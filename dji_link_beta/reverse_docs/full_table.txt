@@ -1,0 +1,507 @@
+
+===== CMD_SET 0x00 (0) [general] =====
+  0x00/0x00 (  0)  req=uav_general_ping_req  rsp=uav_general_ping_rsp
+  0x00/0x01 (  1)  req=uav_general_get_get_version_req  rsp=uav_general_get_get_version_rsp
+  0x00/0x0B ( 11)  req=uav_general_set_reboot_device_req  rsp=uav_general_set_reboot_device_rsp
+  0x00/0x0E ( 14)  req=uav_general_heartbeat_req  rsp=uav_general_heartbeat_rsp
+  0x00/0x12 ( 18)  req=uav_general_find_uav_req  rsp=uav_general_find_uav_rsp
+  0x00/0x1F ( 31)  req=uav_general_get_get_file_data_req  rsp=uav_general_get_get_file_data_rsp
+  0x00/0x20 ( 32)  req=uav_general_get_get_file_list_req  rsp=uav_general_get_get_file_list_rsp
+  0x00/0x26 ( 38)  req=uav_general_transfer_msg_req  rsp=uav_general_transfer_msg_rsp
+  0x00/0x28 ( 40)  req=uav_general_delete_drive_file_req  rsp=uav_general_delete_file_rsp
+  0x00/0x28 ( 40)  req=uav_general_delete_file_req  rsp=uav_general_delete_file_rsp
+  0x00/0x2A ( 42)  req=uav_general_general_file_transfer_req  rsp=uav_general_general_file_transfer_rsp
+  0x00/0x32 ( 50)  req=uav_general_activate_device_req  rsp=uav_general_activate_device_rsp
+  0x00/0x34 ( 52)  req=uav_general_buried_messages_req  rsp=uav_general_buried_messages_rsp
+  0x00/0x36 ( 54)  req=uav_general_deactivate_device_req  rsp=uav_general_deactivate_device_rsp
+  0x00/0x44 ( 68)  req=uav_general_set_temperature_test_set_req  rsp=uav_general_set_temperature_test_set_rsp
+  0x00/0x4A ( 74)  req=uav_general_set_device_date_req  rsp=uav_general_set_device_date_rsp
+  0x00/0x4A ( 74)  req=uav_general_set_device_date_with_utc_req  rsp=uav_general_set_device_date_rsp
+  0x00/0x4B ( 75)  req=uav_general_get_device_date_req  rsp=uav_general_get_device_date_rsp
+  0x00/0x4F ( 79)  req=uav_general_get_get_version_config_req  rsp=uav_general_get_get_version_config_rsp
+  0x00/0x51 ( 81)  req=uav_general_get_fetch_serial_number_req  rsp=uav_general_get_fetch_serial_number_rsp
+  0x00/0x6A (106)  req=uav_general_time_manage_req  rsp=uav_general_set_device_date_v2_rsp
+  0x00/0x70 (112)  req=uav_general_debug_cmd_req  rsp=uav_general_debug_cmd_rsp
+  0x00/0x72 (114)  req=uav_general_set_upgrade_notification_req  rsp=uav_general_set_upgrade_notification_rsp
+  0x00/0x74 (116)  req=uav_general_accesslocker_v1_encryption_result_req  rsp=uav_general_get_accesslocker_v1_common_rsp
+  0x00/0x76 (118)  req=uav_general_event_track_push_push  rsp=uav_general_push_event_track_push_rsp
+  0x00/0x88 (136)  req=uav_general_get_query_device_information_req  rsp=uav_general_get_query_device_information_rsp
+  0x00/0x8C (140)  req=uav_general_download_status_push  rsp=uav_general_push_upgrade_file_download_status_push_rsp
+  0x00/0x8D (141)  req=uav_general_set_sleep_negotiate_req  rsp=uav_general_set_sleep_negotiate_rsp
+  0x00/0x91 (145)  req=uav_general_set_rndis_status_req  rsp=uav_general_set_rndis_status_rsp
+  0x00/0x96 (150)  req=uav_general_get_enter_force_upgrade_req  rsp=uav_general_get_enter_force_upgrade_rsp
+  0x00/0x97 (151)  req=uav_general_link_monitor_request  rsp=uav_general_link_monitor_response
+  0x00/0x99 (153)  req=uav_general_united_pub_sub_agent_req  rsp=uav_general_united_pub_sub_agent_rsp
+  0x00/0xA1 (161)  req=uav_general_push_device_restart_time_push_rsp  rsp=uav_general_device_restart_time_push
+  0x00/0xA4 (164)  req=uav_general_model_auth_request  rsp=uav_general_model_auth_response
+  0x00/0xA5 (165)  req=uav_general_get_switch_upgrade_bin_req  rsp=uav_general_get_switch_upgrade_bin_rsp
+  0x00/0xA6 (166)  req=uav_general_get_gls_cp_status_req  rsp=uav_general_get_gls_cp_status_rsp
+  0x00/0xB2 (178)  req=uav_general_get_low_power_action_req  rsp=uav_general_get_low_power_action_rsp
+  0x00/0xB5 (181)  req=uav_general_get_exclusive_set_subscribe_req  rsp=uav_general_get_exclusive_set_subscribe_rsp
+  0x00/0xB6 (182)  req=uav_general_get_exclusive_set_push_req  rsp=uav_general_get_exclusive_set_push_rsp
+  0x00/0xB7 (183)  req=uav_general_get_static_cap_req  rsp=uav_general_get_static_cap_rsp
+  0x00/0xB8 (184)  req=uav_general_get_function_discover_req  rsp=uav_general_get_function_discover_rsp
+  0x00/0xD5 (213)  req=uav_general_get_lock_uav_req  rsp=uav_general_get_lock_uav_rsp
+  0x00/0xDA (218)  req=uav_general_get_data_act_req  rsp=uav_general_get_data_act_rsp
+  0x00/0xDD (221)  req=uav_general_get_UAV_CLOUD_CONTROL_req  rsp=uav_general_get_UAV_CLOUD_CONTROL_rsp
+  0x00/0xDE (222)  req=uav_general_DEVICE_RESET_req  rsp=uav_general_DEVICE_RESET_rsp
+  0x00/0xDF (223)  req=uav_general_log_space_control_req  rsp=uav_general_log_space_control_rsp
+  0x00/0xE5 (229)  req=uav_general_get_secure_binding_req  rsp=uav_general_get_secure_binding_rsp
+  0x00/0xE5 (229)  req=uav_general_get_secure_binding_rsp  rsp=
+  0x00/0xE6 (230)  req=uav_general_get_secure_device_user_bind_req  rsp=uav_general_get_secure_device_user_bind_rsp
+  0x00/0xE9 (233)  req=uav_general_add_log_tag_rsp  rsp=uav_general_add_log_tag_req
+  0x00/0xEA (234)  req=uav_general_log_export_control_req  rsp=uav_general_log_export_control_rsp
+  0x00/0xF4 (244)  req=uav_general_start_test_req  rsp=uav_general_start_test_rsp
+  0x00/0xFE (254)  req=uav_general_heartbeat_req  rsp=uav_general_heartbeat_rsp
+  0x00/0xFF (255)  req=uav_general_get_device_info_req  rsp=uav_general_get_device_info_rsp
+
+===== CMD_SET 0x01 (1) [special] =====
+  0x01/0x01 (  1)  req=uav_special_special_ctrl_push  rsp=uav_special_special_ctrl_rsp
+  0x01/0x02 (  2)  req=uav_action_virtual_rc_joystick_req  rsp=uav_action_virtual_rc_joystick_rsp
+  0x01/0x0A ( 10)  req=uav_special_SPECIAL_TLV_CMD_push  rsp=uav_special_push_SPECIAL_TLV_CMD_rsp
+  0x01/0x82 (130)  req=uav_special_control_blackbox_folder_req  rsp=uav_special_control_blackbox_folder_rsp
+  0x01/0x83 (131)  req=uav_special_get_get_blackbox_info_req  rsp=uav_special_get_get_blackbox_info_rsp
+  0x01/0x84 (132)  req=uav_special_set_set_blackbox_info_req  rsp=uav_special_set_set_blackbox_info_rsp
+
+===== CMD_SET 0x02 (2) [camera] =====
+  0x02/0x01 (  1)  req=uav_camera_take_photo_req  rsp=uav_camera_take_photo_rsp
+  0x02/0x02 (  2)  req=uav_camera_record_video_req  rsp=uav_camera_record_video_rsp
+  0x02/0x09 (  9)  req=uav_camera_set_liveview_source_camera_req  rsp=uav_camera_set_liveview_source_camera_rsp
+  0x02/0x0C ( 12)  req=uav_camera_switch_playbackmode_req  rsp=uav_camera_switch_playbackmode_rsp
+  0x02/0x10 ( 16)  req=uav_camera_set_camera_working_mode_req  rsp=uav_camera_set_camera_working_mode_rsp
+  0x02/0x12 ( 18)  req=uav_camera_set_camera_photo_size_req  rsp=uav_camera_set_camera_photo_size_rsp
+  0x02/0x14 ( 20)  req=uav_camera_set_camera_photo_quality_req  rsp=uav_camera_set_camera_photo_quality_rsp
+  0x02/0x16 ( 22)  req=uav_camera_set_camera_photo_storage_format_req  rsp=uav_camera_set_camera_photo_storage_format_rsp
+  0x02/0x18 ( 24)  req=uav_camera_set_video_format_req  rsp=uav_camera_set_video_format_rsp
+  0x02/0x1A ( 26)  req=uav_camera_set_camera_video_quality_req  rsp=uav_camera_set_camera_video_quality_rsp
+  0x02/0x1C ( 28)  req=uav_camera_set_camera_video_storage_format_req  rsp=uav_camera_set_camera_video_storage_format_rsp
+  0x02/0x1E ( 30)  req=uav_camera_set_camera_exposure_mode_req  rsp=uav_camera_set_camera_exposure_mode_rsp
+  0x02/0x20 ( 32)  req=uav_camera_set_camera_scene_mode_req  rsp=uav_camera_set_camera_scene_mode_rsp
+  0x02/0x21 ( 33)  req=uav_camera_get_camera_scene_mode_req  rsp=uav_camera_get_camera_scene_mode_rsp
+  0x02/0x22 ( 34)  req=uav_camera_set_camera_metering_mode_req  rsp=uav_camera_set_camera_metering_mode_rsp
+  0x02/0x24 ( 36)  req=uav_camera_set_camera_focus_mode_req  rsp=uav_camera_set_camera_focus_mode_rsp
+  0x02/0x26 ( 38)  req=uav_camera_set_aperture_size_req  rsp=uav_camera_set_aperture_size_rsp
+  0x02/0x28 ( 40)  req=uav_camera_set_camera_shutter_speed_req  rsp=uav_camera_set_camera_shutter_speed_rsp
+  0x02/0x29 ( 41)  req=uav_camera_get_camera_shutter_speed_req  rsp=uav_camera_get_camera_shutter_speed_rsp
+  0x02/0x2A ( 42)  req=uav_camera_set_camera_iso_para_req  rsp=uav_camera_set_camera_iso_para_rsp
+  0x02/0x2B ( 43)  req=uav_camera_get_camera_iso_para_req  rsp=uav_camera_get_camera_iso_para_rsp
+  0x02/0x2C ( 44)  req=uav_camera_set_camera_white_balance_req  rsp=uav_camera_set_camera_white_balance_rsp
+  0x02/0x2E ( 46)  req=uav_camera_set_camera_exposure_compensation_req  rsp=uav_camera_set_camera_exposure_compensation_rsp
+  0x02/0x30 ( 48)  req=uav_camera_set_focus_area_req  rsp=uav_camera_set_focus_area_rsp
+  0x02/0x32 ( 50)  req=uav_camera_set_spot_focus_area_req  rsp=uav_camera_set_spot_focus_area_rsp
+  0x02/0x33 ( 51)  req=uav_camera_get_spot_focus_area_req  rsp=uav_camera_get_spot_focus_area_rsp
+  0x02/0x34 ( 52)  req=uav_camera_set_focus_zoom_para_req  rsp=uav_camera_set_focus_zoom_para_rsp
+  0x02/0x38 ( 56)  req=uav_camera_set_sharpness_para_req  rsp=uav_camera_set_sharpness_para_rsp
+  0x02/0x3A ( 58)  req=uav_camera_set_contrast_para_req  rsp=uav_camera_set_contrast_para_rsp
+  0x02/0x3C ( 60)  req=uav_camera_set_saturation_para_req  rsp=uav_camera_set_saturation_para_rsp
+  0x02/0x3E ( 62)  req=uav_camera_set_colortone_para_req  rsp=uav_camera_set_colortone_para_rsp
+  0x02/0x42 ( 66)  req=uav_camera_set_digital_filter_req  rsp=uav_camera_set_digital_filter_rsp
+  0x02/0x44 ( 68)  req=uav_camera_set_digital_denoising_req  rsp=uav_camera_set_digital_denoising_rsp
+  0x02/0x46 ( 70)  req=uav_camera_set_anti_filcker_req  rsp=uav_camera_set_anti_filcker_rsp
+  0x02/0x48 ( 72)  req=uav_camera_set_continue_para_req  rsp=uav_camera_set_continue_para_rsp
+  0x02/0x4A ( 74)  req=uav_camera_set_timelapse_para_req  rsp=uav_camera_set_timelapse_para_rsp
+  0x02/0x4B ( 75)  req=uav_camera_get_timelapse_para_req  rsp=uav_camera_get_timelapse_para_rsp
+  0x02/0x4C ( 76)  req=uav_camera_set_video_out_para_req  rsp=uav_camera_set_video_out_para_rsp
+  0x02/0x4D ( 77)  req=uav_camera_get_video_out_para_req  rsp=uav_camera_get_video_out_para_rsp
+  0x02/0x54 ( 84)  req=uav_camera_set_date_para_req  rsp=uav_camera_set_date_para_rsp
+  0x02/0x56 ( 86)  req=uav_camera_set_language_para_req  rsp=uav_camera_set_language_para_rsp
+  0x02/0x57 ( 87)  req=uav_camera_get_language_para_req  rsp=uav_camera_get_language_para_rsp
+  0x02/0x58 ( 88)  req=uav_camera_set_gps_coordinate_req  rsp=uav_camera_set_gps_coordinate_rsp
+  0x02/0x59 ( 89)  req=uav_camera_get_gps_coordinate_req  rsp=uav_camera_get_gps_coordinate_rsp
+  0x02/0x5C ( 92)  req=uav_camera_set_file_index_mode_req  rsp=uav_camera_set_file_index_mode_rsp
+  0x02/0x5E ( 94)  req=uav_camera_set_aeb_continues_req  rsp=uav_camera_set_aeb_continues_rsp
+  0x02/0x5F ( 95)  req=uav_camera_get_aeb_continues_req  rsp=uav_camera_get_aeb_continues_rsp
+  0x02/0x60 ( 96)  req=uav_camera_set_histogram_push_enable_req  rsp=uav_camera_set_histogram_push_enable_rsp
+  0x02/0x61 ( 97)  req=uav_camera_get_histogram_push_enable_req  rsp=uav_camera_get_histogram_push_enable_rsp
+  0x02/0x62 ( 98)  req=uav_camera_set_video_caption_req  rsp=uav_camera_set_video_caption_rsp
+  0x02/0x63 ( 99)  req=uav_camera_get_video_caption_req  rsp=uav_camera_get_video_caption_rsp
+  0x02/0x66 (102)  req=uav_camera_set_ntspal_type_req  rsp=uav_camera_set_ntspal_type_rsp
+  0x02/0x68 (104)  req=uav_camera_set_ae_lock_req  rsp=uav_camera_set_ae_lock_rsp
+  0x02/0x69 (105)  req=uav_camera_get_ae_lock_req  rsp=uav_camera_get_ae_lock_rsp
+  0x02/0x6A (106)  req=uav_camera_set_capture_type_req  rsp=uav_camera_set_capture_type_rsp
+  0x02/0x6C (108)  req=uav_camera_set_recording_mode_req  rsp=uav_camera_set_recording_mode_rsp
+  0x02/0x6E (110)  req=uav_camera_set_pano_mode_req  rsp=uav_camera_set_pano_mode_rsp
+  0x02/0x6F (111)  req=uav_camera_get_pano_mode_req  rsp=uav_camera_get_pano_mode_rsp
+  0x02/0x72 (114)  req=uav_camera_format_sdcard_req  rsp=uav_camera_format_sdcard_rsp
+  0x02/0x77 (119)  req=uav_camera_save_camera_para_req  rsp=uav_camera_save_camera_para_rsp
+  0x02/0x78 (120)  req=uav_camera_load_camera_para_req  rsp=uav_camera_load_camera_para_rsp
+  0x02/0x79 (121)  req=uav_camera_delete_photo_req  rsp=uav_camera_delete_photo_rsp
+  0x02/0x7A (122)  req=uav_camera_video_playback_control_req  rsp=uav_camera_video_playback_control_rsp
+  0x02/0x7B (123)  req=uav_camera_single_playback_select_req  rsp=uav_camera_single_playback_select_rsp
+  0x02/0x8E (142)  req=uav_camera_parameter_option_req  rsp=uav_camera_parameter_option_rsp
+  0x02/0x8E (142)  req=uav_camera_parameter_option_rsp  rsp=
+  0x02/0x8F (143)  req=uav_camera_push_settings_update_notify_rsp  rsp=uav_camera_settings_update_notify_push
+  0x02/0x90 (144)  req=uav_camera_serial_number_req  rsp=uav_camera_serial_number_rsp
+  0x02/0x92 (146)  req=uav_camera_get_video_recording_info_req  rsp=uav_camera_get_video_recording_info_rsp
+  0x02/0x93 (147)  req=uav_camera_set_video_clip_info_req  rsp=uav_camera_set_video_clip_info_rsp
+  0x02/0x95 (149)  req=uav_camera_set_focus_engine_value_req  rsp=uav_camera_set_focus_engine_value_rsp
+  0x02/0x98 (152)  req=uav_camera_get_file_system_info_req  rsp=uav_camera_get_file_system_info_rsp
+  0x02/0x9F (159)  req=uav_camera_set_audio_param_req  rsp=uav_camera_set_audio_param_rsp
+  0x02/0xA0 (160)  req=uav_camera_get_audio_param_req  rsp=uav_camera_get_audio_param_rsp
+  0x02/0xA2 (162)  req=uav_camera_set_lens_focal_distance_req  rsp=uav_camera_set_lens_focal_distance_rsp
+  0x02/0xA3 (163)  req=uav_camera_set_calibration_control_req  rsp=uav_camera_set_calibration_control_rsp
+  0x02/0xA8 (168)  req=uav_camera_set_ae_lock_type_req  rsp=uav_camera_set_ae_lock_type_rsp
+  0x02/0xAB (171)  req=uav_camera_set_video_coding_standard_req  rsp=uav_camera_set_video_coding_standard_rsp
+  0x02/0xAF (175)  req=uav_camera_set_pro_video_format_req  rsp=uav_camera_set_pro_video_format_rsp
+  0x02/0xB0 (176)  req=uav_camera_get_pro_video_format_req  rsp=uav_camera_get_pro_video_format_rsp
+  0x02/0xB3 (179)  req=uav_camera_get_app_request_i_frame_req  rsp=uav_camera_get_app_request_i_frame_rsp
+  0x02/0xB5 (181)  req=uav_camera_get_sensor_id_req  rsp=uav_camera_get_sensor_id_rsp
+  0x02/0xB6 (182)  req=uav_camera_set_front_led_auto_close_req  rsp=uav_camera_set_front_led_auto_close_rsp
+  0x02/0xB8 (184)  req=uav_camera_set_control_zoom_req  rsp=uav_camera_set_control_zoom_rsp
+  0x02/0xB9 (185)  req=uav_camera_set_image_orientation_req  rsp=uav_camera_set_image_orientation_rsp
+  0x02/0xBB (187)  req=uav_camera_set_lock_gimbal_when_capture_req  rsp=uav_camera_set_lock_gimbal_when_capture_rsp
+  0x02/0xBF (191)  req=uav_camera_set_file_tag_req  rsp=uav_camera_set_file_tag_rsp
+  0x02/0xC4 (196)  req=uav_camera_set_tap_zoom_enable_req  rsp=uav_camera_set_tap_zoom_enable_rsp
+  0x02/0xC5 (197)  req=uav_camera_get_tap_zoom_enable_req  rsp=uav_camera_get_tap_zoom_enable_rsp
+  0x02/0xC6 (198)  req=uav_camera_set_tap_zoom_target_req  rsp=uav_camera_set_tap_zoom_target_rsp
+  0x02/0xCE (206)  req=uav_camera_get_calibration_control_req  rsp=uav_camera_get_calibration_control_rsp
+  0x02/0xD7 (215)  req=uav_camera_set_user_custom_data_req  rsp=uav_camera_set_user_custom_data_rsp
+  0x02/0xD8 (216)  req=uav_camera_get_user_custom_data_req  rsp=uav_camera_get_user_custom_data_rsp
+  0x02/0xDA (218)  req=uav_camera_storage_config_req  rsp=uav_camera_storage_config_rsp
+  0x02/0xE1 (225)  req=uav_camera_set_set_mode_profile_req  rsp=uav_camera_set_set_mode_profile_rsp
+  0x02/0xE5 (229)  req=uav_camera_set_watermark_req  rsp=uav_camera_set_watermark_rsp
+  0x02/0xE7 (231)  req=uav_camera_set_original_photo_saved_configuration_req  rsp=uav_camera_set_original_photo_saved_configuration_rsp
+  0x02/0xE8 (232)  req=uav_camera_get_original_photo_saved_configuration_req  rsp=uav_camera_get_original_photo_saved_configuration_rsp
+  0x02/0xEB (235)  req=uav_camera_set_camera_status_subscribe_req  rsp=uav_camera_set_camera_status_subscribe_rsp
+  0x02/0xFE (254)  req=uav_camera_set_set_baseband_req  rsp=uav_camera_set_set_baseband_rsp
+  0x02/0xFF (255)  req=uav_camera_cam_expan_cmd  rsp=uav_camera_camera_expansion_cmd_rsp
+
+===== CMD_SET 0x03 (3) [fc] =====
+  0x03/0x2A ( 42)  req=uav_fc_blade_calibration_req  rsp=uav_fc_function_control_rsp
+  0x03/0x2A ( 42)  req=uav_fc_function_control_req  rsp=uav_fc_function_control_rsp
+  0x03/0x2F ( 47)  req=uav_fc_set_voltage_alert_req  rsp=uav_fc_set_voltage_alert_rsp
+  0x03/0x2F ( 47)  req=uav_voltage_alert_parameter  rsp=uav_fc_set_voltage_alert_rsp
+  0x03/0x30 ( 48)  req=uav_fc_get_voltage_alert_req  rsp=uav_fc_get_voltage_alert_rsp
+  0x03/0x31 ( 49)  req=uav_fc_set_homepoint_req  rsp=uav_fc_set_homepoint_rsp
+  0x03/0x33 ( 51)  req=uav_fc_set_aircraft_name_req  rsp=uav_fc_set_aircraft_name_rsp
+  0x03/0x34 ( 52)  req=uav_fc_get_aircraft_name_req  rsp=uav_fc_get_aircraft_name_rsp
+  0x03/0x39 ( 57)  req=uav_fc_switch_to_read_data_mode_req  rsp=uav_fc_switch_to_read_data_mode_rsp
+  0x03/0x3B ( 59)  req=uav_fc_set_fail_safe_action_req  rsp=uav_fc_set_fail_safe_action_rsp
+  0x03/0x3C ( 60)  req=uav_fc_get_fail_safe_action_req  rsp=uav_fc_get_fail_safe_action_rsp
+  0x03/0x46 ( 70)  req=uav_fc_switch_gps_snr_push_req  rsp=uav_fc_switch_gps_snr_push_rsp
+  0x03/0x52 ( 82)  req=uav_fc_confirm_electricity_gohome_req  rsp=uav_fc_confirm_electricity_gohome_rsp
+  0x03/0x5B ( 91)  req=uav_fc_capability_set_subscribe_push  rsp=uav_fc_push_capability_set_subscribe_rsp
+  0x03/0x5C ( 92)  req=uav_fc_capability_set_push_push  rsp=uav_fc_push_capability_set_push_rsp
+  0x03/0x77 (119)  req=uav_fc_handle_eid_switch  rsp=uav_fc_eid_switch_status
+  0x03/0x78 (120)  req=uav_fc_action_rid_set_and_delete_opid  rsp=uav_fc_action_rid_set_and_delete_opid_ack
+  0x03/0x80 (128)  req=uav_fc_set_ground_station_on_off_req  rsp=uav_fc_set_ground_station_on_off_rsp
+  0x03/0x8F (143)  req=uav_fc_recorder_rpc_rsp  rsp=uav_fc_recorder_rpc_req
+  0x03/0x9C (156)  req=uav_fc_set_waypoint_auto_flight_speed_req  rsp=uav_fc_set_waypoint_auto_flight_speed_rsp
+  0x03/0x9D (157)  req=uav_fc_get_waypoint_auto_flight_speed_req  rsp=uav_fc_get_waypoint_auto_flight_speed_rsp
+  0x03/0xA0 (160)  req=uav_fc_agnss_pos_and_time_data_push  rsp=uav_fc_push_agnss_pos_and_time_data_rsp
+  0x03/0xA2 (162)  req=uav_fc_agps_online_push_push  rsp=uav_fc_push_agps_online_push_rsp
+  0x03/0xAF (175)  req=uav_fc_get_product_config_req  rsp=uav_fc_get_product_config_rsp
+  0x03/0xB4 (180)  req=uav_fc_get_uav_uav_code_req  rsp=uav_fc_get_uav_uav_code_rsp
+  0x03/0xB8 (184)  req=uav_fc_get_redundancy_system_req  rsp=uav_fc_get_redundancy_system_rsp
+  0x03/0xBB (187)  req=uav_fc_get_nfzdb_upgrade_status_query_req  rsp=uav_fc_get_nfzdb_upgrade_status_query_rsp
+  0x03/0xBC (188)  req=uav_fc_fmu_api_register_led_action_req  rsp=uav_fc_fmu_api_register_led_action_rsp
+  0x03/0xBC (188)  req=uav_fc_get_nfzdb_upgrade_result_query_req  rsp=uav_fc_get_nfzdb_upgrade_result_query_rsp
+  0x03/0xBD (189)  req=uav_fc_fmu_api_logout_led_action_req  rsp=uav_fc_fmu_api_logout_led_action_rsp
+  0x03/0xBD (189)  req=uav_fc_nfz_upgrade_exit_req  rsp=uav_fc_nfz_upgrade_exit_rsp
+  0x03/0xBE (190)  req=uav_fc_fmu_api_set_led_action_req  rsp=uav_fc_fmu_api_set_led_action_rsp
+  0x03/0xD7 (215)  req=uav_fc_recorder_rpc_rsp  rsp=uav_fc_recorder_rpc_req
+  0x03/0xDA (218)  req=uav_fc_mc_monitor_req  rsp=uav_fc_mc_monitor_rsp
+  0x03/0xE9 (233)  req=uav_fc_set_cmd_handler_req  rsp=uav_fc_set_cmd_handler_rsp
+  0x03/0xED (237)  req=uav_fc_esc_echo_cmd_info_req  rsp=uav_fc_esc_echo_cmd_info_rsp
+  0x03/0xEE (238)  req=uav_fc_get_app_count_down_push_req  rsp=uav_general_set_device_date_rsp
+  0x03/0xF3 (243)  req=uav_fc_reset_cfg_item_req  rsp=uav_fc_reset_cfg_item_rsp
+  0x03/0xF5 (245)  req=uav_fc_get_get_set_driver_licesen_info_req  rsp=uav_fc_get_get_set_driver_licesen_info_rsp
+  0x03/0xF7 (247)  req=uav_fc_get_get_cfg_item_info_by_hash_req  rsp=uav_fc_get_get_cfg_item_info_by_hash_rsp
+  0x03/0xF8 (248)  req=uav_fc_read_hash_param_req  rsp=uav_fc_read_hash_param_rsp
+  0x03/0xF9 (249)  req=uav_fc_set_write_hash_param_req  rsp=uav_fc_set_write_hash_param_rsp
+  0x03/0xFA (250)  req=uav_fc_set_reset_cfg_item_by_hash_req  rsp=uav_fc_set_reset_cfg_item_by_hash_rsp
+  0x03/0xFE (254)  req=uav_fc_set_set_motor_force_disable_flag_req  rsp=uav_fc_set_set_motor_force_disable_flag_rsp
+
+===== CMD_SET 0x04 (4) [gimbal] =====
+  0x04/0x01 (  1)  req=uav_gimbal_set_motion_control_req  rsp=uav_gimbal_set_motion_control_rsp
+  0x04/0x07 (  7)  req=uav_gimbal_set_roll_trimming_adjust_req  rsp=uav_gimbal_set_roll_trimming_adjust_rsp
+  0x04/0x08 (  8)  req=uav_gimbal_auto_calibration_req  rsp=uav_gimbal_auto_calibration_rsp
+  0x04/0x0A ( 10)  req=uav_gimbal_set_control_gimbal_angle_req  rsp=uav_gimbal_set_control_gimbal_angle_rsp
+  0x04/0x0C ( 12)  req=uav_gimbal_set_cmd_custom_ctrl_speed_req  rsp=uav_gimbal_set_cmd_custom_ctrl_speed_rsp
+  0x04/0x0D ( 13)  req=uav_gimbal_set_turn_on_off_control_req  rsp=uav_gimbal_set_turn_on_off_control_rsp
+  0x04/0x0F ( 15)  req=uav_gimbal_set_user_params_req  rsp=uav_gimbal_set_user_params_rsp
+  0x04/0x10 ( 16)  req=uav_gimbal_read_params_req  rsp=uav_gimbal_read_params_rsp
+  0x04/0x12 ( 18)  req=uav_gimbal_get_message_subscription_req  rsp=uav_gimbal_get_message_subscription_rsp
+  0x04/0x13 ( 19)  req=uav_gimbal_reset_default_params_req  rsp=uav_gimbal_reset_default_params_rsp
+  0x04/0x14 ( 20)  req=uav_gimbal_set_control_gimbal_angle_ex_req  rsp=uav_gimbal_set_control_gimbal_angle_ex_rsp
+  0x04/0x25 ( 37)  req=uav_gimbal_set_gimbal_timelapse_control_req  rsp=uav_gimbal_set_gimbal_timelapse_control_rsp
+  0x04/0x3A ( 58)  req=uav_gimbal_set_coordinate_system_rotate_req  rsp=uav_gimbal_set_coordinate_system_rotate_rsp
+  0x04/0x44 ( 68)  req=uav_gimbal_set_gimbal_work_mode_req  rsp=uav_gimbal_set_gimbal_work_mode_rsp
+  0x04/0x4C ( 76)  req=uav_gimbal_set_work_mode_and_return_center_req  rsp=uav_gimbal_set_work_mode_and_return_center_rsp
+  0x04/0x50 ( 80)  req=uav_gimbal_gimbal_system_param_req  rsp=uav_gimbal_gimbal_system_param_rsp
+  0x04/0x67 (103)  req=uav_gimbal_set_gimbal_esc_extern_command_req  rsp=uav_gimbal_set_gimbal_esc_extern_command_rsp
+  0x04/0x68 (104)  req=uav_gimbal_cali_data_exist_req  rsp=uav_gimbal_cali_data_exist_rsp
+  0x04/0x72 (114)  req=uav_gimbal_get_get_gimbal_info_extend_req  rsp=uav_gimbal_get_get_gimbal_info_extend_rsp
+  0x04/0x77 (119)  req=uav_gimbal_get_gimbal_capability_req  rsp=uav_gimbal_get_gimbal_capability_rsp
+
+===== CMD_SET 0x05 (5) [centerboard] =====
+  0x05/0x08 (  8)  req=uav_centerboard_get_request_battery_history_state_req  rsp=uav_centerboard_get_request_battery_history_state_rsp
+  0x05/0x09 (  9)  req=uav_centerboard_battery_self_discharge_req  rsp=uav_centerboard_battery_self_discharge_rsp
+  0x05/0x21 ( 33)  req=uav_centerboard_get_request_battery_static_info_req  rsp=uav_centerboard_get_request_battery_static_info_rsp
+  0x05/0x33 ( 51)  req=uav_centerboard_get_get_battery_barcode_req  rsp=uav_centerboard_get_get_battery_barcode_rsp
+
+===== CMD_SET 0x06 (6) [rc] =====
+  0x06/0x03 (  3)  req=uav_rc_calibrate_channels_req  rsp=uav_rc_calibrate_channels_rsp
+  0x06/0x06 (  6)  req=uav_rc_set_machine_mode_req  rsp=uav_rc_set_machine_mode_rsp
+  0x06/0x07 (  7)  req=uav_rc_get_machine_mode_req  rsp=uav_rc_get_machine_mode_rsp
+  0x06/0x0A ( 10)  req=uav_rc_set_local_machine_password_req  rsp=uav_rc_set_local_machine_password_rsp
+  0x06/0x0B ( 11)  req=uav_rc_get_local_machine_password_req  rsp=uav_rc_get_local_machine_password_rsp
+  0x06/0x11 ( 17)  req=uav_rc_set_machine_function_switch_req  rsp=uav_rc_set_machine_function_switch_rsp
+  0x06/0x12 ( 18)  req=uav_rc_get_machine_function_switch_req  rsp=uav_rc_get_machine_function_switch_rsp
+  0x06/0x19 ( 25)  req=uav_rc_set_controller_mode_req  rsp=uav_rc_set_controller_mode_rsp
+  0x06/0x1A ( 26)  req=uav_rc_get_controller_mode_req  rsp=uav_rc_get_controller_mode_rsp
+  0x06/0x21 ( 33)  req=uav_rc_get_ce_fcc_req  rsp=uav_rc_get_ce_fcc_rsp
+  0x06/0x22 ( 34)  req=uav_rc_get_gimbal_control_req  rsp=uav_rc_get_gimbal_control_rsp
+  0x06/0x23 ( 35)  req=uav_rc_request_gimbal_control_rsp  rsp=
+  0x06/0x2A ( 42)  req=uav_rc_get_slave_control_mode_req  rsp=uav_rc_get_slave_control_mode_rsp
+  0x06/0x2C ( 44)  req=uav_rc_get_gimbal_control_speed_req  rsp=uav_rc_get_gimbal_control_speed_rsp
+  0x06/0x2D ( 45)  req=uav_rc_set_customized_btn_function_req  rsp=uav_rc_set_customized_btn_function_rsp
+  0x06/0x2E ( 46)  req=uav_rc_get_customized_btn_function_req  rsp=uav_rc_get_customized_btn_function_rsp
+  0x06/0x2F ( 47)  req=uav_rc_pair_frequency_req  rsp=uav_rc_pair_frequency_rsp
+  0x06/0x32 ( 50)  req=uav_rc_get_rtc_clock_req  rsp=uav_rc_get_rtc_clock_rsp
+  0x06/0x34 ( 52)  req=uav_rc_get_gimbal_control_gain_req  rsp=uav_rc_get_gimbal_control_gain_rsp
+  0x06/0x36 ( 54)  req=uav_rc_get_gimbal_control_mode_req  rsp=uav_rc_get_gimbal_control_mode_rsp
+  0x06/0x3A ( 58)  req=uav_rc_set_usb_mode_2014rc_req  rsp=uav_rc_set_usb_mode_2014rc_rsp
+  0x06/0x3D ( 61)  req=uav_rc_mutil_device_pair_t20_req  rsp=uav_rc_mutil_device_pair_rsp
+  0x06/0x46 ( 70)  req=uav_rc_mutil_device_select_target_aircraft_req  rsp=uav_rc_mutil_device_select_target_aircraft_rsp
+  0x06/0x47 ( 71)  req=uav_rc_custom_function_control_req  rsp=uav_rc_custom_function_control_rsp
+  0x06/0x48 ( 72)  req=uav_rc_param_request_req  rsp=uav_rc_param_request_rsp
+  0x06/0x49 ( 73)  req=uav_rc_mutil_device_enable_rtk_req  rsp=uav_rc_mutil_device_enable_rtk_rsp
+  0x06/0x4A ( 74)  req=uav_rc_mutil_device_enable_4g_req  rsp=uav_rc_mutil_device_enable_4g_rsp
+  0x06/0x53 ( 83)  req=uav_rc_get_unit_language_req  rsp=uav_rc_get_unit_language_rsp
+  0x06/0x54 ( 84)  req=uav_rc_set_unit_language_req  rsp=uav_rc_set_unit_language_rsp
+  0x06/0x59 ( 89)  req=uav_rc_set_set_pts_channel_req  rsp=uav_rc_set_set_pts_channel_rsp
+  0x06/0x6B (107)  req=uav_rc_UAV_RACING_RC_VIBRATING_MOTOR_CTRL_push  rsp=uav_rc_push_UAV_RACING_RC_VIBRATING_MOTOR_CTRL_rsp
+  0x06/0x72 (114)  req=uav_rc_set_stick_value_lock_req  rsp=uav_rc_set_stick_value_lock_rsp
+  0x06/0x72 (114)  req=uav_rc_set_stick_value_lock_with_ch4_func_req  rsp=uav_rc_set_stick_value_lock_rsp
+  0x06/0x74 (116)  req=uav_rc_get_stick_value_lock_status_req  rsp=uav_rc_get_stick_value_lock_status_rsp
+  0x06/0x74 (116)  req=uav_rc_get_stick_value_lock_status_req  rsp=uav_rc_get_stick_value_lock_status_with_ch4_func_rsp
+  0x06/0x79 (121)  req=uav_rc_get_get_rc_firmware_info_req  rsp=uav_rc_get_get_rc_firmware_info_rsp
+  0x06/0x8C (140)  req=uav_rc_set_app_work_stage_set_req  rsp=uav_rc_set_app_work_stage_set_rsp
+  0x06/0x8D (141)  req=uav_rc_set_self_def_key_list_req  rsp=uav_rc_set_self_def_key_rsp
+  0x06/0x8E (142)  req=uav_rc_get_self_def_key_list_req  rsp=uav_rc_get_self_def_key_list_rsp
+  0x06/0xA1 (161)  req=uav_rc_push_data_sync_rsp  rsp=
+  0x06/0xAA (170)  req=uav_rc_rocker_control_gimbal_mode_req  rsp=uav_rc_rocker_control_gimbal_mode_rsp
+  0x06/0xE5 (229)  req=uav_rc_get_custom_setting_support_info_req  rsp=uav_rc_get_custom_setting_support_info_rsp
+  0x06/0xF1 (241)  req=uav_rc_set_app_to_pc_control_req  rsp=uav_rc_set_app_to_pc_control_rsp
+
+===== CMD_SET 0x07 (7) [wifi] =====
+  0x07/0x05 (  5)  req=uav_wifi_set_ap_power_req  rsp=uav_wifi_set_ap_power_rsp
+  0x07/0x06 (  6)  req=uav_wifi_get_ap_power_req  rsp=uav_wifi_get_ap_power_rsp
+  0x07/0x07 (  7)  req=uav_wifi_get_ssid_req  rsp=uav_wifi_get_ssid_rsp
+  0x07/0x08 (  8)  req=uav_wifi_set_ssid_req  rsp=uav_wifi_set_ssid_rsp
+  0x07/0x0C ( 12)  req=uav_wifi_get_mac_req  rsp=uav_wifi_get_mac_rsp
+  0x07/0x0D ( 13)  req=uav_wifi_set_password_req  rsp=uav_wifi_set_password_rsp
+  0x07/0x0E ( 14)  req=uav_wifi_get_password_req  rsp=uav_wifi_get_password_rsp
+  0x07/0x10 ( 16)  req=uav_wifi_set_frequency_switch_req  rsp=uav_wifi_set_frequency_switch_rsp
+  0x07/0x15 ( 21)  req=uav_wifi_restart_req  rsp=uav_wifi_restart_rsp
+  0x07/0x16 ( 22)  req=uav_wifi_set_auto_freq_req  rsp=uav_wifi_set_auto_freq_rsp
+  0x07/0x17 ( 23)  req=uav_wifi_get_auto_freq_req  rsp=uav_wifi_get_auto_freq_rsp
+  0x07/0x18 ( 24)  req=uav_wifi_set_country_code_req  rsp=uav_wifi_set_country_code_rsp
+  0x07/0x19 ( 25)  req=uav_wifi_get_country_code_req  rsp=uav_wifi_get_country_code_rsp
+  0x07/0x28 ( 40)  req=uav_wifi_get_sdr_channel_info_req  rsp=uav_wifi_get_sdr_channel_info_rsp
+  0x07/0x29 ( 41)  req=uav_wifi_request_snr_req  rsp=uav_wifi_request_snr_rsp
+  0x07/0x2B ( 43)  req=uav_wifi_set_wifi_frequecy_req  rsp=uav_wifi_set_ssid_rsp
+  0x07/0x2E ( 46)  req=uav_wifi_set_frequency_support_req  rsp=uav_wifi_set_frequency_support_rsp
+  0x07/0x30 ( 48)  req=uav_wifi_set_country_code_ext_req  rsp=uav_wifi_set_country_code_ext_rsp
+  0x07/0x33 ( 51)  req=uav_wifi_get_is_support_area_code_req  rsp=uav_wifi_get_is_support_area_code_rsp
+  0x07/0x41 ( 65)  req=uav_wifi_start_ground_wifi_req  rsp=uav_wifi_start_ground_wifi_rsp
+  0x07/0x42 ( 66)  req=uav_wifi_stop_ground_wifi_req  rsp=uav_wifi_stop_ground_wifi_rsp
+  0x07/0x44 ( 68)  req=uav_wifi_get_get_frequency_req  rsp=uav_wifi_get_get_frequency_rsp
+  0x07/0x45 ( 69)  req=uav_wifi_device_permission_verification_req  rsp=uav_wifi_device_permission_verification_rsp
+  0x07/0x46 ( 70)  req=uav_wifi_push_device_permission_verification_asyn_result_rsp  rsp=
+  0x07/0x47 ( 71)  req=uav_wifi_connect_ap_req  rsp=uav_wifi_connect_ap_rsp
+  0x07/0x93 (147)  req=uav_wifi_sw_dev_info_1_push  rsp=uav_wifi_request_snr_rsp
+  0x07/0x93 (147)  req=uav_wifi_sw_dev_info_push  rsp=uav_wifi_request_snr_rsp
+
+===== CMD_SET 0x08 (8) [dm368] =====
+  0x08/0x01 (  1)  req=uav_dm368_set_ground_side_param_req  rsp=uav_dm368_set_ground_side_param_rsp
+  0x08/0x02 (  2)  req=uav_dm368_read_ground_side_param_req  rsp=uav_dm368_read_ground_side_param_rsp
+  0x08/0x32 ( 50)  req=uav_dm368_sdr_data_report_push_push  rsp=uav_dm368_push_sdr_data_report_push_rsp
+  0x08/0x41 ( 65)  req=uav_dm368_send_decode_capability_req  rsp=uav_dm368_send_decode_capability_rsp
+  0x08/0x42 ( 66)  req=uav_dm368_action_send_decode_framerate_ability_req  rsp=uav_dm368_action_send_decode_framerate_ability_rsp
+  0x08/0x43 ( 67)  req=uav_dm368_set_auto_framerate_state_req  rsp=uav_dm368_set_auto_framerate_state_rsp
+  0x08/0x69 (105)  req=uav_dm368_set_liveview_priority_bandwidth_req  rsp=uav_dm368_set_liveview_priority_bandwidth_rsp
+  0x08/0x78 (120)  req=uav_dm368_set_sh_start_live_streaming_req  rsp=uav_dm368_set_sh_start_live_streaming_rsp
+  0x08/0x79 (121)  req=uav_dm368_get_sh_get_live_streaming_setting_info_req  rsp=uav_dm368_get_sh_get_live_streaming_setting_info_rsp
+
+===== CMD_SET 0x09 (9) [ofdm/airlink] =====
+  0x09/0x09 (  9)  req=uav_ofdm_frequency_power_push_request_req  rsp=uav_ofdm_frequency_power_push_request_rsp
+  0x09/0x0D ( 13)  req=uav_ofdm_set_config_info_req  rsp=uav_ofdm_set_config_info_rsp
+  0x09/0x21 ( 33)  req=uav_ofdm_get_sdr_conf_req  rsp=uav_ofdm_get_sdr_conf_rsp
+  0x09/0x26 ( 38)  req=uav_ofdm_read_sdr_param_req  rsp=uav_ofdm_read_sdr_param_rsp
+  0x09/0x27 ( 39)  req=uav_ofdm_set_sdr_param_req  rsp=uav_ofdm_set_sdr_param_rsp
+  0x09/0x39 ( 57)  req=uav_ofdm_set_sdr_config_info_req  rsp=uav_ofdm_set_sdr_config_info_rsp
+  0x09/0x44 ( 68)  req=uav_ofdm_sdr_role_revert_req  rsp=uav_ofdm_sdr_role_revert_rsp
+  0x09/0x4B ( 75)  req=device_ofdm_sdr_dongle_state_req  rsp=device_ofdm_sdr_dongle_state_rsp
+  0x09/0x4D ( 77)  req=uav_ofdm_get_hdvt_mode_get_req  rsp=uav_ofdm_get_hdvt_mode_get_rsp
+  0x09/0x4E ( 78)  req=uav_ofdm_set_hdvt_mode_switch_req  rsp=uav_ofdm_set_hdvt_mode_switch_rsp
+  0x09/0xA0 (160)  req=uav_ofdm_get_sssfn_req  rsp=uav_ofdm_get_sssfn_rsp
+  0x09/0xB3 (179)  req=uav_ofdm_set_selete_fpv_req  rsp=uav_ofdm_set_selete_fpv_rsp
+  0x09/0xF9 (249)  req=uav_ofdm_RELAY_FREQ_PEER_START_req  rsp=uav_ofdm_RELAY_FREQ_PEER_START_rsp
+  0x09/0xFA (250)  req=uav_ofdm_RELAY_FUNC_req  rsp=uav_ofdm_RELAY_FUNC_rsp
+  0x09/0xFD (253)  req=uav_ofdm_gnd_decoder_ability_feedback_push  rsp=uav_ofdm_push_gnd_decoder_ability_feedback_rsp
+
+===== CMD_SET 0x0A (10) [vision] =====
+  0x0A/0x09 (  9)  req=uav_vision_set_debug_upload_req  rsp=uav_vision_set_debug_upload_rsp
+  0x0A/0x1B ( 27)  req=uav_vision_free_pano_cap_area_info_push  rsp=uav_vision_push_free_pano_cap_area_info_rsp
+  0x0A/0x20 ( 32)  req=uav_vision_set_tracking_select_req  rsp=uav_vision_set_tracking_select_rsp
+  0x0A/0x27 ( 39)  req=uav_vision_set_common_ctrl_req  rsp=uav_vision_set_common_ctrl_rsp
+  0x0A/0x28 ( 40)  req=uav_vision_get_get_param_req  rsp=uav_vision_get_get_param_rsp
+  0x0A/0x29 ( 41)  req=uav_vision_set_set_param_req  rsp=uav_vision_set_set_param_rsp
+  0x0A/0x3E ( 62)  req=uav_vision_set_pano_control_req  rsp=uav_vision_set_pano_control_rsp
+  0x0A/0x4A ( 74)  req=uav_vision_set_action_cmd_req  rsp=uav_vision_set_action_cmd_rsp
+  0x0A/0x56 ( 86)  req=uav_vision_set_set_perception_switch_cmds_req  rsp=uav_vision_set_set_perception_switch_cmds_rsp
+  0x0A/0x58 ( 88)  req=uav_vision_get_get_perception_switch_cmds_req  rsp=uav_vision_get_get_perception_switch_cmds_rsp
+  0x0A/0x5B ( 91)  req=uav_vision_set_switch_navigation_function_req  rsp=uav_vision_set_switch_navigation_function_rsp
+  0x0A/0x5C ( 92)  req=uav_vision_set_switch_fixed_speed_req  rsp=uav_vision_set_switch_fixed_speed_rsp
+  0x0A/0x62 ( 98)  req=uav_vision_set_visual_stablize_app_state_req  rsp=uav_vision_set_visual_stablize_app_state_rsp
+  0x0A/0x74 (116)  req=uav_vision_set_time_lapse_submode_req  rsp=uav_vision_set_time_lapse_submode_rsp
+  0x0A/0x74 (116)  req=uav_vision_set_time_lapse_submode_req_v1  rsp=uav_vision_set_time_lapse_submode_rsp
+  0x0A/0x76 (118)  req=uav_vision_set_time_lapse_waypoint_record_action_req  rsp=uav_vision_set_time_lapse_waypoint_record_action_rsp
+  0x0A/0x77 (119)  req=uav_vision_get_time_lapse_waypoint_download_req  rsp=uav_vision_get_time_lapse_waypoint_download_rsp
+  0x0A/0x78 (120)  req=uav_vision_set_time_lapse_start_req  rsp=uav_vision_set_time_lapse_start_rsp
+  0x0A/0x7A (122)  req=uav_vision_set_time_lapse_pause_stop_req  rsp=uav_vision_set_time_lapse_pause_stop_rsp
+  0x0A/0x7B (123)  req=uav_vision_set_time_lapse_set_param_req  rsp=uav_vision_set_time_lapse_set_param_rsp
+  0x0A/0x7C (124)  req=uav_vision_set_time_lapse_load_task_req  rsp=uav_vision_set_time_lapse_load_task_rsp
+  0x0A/0x7D (125)  req=uav_vision_set_app_camera_calibration_cmd_req  rsp=uav_vision_set_app_camera_calibration_cmd_rsp
+  0x0A/0x81 (129)  req=uav_vision_set_start_stop_uav_req  rsp=uav_vision_set_start_stop_uav_rsp
+  0x0A/0x8D (141)  req=uav_vision_time_lapse_compass_cali_req_req  rsp=uav_vision_time_lapse_compass_cali_req_rsp
+  0x0A/0x94 (148)  req=uav_vision_set_SetTrackingTarget_req  rsp=uav_vision_set_SetTrackingTarget_rsp
+  0x0A/0x97 (151)  req=uav_vision_set_StopMultiTracking_req  rsp=uav_general_set_device_date_rsp
+  0x0A/0x9A (154)  req=uav_vision_set_smart_eye_select_target_req  rsp=uav_vision_set_smart_eye_select_target_rsp
+  0x0A/0x9B (155)  req=uav_vision_ack  rsp=uav_vision_get_pano_image_buf_rsp
+  0x0A/0x9B (155)  req=uav_vision_get_smart_eye_mot_switch_state_req  rsp=uav_vision_get_smart_eye_mot_switch_state_rsp
+  0x0A/0xBA (186)  req=uav_vision_target_manager_cmd_req  rsp=uav_vision_target_manager_cmd_rsp
+  0x0A/0xC1 (193)  req=uav_vision_set_poi_init_target_req  rsp=uav_vision_set_poi_init_target_rsp
+  0x0A/0xC4 (196)  req=uav_vision_set_poi_set_param_req  rsp=uav_vision_set_poi_set_param_rsp
+  0x0A/0xE7 (231)  req=uav_vision_tracking_box_to_nav_push  rsp=uav_vision_push_tracking_box_to_nav_rsp
+  0x0A/0xEC (236)  req=uav_vision_get_navi_homing_receive_msg_from_APP_req  rsp=uav_vision_get_navi_homing_receive_msg_from_APP_rsp
+  0x0A/0xF6 (246)  req=uav_vision_set_mastershot_set_param_req  rsp=uav_vision_set_mastershot_set_param_rsp
+  0x0A/0xF9 (249)  req=uav_vision_set_multi_target_mastershot_param_req_req  rsp=uav_vision_set_multi_target_mastershot_param_req_rsp
+
+===== CMD_SET 0x0B (11) [simulator] =====
+  0x0B/0x01 (  1)  req=uav_simulator_get_sim_scan_req  rsp=uav_simulator_get_sim_scan_rsp
+  0x0B/0x02 (  2)  req=uav_simulator_get_sim_para_req  rsp=uav_simulator_get_sim_para_rsp
+  0x0B/0x04 (  4)  req=uav_simulator_get_sim_command_req  rsp=uav_simulator_get_sim_command_rsp
+
+===== CMD_SET 0x0D (13) [smartbattery] =====
+  0x0D/0x01 (  1)  req=uav_smart_battery_get_static_info_req  rsp=uav_smart_battery_get_static_info_rsp
+  0x0D/0x02 (  2)  req=uav_smart_battery_get_dynamic_info_req  rsp=uav_smart_battery_get_dynamic_info_rsp
+  0x0D/0x03 (  3)  req=uav_smart_battery_get_cell_voltage_req  rsp=uav_smart_battery_get_cell_voltage_rsp
+  0x0D/0x04 (  4)  req=uav_smart_battery_get_get_barcode_req  rsp=uav_smart_battery_get_get_barcode_rsp
+  0x0D/0x11 ( 17)  req=uav_smart_battery_set_self_discharge_req  rsp=uav_smart_battery_set_self_discharge_rsp
+  0x0D/0x24 ( 36)  req=uav_smart_battery_param_collect_req  rsp=uav_smart_battery_param_collect_rsp
+  0x0D/0xC4 (196)  req=uav_smart_battery_get_full_charge_condition_req  rsp=uav_smart_battery_get_full_charge_condition_rsp
+  0x0D/0xEF (239)  req=uav_smart_battery_clear_user_pd_blacklist_req  rsp=uav_smart_battery_clear_user_pd_blacklist_rsp
+
+===== CMD_SET 0x10 (16) [test] =====
+  0x10/0x10 ( 16)  req=uav_test_fstest_enable_req  rsp=uav_test_fstest_enable_rsp
+  0x10/0x11 ( 17)  req=uav_test_fstest_run_case_req  rsp=uav_test_fstest_run_case_rsp
+  0x10/0x12 ( 18)  req=uav_test_fstest_get_case_status_req  rsp=uav_test_fstest_get_case_status_rsp
+  0x10/0x13 ( 19)  req=uav_test_get_fs_test_case_req  rsp=uav_test_fstest_case_case_cnt_rsp
+  0x10/0x14 ( 20)  req=uav_test_fstest_get_case_info_req  rsp=uav_test_fstest_get_case_info_rsp
+
+===== CMD_SET 0x11 (17) [adsb] =====
+  0x11/0x0C ( 12)  req=uav_adsb_get_adsb_on_off_req  rsp=uav_adsb_get_adsb_on_off_rsp
+  0x11/0x37 ( 55)  req=uav_adsb_set_set_adsb_agent_switch_req  rsp=uav_adsb_set_set_adsb_agent_switch_rsp
+  0x11/0x39 ( 57)  req=uav_adsb_set_adsb_test_data_req  rsp=uav_adsb_set_adsb_test_data_rsp
+  0x11/0x43 ( 67)  req=uav_adsb_set_app_update_pos_enc_req  rsp=uav_adsb_set_app_update_pos_enc_rsp
+  0x11/0x4B ( 75)  req=uav_adsb_set_rid_registed_shared_key_query_req  rsp=uav_adsb_set_rid_registed_shared_key_query_rsp
+  0x11/0x50 ( 80)  req=uav_adsb_get_drone_dynamic_max_height_req  rsp=uav_adsb_get_drone_dynamic_max_height_rsp
+  0x11/0xD1 (209)  req=uav_adsb_get_realname_check_protocol_req  rsp=uav_adsb_get_realname_check_protocol_rsp
+  0x11/0xD5 (213)  req=uav_adsb_china_oid_publish_push  rsp=uav_adsb_push_china_oid_publish_rsp
+  0x11/0xD6 (214)  req=uav_adsb_set_china_uom_realname_tag_req  rsp=uav_adsb_set_china_uom_realname_tag_rsp
+
+===== CMD_SET 0x12 (18) [bt] =====
+  0x12/0x07 (  7)  req=uav_bt_get_get_ble_name_req  rsp=uav_bt_get_get_ble_name_rsp
+  0x12/0x08 (  8)  req=uav_bt_set_set_ble_name_req  rsp=uav_bt_set_set_ble_name_rsp
+  0x12/0x0C ( 12)  req=uav_bt_get_bt_mac_addr_req  rsp=uav_bt_get_bt_mac_addr_rsp
+  0x12/0x21 ( 33)  req=bt_get_ibeacon_uuid_req  rsp=bt_get_ibeacon_uuid_rsp
+  0x12/0x8E (142)  req=uav_bt_network_report_action_req  rsp=uav_bt_network_report_action_rsp
+
+===== CMD_SET 0x15 (21) [goggles] =====
+  0x15/0x35 ( 53)  req=uav_goggles_app_to_glass_push_data_push  rsp=uav_goggles_push_app_to_glass_push_data_rsp
+
+===== CMD_SET 0x18 (24) [cellular4g] =====
+  0x18/0x15 ( 21)  req=uav_cellular4g_lte_apn_request_info  rsp=uav_cellular4g_lte_apn_response_info
+  0x18/0x43 ( 67)  req=uav_cellular4g_get_lte_dongle_fw_release_note_req  rsp=uav_cellular4g_get_lte_dongle_fw_release_note_rsp
+  0x18/0x45 ( 69)  req=uav_cellular4g_get_dongle_subscribe_info_req  rsp=uav_cellular4g_get_dongle_subscribe_info_rsp
+  0x18/0x4B ( 75)  req=uav_cellular4g_lte_esim_set_info  rsp=uav_cellular4g_lte_esim_response_info
+
+===== CMD_SET 0x19 (25) [extend] =====
+  0x19/0x31 ( 49)  req=uav_extend_log_export_control_req  rsp=uav_extend_log_export_control_rsp
+  0x19/0x40 ( 64)  req=uav_extend_lock_right_of_control_req  rsp=uav_extend_lock_right_of_control_rsp
+  0x19/0x41 ( 65)  req=uav_extend_preempt_right_of_control_req  rsp=uav_extend_preempt_right_of_control_rsp
+  0x19/0x42 ( 66)  req=uav_extend_owner_ack  rsp=
+  0x19/0x45 ( 69)  req=uav_extend_set_notify_uncontrol_action_req  rsp=uav_extend_set_notify_uncontrol_action_rsp
+  0x19/0x46 ( 70)  req=uav_extend_set_task_occupy_control_req  rsp=uav_extend_set_task_occupy_control_rsp
+
+===== CMD_SET 0x21 (33) [health] =====
+  0x21/0x04 (  4)  req=uav_heathy_set_inject_test_req  rsp=uav_heathy_set_inject_test_rsp
+  0x21/0x05 (  5)  req=uav_heathy_set_set_subscriber_req  rsp=uav_heathy_set_set_subscriber_rsp
+  0x21/0x0A ( 10)  req=uav_heathy_get_history_cmd  rsp=uav_heathy_get_history_cmd_rsp
+
+===== CMD_SET 0x22 (34) [fc2] =====
+  0x22/0x1D ( 29)  req=uav_fc2_get_get_waypoint_info_req  rsp=uav_fc2_get_get_waypoint_info_rsp
+  0x22/0x27 ( 39)  req=uav_fc2_get_API_WP2_GET_BREAK_POINT_INFO_req  rsp=uav_fc2_get_API_WP2_GET_BREAK_POINT_INFO_rsp
+  0x22/0x28 ( 40)  req=uav_fc2_FC_FACTORY_CMD_req  rsp=uav_fc2_FC_FACTORY_CMD_rsp
+  0x22/0x48 ( 72)  req=uav_fc2_get_afqt_on_off_cmd_req  rsp=uav_fc2_get_afqt_on_off_cmd_rsp
+  0x22/0x60 ( 96)  req=uav_fc2_get_display_mode_on_off_req  rsp=uav_fc2_g
+  0x22/0x67 (103)  req=uav_fc2_get_GET_ESC_DATA_API_req  rsp=uav_fc2_get_GET_ESC_DATA_API_rsp
+  0x22/0x80 (128)  req=uav_fc_fs_cnt_down_to_app_push  rsp=uav_fc_push_fs_cnt_down_to_app_rsp
+  0x22/0xAB (171)  req=uav_fc2_start_stop_wpmz_mission_req  rsp=uav_fc2_start_stop_wpmz_mission_rsp
+  0x22/0xAC (172)  req=uav_fc2_break_resume_wpmz_mission_req  rsp=uav_fc2_break_resume_wpmz_mission_rsp
+  0x22/0xAE (174)  req=uav_fc2_get_wp3_query_result_req  rsp=uav_fc2_get_wp3_query_result_rsp
+  0x22/0xAF (175)  req=uav_fc2_get_wp3_query_breakpoint_info_req  rsp=uav_fc2_get_wp3_query_breakpoint_info_rsp
+  0x22/0xCB (203)  req=uav_fc2_RC_DYN_HOMEPOINT_INFO_push  rsp=uav_fc2_push_RC_DYN_HOMEPOINT_INFO_rsp
+
+===== CMD_SET 0x23 (35) [navigation] =====
+  0x23/0x04 (  4)  req=uav_navigation_api_msg_result_ind_t_push  rsp=uav_navigation_push_api_msg_result_ind_t_rsp
+  0x23/0x12 ( 18)  req=uav_navigation_get_precise_photo_file_action_req  rsp=uav_navigation_get_precise_photo_file_action_rsp
+  0x23/0x13 ( 19)  req=uav_navigation_handheld_func_req  rsp=uav_navigation_handheld_func_rsp
+  0x23/0x15 ( 21)  req=uav_navigation_handheld_func_exit_req  rsp=uav_navigation_handheld_func_exit_rsp
+  0x23/0x16 ( 22)  req=uav_navigation_set_handheld_func_param_req  rsp=uav_navigation_set_handheld_func_param_rsp
+  0x23/0x18 ( 24)  req=navigation_smart_portrait_ctrl_action_req  rsp=navigation_smart_portrait_ctrl_action_rsp
+  0x23/0x19 ( 25)  req=navigation_get_smart_portrait_template_get_req  rsp=navigation_get_smart_portrait_template_get_rsp
+  0x23/0xA0 (160)  req=uav_navigation_set_keep_sticks_switch_req  rsp=uav_navigation_set_keep_sticks_switch_rsp
+  0x23/0xB6 (182)  req=uav_navigation_fancy_mode_intend_from_app_req  rsp=uav_navigation_push_fancy_mode_intend_from_app_rsp
+  0x23/0xC0 (192)  req=uav_navigation_offline_map_service_req  rsp=uav_navigation_offline_map_service_rsp
+
+===== CMD_SET 0x24 (36) [perception] =====
+  0x24/0x28 ( 40)  req=uav_perception_get_vps_cali_token_req  rsp=uav_perception_get_vps_cali_token_rsp
+
+===== CMD_SET 0x49 (73) [sdk] =====
+  0x49/0x80 (128)  req=uav_sdk_get_or_release_control_auth_t  rsp=uav_sdk_get_or_release_control_auth_ack_t
+
+===== CMD_SET 0x50 (80) [esdd] =====
+  0x50/0x05 (  5)  req=uav_esdd_get_get_remote_audio_remux_state_req  rsp=uav_esdd_get_get_remote_audio_remux_state_rsp
+  0x50/0x08 (  8)  req=uav_esdd_get_rgb_led_control_req  rsp=uav_esdd_get_rgb_led_control_rsp
+
+===== CMD_SET 0x51 (81) [wlm] =====
+  0x51/0x02 (  2)  req=uav_wlm_get_link_mode_switch_req  rsp=uav_wlm_get_link_mode_switch_rsp
+  0x51/0x09 (  9)  req=uav_wlm_wlm_test_info_req  rsp=uav_wlm_wlm_test_info_rsp
+  0x51/0x0D ( 13)  req=uav_wlm_get_wlm_debug_control_req  rsp=uav_wlm_get_wlm_debug_control_rsp
+  0x51/0x15 ( 21)  req=uav_wlm_get_dev_select_req  rsp=uav_wlm_get_dev_select_rsp
+  0x51/0x1A ( 26)  req=uav_wlm_service_mode_switch_req  rsp=uav_wlm_service_mode_switch_rsp
+  0x51/0x1E ( 30)  req=uav_wlm_DUSS_MB_CMD_WL_MANAGE_RM_CTRL_REPORT_push  rsp=uav_wlm_push_DUSS_MB_CMD_WL_MANAGE_RM_CTRL_REPORT_rsp
+  0x51/0x2B ( 43)  req=uav_wlm_wlm_app_conn_product_info_push  rsp=uav_wlm_push_wlm_app_conn_product_info_rsp
+  0x51/0x42 ( 66)  req=uav_wlm_wlm_ability_nego_result_req  rsp=uav_wlm_wlm_ability_nego_result_rsp
+
+===== CMD_SET 0x52 (82) [af] =====
+  0x52/0x01 (  1)  req=uav_af_rc_start_autoflight_req  rsp=uav_af_set_rc_start_autoflight_rsp
+
+===== CMD_SET 0x59 (89) [diag] =====
+  0x59/0x01 (  1)  req=uav_diag_sys_diag_mode_switch_req  rsp=uav_diag_sys_diag_mode_switch_rsp
+  0x59/0x02 (  2)  req=uav_diag_get_sys_diag_capability_req  rsp=uav_diag_get_sys_diag_capability_rsp
+  0x59/0x03 (  3)  req=uav_diag_get_sys_diag_keep_alive_req  rsp=uav_diag_get_sys_diag_keep_alive_rsp
+  0x59/0x04 (  4)  req=uav_diag_sys_diag_execute_req  rsp=uav_diag_sys_diag_execute_rsp
+  0x59/0x05 (  5)  req=uav_diag_sys_diag_terminate_req  rsp=uav_diag_sys_diag_terminate_rsp
+  0x59/0x07 (  7)  req=uav_diag_get_diag_result_cmd  rsp=uav_diag_get_diag_result_cmd_rsp
+
+===== CMD_SET 0xEE (238) [app] =====
+  0xEE/0x02 (  2)  req=uav_app_phone_camera_info_push  rsp=uav_app_push_phone_camera_info_rsp
+  0xEE/0x07 (  7)  req=uav_app_app_running_state_push  rsp=uav_app_push_app_running_state_rsp
+  0xEE/0x08 (  8)  req=uav_app_get_app_running_state_rsp  rsp=uav_app_get_app_running_state_req
+  0xEE/0x12 ( 18)  req=uav_app_push_app_state_sync_req  rsp=uav_app_push_app_state_sync_rsp
+  0xEE/0x2C ( 44)  req=uav_app_set_language_settings_req  rsp=uav_app_set_language_settings_rsp

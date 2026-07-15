@@ -1,0 +1,25 @@
+# Throwaway working files (not part of the project)
+scratch/
+*.tmp
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# decompiled .apk DJI Fly
+
+decompiled/
+
+# NOTE: decompiled/ is intentionally tracked (kept for analysis).
+# The APK there is ~700 MB — track it with Git LFS ("*.apk"), see decompiled/README.md.

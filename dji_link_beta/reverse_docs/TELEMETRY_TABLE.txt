@@ -1,0 +1,771 @@
+DJI Fly native SDK (libsdk_jni.so, WM160/Mavic Mini 1) — COMPLETE Key*Push telemetry decoder table
+Payload = *(uav_cmd_rsp+0x28) for MODE=payload; for MODE=typed x2 IS the decoded struct pointer (offsets are struct fields).
+Types: uN unsigned int, sN signed int, fN = N-bit value loaded into FP reg (raw int reinterpreted/converted). pairNN = ldp.
+Confidence: H=offset+type direct; M=needs scaling/mask review; L=empty/indirect(helper call).
+
+====================================================================================================
+### SUBSYSTEM: FLIGHT CONTROLLER / OSD   (87 fields)
+====================================================================================================
+  AirSenseSystemConnected                        [H] src=core::uav_cmd_rsp  VA=0x2c2e6bc
+      @0x0:u8  mask/shift=&0x1
+  AirSenseSystemInformation                      [H] src=core::uav_cmd_rsp  VA=0x2c2eb20
+      @0x0:u8 @0x1:u8  mask/shift=>>6 bits[1:3] bits[4:5]
+  AirSenseSystemSupported                        [H] src=core::uav_cmd_rsp  VA=0x2c2e4a8
+      @0xc:u32 @0x10:u32 @0x24:u32 @0x28:u64  mask/shift=&0x1
+  Altitude                                       [H] src=core::uav_cmd_rsp  VA=0x2b8ba9c
+      @0x10:s16  scale=x0.1
+  AreMotorsOn                                    [H] src=core::uav_cmd_rsp  VA=0x2b9d490
+      @0x20:u32  mask/shift=bits[3:3]
+  Attitude                                       [H] src=core::uav_cmd_rsp  VA=0x2b8bbd8
+      @0x18:s16 @0x1a:s16 @0x1c:s16  scale=x0.1
+  AutoRTHReason                                  [H] src=core::uav_cmd_rsp  VA=0x2ba2580
+      @0x25:u8
+  CameraStorageGroupInfoByStorageInfo            [H] src=core::uav_cmd_rsp  VA=0x3487ac8
+      @0x1:u8  mask/shift=&0x1 bits[1:4]
+  ChargeRemainingInfo                            [H] src=core::uav_cmd_rsp  VA=0x33bb96c
+      @0x0:u32 @0x4:u8 @0x17:u8  mask/shift=bits[6:6] bits[5:5]
+  ChargeRemainingInfoByFC                        [H] src=core::uav_cmd_rsp  VA=0x33bbb38
+      @0x0:u32 @0x4:u8 @0x17:u8  mask/shift=bits[6:6] bits[5:5]
+  ChipOverHeatLevel0801                          [H] src=core::uav_cmd_rsp  VA=0x2c2e480
+      @0xc:u32 @0x10:u32
+  ChipOverHeatLevel0F01                          [H] src=core::uav_cmd_rsp  VA=0x2c2dea8
+      @0xc:u32 @0x10:u32
+  CommonCountDownLandingStatus                   [H] src=core::uav_cmd_rsp  VA=0x2bd56a8
+      @0x0:u8 @0x24:u32
+  CompassHeading                                 [H] src=core::uav_cmd_rsp  VA=0x2ba62b8
+      @0x1c:s16  scale=x0.1
+  CountDownInfo                                  [H] src=core::uav_cmd_rsp  VA=0x2ba2bfc
+      @0x0:u8 @0x1:u8 @0x3:u8
+  CountDownLandingInfo                           [H] src=core::uav_cmd_rsp  VA=0x2ba2db8
+      @0x1:u8 @0x2:u8 @0x3:u8 @0x4:u8 @0xa:u8
+  CountDownLandingStatus                         [H] src=core::uav_cmd_rsp  VA=0x2bd62c4
+      @0x1:u8
+  CurrentFlightDurationInSeconds                 [H] src=uav_fc_fc_osd_lowfreq_push  VA=0x2fd54e0
+      @0x61:u8 @0x64:u16
+  DigitalDenoising                               [H] src=core::uav_cmd_rsp  VA=0x3692ec0
+      @0x67:s8
+  DisplayDataReport                              [H] src=core::uav_cmd_rsp  VA=0x2bb6758
+      @0x24:u32
+  DynamicDBFileMaxSizeMB                         [H] src=uav_fc_flylimit_version_push  VA=0x2c994c0
+      @0x8:u32  mask/shift=bits[21:28]
+  DynamicHomePointState                          [H] src=core::uav_cmd_rsp  VA=0x2fd2fec
+      @0x60:u8
+  EmergencyBrakeDirection                        [H] src=core::uav_cmd_rsp  VA=0x2c2fc18
+      @0x0:u16 @0x2:u8  mask/shift=bits[16:17] bits[5:6]
+  EmergencyBrakeEndReason                        [H] src=core::uav_cmd_rsp  VA=0x2c2fe68
+      @0x0:u16 @0x2:u8  mask/shift=bits[19:20]
+  FCMSpotlightTargetIndicatorInfo                [H] src=core::uav_cmd_rsp  VA=0x428bd40
+      @0x0:u64
+  FCRemoteControllerSwitchMode                   [H] src=core::uav_cmd_rsp  VA=0x2bec358
+      @0x20:u32  mask/shift=bits[13:14]
+  FCWhiteListUnlimitEnable                       [H] src=core::uav_cmd_rsp  VA=0x2bdcb28
+      @0x0:u8
+  FlightLimitHeight                              [H] src=uav_fc_no_fly_area_push  VA=0x2bb6988
+      @0x5:u16
+  FlightLogIndex                                 [H] src=uav_fc_fc_osd_lowfreq_push  VA=0x2ba63f4
+      @0x1e:u16
+  FlightMode                                     [H] src=core::uav_cmd_rsp  VA=0x2b9a31c
+      @0x1e:u8  mask/shift=&0x7f
+  FlightTimeInSeconds                            [H] src=core::uav_cmd_rsp  VA=0x2bc7d84
+      @0x2a:u16
+  FlightrestrictDBType                           [H] src=uav_fc_flylimit_version_push  VA=0x2bb652c
+      @0x8:u32  mask/shift=bits[13:20] bits[5:12]
+  FlyLimitDBVersion                              [H] src=uav_fc_flylimit_version_push  VA=0x2ba9ad8
+      @0x0:u32  mask/shift=>>24 bits[16:23] bits[8:15] &0xff
+  GPSIsValid                                     [H] src=core::uav_cmd_rsp  VA=0x2b9a57c
+      @0x20:u32  mask/shift=bits[15:15]
+  GPSModeFailureReason                           [H] src=core::uav_cmd_rsp  VA=0x2bcce80
+      @0x27:u8  mask/shift=&0xf
+  GPSSNRInfo                                     [L] src=uav_fc_gps_snr_push_push  VA=0x2b9a6a8
+      (no direct read - via helper/nested; mode=typed)
+  GPSSNRL5Info                                   [L] src=uav_fc_gps_snr_push_l5_push  VA=0x2b9a898
+      (no direct read - via helper/nested; mode=typed)
+  GPSSignalLevel                                 [H] src=core::uav_cmd_rsp  VA=0x2b9a44c
+      @0x20:u32  mask/shift=bits[18:21]
+  GoHomeTrajectory                               [H] src=core::uav_cmd_rsp  VA=0x2baebf4
+      @0x24:u32 @0x28:u64  scale=x4.19095e-08 mask/shift=&0x-2 <<2
+  HandHeldObjectDetectionTarget                  [L] src=core::uav_cmd_rsp  VA=0x3933ef0
+      (no direct read - via helper/nested; mode=typed)
+  HandHeldScannedTargets                         [L] src=core::uav_cmd_rsp  VA=0x393391c
+      (no direct read - via helper/nested; mode=typed)
+  HandHeldTrackingTarget                         [H] src=core::uav_cmd_rsp  VA=0x3933adc
+      @0x5:u8  mask/shift=>>3
+  HeightLimitReason                              [H] src=uav_fc_fc_osd_lowfreq_push  VA=0x2bb6c64
+      @0x24:u8  mask/shift=&0x1f
+  HomeLocation                                   [H] src=core::uav_cmd_rsp  VA=0x2b88ca4
+      @0x0:pair64  scale=x3.14159
+  HomeLocationType                               [H] src=core::uav_cmd_rsp  VA=0x2b896c4
+      @0x4c:u8
+  HoveringPositionModeIsAvailable                [H] src=uav_fc_fc_osd_lowfreq_push  VA=0x2be3b64
+      @0x4b:u8  mask/shift=>>7
+  IMUFailureReason                               [H] src=core::uav_cmd_rsp  VA=0x2baff48
+      @0x31:u8
+  IsFlightLimitUsedOnBoardDB                     [H] src=uav_fc_no_fly_area_push  VA=0x2be41ac
+      @0x3:u16  mask/shift=bits[7:7]
+  IsFlying                                       [H] src=core::uav_cmd_rsp  VA=0x2b8bd3c
+      @0x20:u32  mask/shift=&0xe
+  IsHomeLocationSet                              [H] src=core::uav_cmd_rsp  VA=0x2bb6d94
+      @0x14:u16  mask/shift=&0x1
+  IsImpactedInAir                                [H] src=uav_fc_fc_osd_lowfreq_push  VA=0x2ba9998
+      @0x20:u32 @0x24:u8
+  IsInMovingPlatform                             [H] src=core::uav_cmd_rsp  VA=0x2bc5ae0
+      @0x41:u8  mask/shift=bits[6:6]
+  IsLandingConfirmationNeeded                    [H] src=core::uav_cmd_rsp  VA=0x2b9eac0
+      @0x0:u16  mask/shift=bits[5:5]
+  IsNearDistanceLimit                            [H] src=uav_fc_fc_osd_lowfreq_push  VA=0x2bc7eb0
+      @0x14:u16  mask/shift=bits[4:4]
+  IsNearHeightLimit                              [H] src=uav_fc_fc_osd_lowfreq_push  VA=0x2bb6ec0
+      @0x14:u16  mask/shift=bits[5:5]
+  IsSimulatorStarted                             [H] src=uav_fc_fc_osd_lowfreq_push  VA=0x2ba6640
+      @0x20:u32  mask/shift=&0x1
+  LimitMaxFlightHeightInMeter                    [H] src=uav_fc_fc_osd_lowfreq_push  VA=0x2bec0f4
+      @0x25:f32
+  MasterShotMissionInfo                          [H] src=core::uav_cmd_rsp  VA=0x3eb65c0
+      @0x24:u32 @0x28:u64  mask/shift=&0xff
+  MasterShotMissionInfoByQsProtocol              [H] src=core::uav_cmd_rsp  VA=0x3ebc684
+      @0x6:u8 @0xb:u8 @0xc:u8 @0xd:u8  mask/shift=>>2 &0xff &0x-8
+  MasterShotStateByQsProtocol                    [H] src=core::uav_cmd_rsp  VA=0x3ebcb88
+      @0xa:u8
+  MotorStartFailureError                         [H] src=core::uav_cmd_rsp  VA=0x2bd664c
+      @0x33:u8
+  MotorStartUpTimes                              [H] src=uav_fc_osd_push  VA=0x2bb6fec
+      @0x2c:u8
+  MultiTargetMasterShotMissionInfo               [H] src=core::uav_cmd_rsp  VA=0x411ef30
+      @0x24:u32 @0x28:u64  mask/shift=&0xff
+  MultiTargetMasterShotScannedTargets            [L] src=core::uav_cmd_rsp  VA=0x4120a68
+      (no direct read - via helper/nested; mode=typed)  mask/shift=>>3
+  MultiTargetMasterShotTrackingTarget            [L] src=core::uav_cmd_rsp  VA=0x41211b8
+      (no direct read - via helper/nested; mode=typed)
+  MultipleTrackBoxInfos                          [L] src=core::uav_cmd_rsp  VA=0x3e7f7c4
+      (no direct read - via helper/nested; mode=typed)
+  NavigationDebugErrorMsg                        [H] src=core::uav_cmd_rsp  VA=0x3e85ff8
+      @0x0:u16  mask/shift=<<1 &0x1fff0
+  PanoZoomFovValueTopic                          [H] src=core::uav_topic_data_rsp  VA=0x4829d5c
+      @0x28:u64  mask/shift=&0xff >>37
+  PhotoIntervalShootSettings                     [H] src=core::uav_cmd_rsp  VA=0x3493430
+      @0x24:u32 @0x28:u64
+  PhotoIntervalShootSettingsWithoutShootCount    [H] src=core::uav_cmd_rsp  VA=0x34936dc
+      @0x24:u32 @0x28:u64
+  PhotoRatioRangeTopic                           [H] src=core::uav_topic_data_rsp  VA=0x3466d34
+      @0x24:u32 @0x28:u64  mask/shift=<<2 >>2 >>62 >>1
+  PrototypeManagerInfo                           [H] src=core::uav_cmd_rsp  VA=0x2bb72f4
+      @0xc:u32 @0x10:u32 @0x28:u64
+  QuickCameraModeRangeTopic                      [H] src=core::uav_topic_data_rsp  VA=0x353e8dc
+      @0x24:u32  mask/shift=>>2 >>62 >>1 <<2
+  QuickShotTrackingBoxState                      [H] src=core::uav_cmd_rsp  VA=0x3e006f4
+      @0x0:u8 @0x2:u8
+  SatelliteCount                                 [H] src=core::uav_cmd_rsp  VA=0x2ba6514
+      @0x24:u8
+  StaticDBVersion                                [H] src=uav_fc_flylimit_version_push  VA=0x2ba9cd4
+      @0x0:u32
+  TakeoffFailureError                            [H] src=core::uav_cmd_rsp  VA=0x2bc7fdc
+      @0x26:u8 @0x2f:u8  mask/shift=&0x7f
+  TakeoffLocationAltitude                        [H] src=uav_fc_fc_osd_lowfreq_push  VA=0x2bd779c
+      @0x10:f32  scale=x0.1
+  TimelapseLiveviewMargin                        [H] src=core::uav_cmd_rsp  VA=0x3e8622c
+      @0x31:f32 @0x35:f32
+  TimelapseLocations                             [H] src=core::uav_cmd_rsp  VA=0x3e73e70
+      @0x0:u8  mask/shift=>>3 >>61 >>2 <<3
+  TotalFlightCount                               [H] src=uav_fc_fc_osd_lowfreq_push  VA=0x2fd2aa0
+      @0x61:u8 @0x62:u16
+  TouchDownConfirmLimitHeight                    [H] src=core::uav_cmd_rsp  VA=0x2bec220
+      @0x2d:u8
+  UserAvoidanceEnabled                           [H] src=uav_fc_avoid_status_push  VA=0x3dff5ac
+      @0x0:u16  mask/shift=bits[1:1]
+  Velocity                                       [H] src=core::uav_cmd_rsp  VA=0x2b8be74
+      @0x12:s16 @0x14:s16 @0x16:s16  scale=x0.1
+  WiFiUpgradeTriggerable                         [H] src=core::uav_cmd_rsp  VA=0x33ccde8
+      @0x14:u8
+  WindDirection                                  [H] src=uav_fc_osd_push  VA=0x2ba4da8
+      @0x1c:s16 @0x40:u8  scale=x0.1
+  WindSpeed                                      [H] src=core::uav_cmd_rsp  VA=0x2b94160
+      @0x44:u8
+====================================================================================================
+### SUBSYSTEM: BATTERY   (17 fields)
+====================================================================================================
+  BatteryThresholdBehavior                       [H] src=uav_fc_osd_push  VA=0x2bdc9fc
+      @0x20:u32  mask/shift=bits[9:10]
+  GoHomeAssessment                               [H] src=uav_fc_func_mcu_battery_capacity_gohome_landing_to_app_push  VA=0x2bed4a4
+      @0x0:u16 @0x2:u16 @0x4:u16 @0x6:u8 @0x7:u8
+  GoHomeAssessmentFromBatteryOSD                 [H] src=uav_fc_electricity_push  VA=0x2bed668
+      @0x0:u16 @0x2:u16 @0x4:u16 @0x6:u16 @0x8:u16 @0xa:f32 @0x16:u8 @0x17:u8
+  LowBatteryWarningThreshold                     [H] src=uav_fc_electricity_push  VA=0x2bd6778
+      @0x1b:u16  mask/shift=&0x7f
+  LowBatteryWarningThresholdOSD                  [H] src=uav_fc_battery_info_to_app_OSD_push  VA=0x2bd68a4
+      @0x6:u16  mask/shift=&0x7f
+  RemainingFlightTime                            [H] src=uav_fc_func_mcu_battery_capacity_gohome_landing_to_app_push  VA=0x2bed874
+      @0x0:u16
+  RemainingFlightTimeFromBatteryOsd              [H] src=uav_fc_electricity_push  VA=0x2bed998
+      @0x0:u16
+  RequireGoHomeByLowBatteryVoltage0              [H] src=core::uav_cmd_rsp  VA=0x2bedabc
+      @0x12:u32  mask/shift=bits[4:4]
+  RequireGoHomeByLowBatteryVoltage1              [H] src=core::uav_cmd_rsp  VA=0x2bedbe8
+      @0x0:u32  mask/shift=bits[4:4]
+  RequireGoHomeBySmartBatteryPercent0            [H] src=core::uav_cmd_rsp  VA=0x2bedf6c
+      @0x12:u32  mask/shift=bits[2:2]
+  RequireGoHomeBySmartBatteryPercent1            [H] src=core::uav_cmd_rsp  VA=0x2bee098
+      @0x0:u32  mask/shift=bits[2:2]
+  RequireLandingByLowBatteryVoltage0             [H] src=core::uav_cmd_rsp  VA=0x2bedd14
+      @0x12:u32  mask/shift=bits[5:5]
+  RequireLandingByLowBatteryVoltage1             [H] src=core::uav_cmd_rsp  VA=0x2bede40
+      @0x0:u32  mask/shift=bits[5:5]
+  RequireLandingBySmartBatteryPercent0           [H] src=core::uav_cmd_rsp  VA=0x2bee1c4
+      @0x12:u32  mask/shift=bits[3:3]
+  RequireLandingBySmartBatteryPercent1           [H] src=core::uav_cmd_rsp  VA=0x2bee2f0
+      @0x0:u32  mask/shift=bits[3:3]
+  SeriousLowBatteryWarningThreshold              [H] src=uav_fc_electricity_push  VA=0x2bec488
+      @0x1c:u8  mask/shift=&0x7f
+  SeriousLowBatteryWarningThresholdOSD           [H] src=uav_fc_battery_info_to_app_OSD_push  VA=0x2bec5b4
+      @0x7:u8  mask/shift=&0x7f
+====================================================================================================
+### SUBSYSTEM: RC / RADIO LINK   (10 fields)
+====================================================================================================
+  AircraftLocation                               [H] src=core::uav_cmd_rsp  VA=0x2b8b880
+      @0x0:pair64 @0x20:u32 @0x44:u8  scale=x3.14159 mask/shift=&0x7
+  BandWidthPercent                               [H] src=core::uav_cmd_rsp  VA=0x3da82d8
+      @0x1:u8  mask/shift=>>3 >>61 >>2 <<3
+  BandWidthPercentIsSupport                      [L] src=uav_dm368_push_liveview_status  VA=0x3dab49c
+      (no direct read - via helper/nested; mode=typed)
+  ChannelSelectionModeWiFi                       [H] src=uav_wifi_wifi_status  VA=0x3d3c5b4
+      @0x0:u16  mask/shift=bits[7:7]
+  IsRCStickNotInPosition                         [H] src=uav_rc_ground_ofdm_self_test_push  VA=0x2d67ab8
+      @0x0:u32  mask/shift=bits[18:18]
+  RCDialButtonDown                               [H] src=uav_rc_get_rc_button_phy_status_req  VA=0x2d85df8
+      @0x0:u32 @0x4:u8  mask/shift=bits[32:32]
+  RCDialValue                                    [H] src=uav_rc_get_rc_button_phy_status_req  VA=0x2d85c70
+      @0x0:u32 @0x4:u8  mask/shift=bits[1:5]
+  SyncLogic21ListenMultiRc                       [L] src=?  VA=0x21c64f8
+      (no direct read - via helper/nested; mode=typed)
+  UavSdrDongleState                              [H] src=device_ofdm_sdr_dongle_state_req  VA=0x3d9d938
+      @0x2:u8 @0x3:u8
+  VelocityFromAircraftCoordinate                 [H] src=uav_fc_osd_push  VA=0x2b8bfe0
+      @0x12:s16 @0x14:s16 @0x16:s16 @0x1c:s16  scale=x0.1
+====================================================================================================
+### SUBSYSTEM: GIMBAL   (10 fields)
+====================================================================================================
+  GimbalCalibrationStateWithExt                  [H] src=core::uav_cmd_rsp  VA=0x3ab963c
+      @0x0:u8 @0x1:u8 @0x2:u8  mask/shift=>>32
+  GimbalZeroPointCalibrationState                [H] src=core::uav_cmd_rsp  VA=0x3ab9c44
+      @0x0:u8 @0x1:u8
+  IsGimbalAttitudePitchUnderControl              [H] src=uav_gimbal_push_status  VA=0x38f047c
+      @0xb:u8 @0x31:u8  mask/shift=&0x1
+  IsGimbalAttitudeRollUnderControl               [H] src=uav_gimbal_push_status  VA=0x38f02d4
+      @0xb:u8 @0x31:u8  mask/shift=bits[1:1]
+  IsGimbalAttitudeYawUnderControl                [H] src=uav_gimbal_push_status  VA=0x38f012c
+      @0xb:u8 @0x31:u8  mask/shift=bits[2:2]
+  IsTimelapseGimbalRollRotateForward             [H] src=core::uav_cmd_rsp  VA=0x408707c
+      @0x0:u8 @0x24:u32
+  TimelapseCurrentGimbalAttitude                 [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e87430
+      @0x26:f32
+  TimelapseGimbalRollRotateRange                 [H] src=core::uav_cmd_rsp  VA=0x4086540
+      @0x0:u8 @0x24:u32
+  TimelapseMaxGimbalAttitude                     [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e87304
+      @0x22:f32
+  TimelapseMinGimbalAttitude                     [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e8755c
+      @0x1e:f32
+====================================================================================================
+### SUBSYSTEM: CAMERA   (113 fields)
+====================================================================================================
+  AEBSettings                                    [H] src=uav_camera_capture_para_push  VA=0x349c0fc
+      @0x3b:u8 @0x3c:u8
+  AEBSettingsRangeTopic                          [H] src=uav_camera_camcap_photo_aeb_rsp  VA=0x349ce40
+      @0x3:u8
+  AELockEnabled                                  [H] src=uav_camera_capture_para_push  VA=0x3468c18
+      @0x38:u8  mask/shift=&0x1
+  AntiFlicker                                    [H] src=uav_camera_capture_para_push  VA=0x3457e88
+      @0x20:u8
+  AntiFlickerRangeTopic                          [H] src=uav_camera_camcap_antiflicker_rsp  VA=0x3458ecc
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  Aperture                                       [H] src=uav_camera_capture_para_push  VA=0x341b050
+      @0x0:u16 @0x14:u8 @0x26:s16
+  AutoChangeStorageInfoTopic                     [H] src=uav_camera_cam_storage_switch_info_rsp  VA=0x38d82b4
+      @0x3:u8 @0x4:u8 @0x5:u8 @0x6:u8 @0x7:u8
+  CameraAdvanceMode                              [H] src=uav_camera_push_camera_status_info_push  VA=0x345bbc0
+      @0x2f:u8
+  CameraBasicFocalLengthTopic                    [H] src=uav_camera_camcap_zoom_rsp  VA=0x356c0ec
+      @0x3:u8 @0xa:u16
+  CameraColor                                    [H] src=uav_camera_capture_para_push::__ndk1::map::less::allocator::pair  VA=0x351dec8
+      @0x1f:s8
+  CameraColorLutVersionRangeTopic                [H] src=uav_camera_camcap_color_mode_rsp  VA=0x38dbf20
+      @0x0:u8 @0x1:u16 @0x3:u8  mask/shift=>>4 &0xf
+  CameraColorRangeTopic                          [H] src=uav_camera_camcap_color_mode_rsp  VA=0x384a6ac
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  CameraColorTintRangeTopic                      [H] src=uav_camera_camcap_wb_rsp  VA=0x3447884
+      @0x7:s16 @0x9:s16
+  CameraDistortionViewInfoTopic                  [H] src=uav_camera_cam_distortion_view_topic_t  VA=0x428a420
+      @0x0:u8 @0x1:u16 @0x3:u8 @0x4:u8 @0x6:f32 @0xa:f32 @0xe:f32 @0x12:f32 @0x16:u16 @0x18:f32 @0x1c:f32 @0x20:u16 @0x22:u16 @0xb7:u8  scale=x3.14159
+  CameraEisModeRangeTopic                        [H] src=uav_camera_camcap_eis_topic_t  VA=0x3aa4920
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  CameraElectronicNDNotifyThresholdTopic         [H] src=uav_camera_camcap_nd_rsp  VA=0x38daa14
+      @0x0:u8 @0x1:u16 @0x3:u8  mask/shift=<<1
+  CameraElectronicNDRangeTopic                   [H] src=uav_camera_camcap_nd_rsp  VA=0x38da408
+      @0x3:u8  mask/shift=>>2 >>62 >>1 <<2
+  CameraElectronicNDRealValueTopic               [H] src=uav_camera_cam_expo_param_rsp  VA=0x38d0620
+      @0x29:u8
+  CameraElectronicNDValueTopic                   [H] src=uav_camera_cam_expo_param_rsp  VA=0x38d0230
+      @0x29:u8
+  CameraFocusRingMaxValue                        [H] src=uav_camera_len_para_push  VA=0x349bc30
+      @0x1:u16
+  CameraFocusRingMaxValueMinusOne                [H] src=uav_camera_len_para_push  VA=0x349bdcc
+      @0x1:u16
+  CameraISO                                      [H] src=uav_camera_capture_para_push  VA=0x341db18
+      @0x5:u8
+  CameraISOMax                                   [H] src=uav_camera_capture_para_push  VA=0x341de50
+      @0x60:u8
+  CameraISOMin                                   [H] src=uav_camera_capture_para_push  VA=0x341df70
+      @0x5f:u8
+  CameraIsTracking                               [H] src=uav_camera_push_camera_status_info_push  VA=0x347e154
+      @0x0:u32  mask/shift=bits[28:28]
+  CameraMeteringModeRangeTopic                   [H] src=uav_camera_camcap_ae_meter_rsp  VA=0x34dabd0
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  CameraModePhotoMergeSmartEyeAndExploreMode     [H] src=uav_camera_push_camera_status_info_push  VA=0x353bc78
+      @0x39:u8  mask/shift=>>2
+  CameraModeProfileRangeTopic                    [H] src=uav_camera_camcap_mode_profile_topic_t  VA=0x3947798
+      @0x0:u8 @0x3:u8  mask/shift=>>2 >>62 >>1 <<2
+  CameraOpticalZoomFocalLength                   [H] src=uav_camera_len_para_push  VA=0x3578408
+      @0x1b:u16
+  CameraOpticalZoomFocalLengthTimesZeroDotSix    [H] src=uav_camera_len_para_push  VA=0x3578a68
+      @0x1b:f16
+  CameraOpticalZoomSpec                          [H] src=uav_camera_len_para_push  VA=0x35773d4
+      @0x17:u16 @0x19:u16 @0x1d:u16
+  CameraOpticalZoomSpecTimesZeroDotSix           [H] src=uav_camera_len_para_push  VA=0x357756c
+      @0x17:u16 @0x19:u16 @0x1d:u16
+  CameraPanoModeExistedTopic                     [H] src=uav_camera_camcap_pano_mode_type_topic_t  VA=0x3aa5adc
+      @0x0:u8 @0x1:u16
+  CameraPanoModeTypeTopic                        [H] src=uav_camera_cam_pano_mode_type_topic_t  VA=0x3aa524c
+      @0x0:u8 @0x1:u8 @0x2:u8
+  CameraRecordingStatus                          [H] src=uav_camera_push_camera_status_info_push  VA=0x3492b64
+      @0x0:u32  mask/shift=bits[6:7]
+  CameraSettingChangedEventTopic                 [H] src=uav_camera_cam_setting_changed_event_topic_t  VA=0x38db228
+      @0x0:u8 @0x3:u16 @0x7:u32
+  CameraStorageGroupInfoByCameraStatus           [H] src=uav_camera_push_camera_status_info_push  VA=0x34878e0
+      @0x0:u32 @0x5:f128  mask/shift=bits[9:9] bits[10:13]
+  CameraStorageLocation                          [H] src=uav_camera_storage_info_push  VA=0x348027c
+      @0x0:u8  mask/shift=>>4
+  CameraStoringFile                              [H] src=uav_camera_push_camera_status_info_push  VA=0x3488f50
+      @0x0:u32  mask/shift=bits[19:19]
+  CameraToastEventTopic                          [H] src=uav_camera_cam_toast_event_topic_t  VA=0x3c20824
+      @0x2:u8
+  CameraType                                     [H] src=uav_camera_push_camera_status_info_push  VA=0x345ba34
+      @0x21:u8
+  CameraWorkMode                                 [H] src=uav_camera_push_camera_status_info_push  VA=0x34509f4
+      @0x4:u8
+  ColorTemperatureRangeTopic                     [H] src=uav_camera_camcap_wb_rsp  VA=0x34890e0
+      @0x3:u8 @0x5:u8
+  ExposureCompensation                           [H] src=uav_camera_capture_para_push  VA=0x347bb14
+      @0x2:u16 @0x4:u8 @0x5:u8 @0x14:u8 @0x28:u16 @0x2a:u8  mask/shift=>>15 &0x7fff
+  ExposureCompensationEVAdjustable               [H] src=uav_camera_capture_para_push  VA=0x347bebc
+      @0x2:u16 @0x4:u8 @0x5:u8 @0x14:u8 @0x28:u16 @0x2a:u8  mask/shift=>>15 &0x7fff
+  ExposureCompensationPayload                    [H] src=uav_camera_capture_para_push  VA=0x347bec4
+      @0x2:u16 @0x4:u8 @0x6:u8 @0x14:u8 @0x28:u16 @0x2a:u8  mask/shift=>>15 &0x7fff
+  ExposureCompensationRangeTopic                 [H] src=uav_camera_camcap_evbias_rsp  VA=0x347c3e0
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  ExposureMode                                   [H] src=uav_camera_capture_para_push  VA=0x3423e18
+      @0x14:u8
+  ExposureModeRangeTopic                         [H] src=uav_camera_camcap_exposure_mode_rsp  VA=0x384a9c4
+      @0x4:u8  mask/shift=>>2 >>62 >>1 <<2
+  ExposureSettings                               [H] src=uav_camera_capture_para_push  VA=0x3451d78
+      @0x26:s16 @0x28:u16 @0x2a:u8 @0x2b:u32 @0x2f:u8  mask/shift=>>15 &0x7fff
+  ExposureStatus                                 [H] src=uav_camera_capture_para_push  VA=0x3452270
+      @0x43:u8
+  FOVInfo                                        [H] src=uav_camera_fov_para_push  VA=0x3423954
+      @0x0:f128
+  FocalLengthRangeTopic                          [H] src=uav_camera_camcap_zoom_rsp  VA=0x3498200
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  HandHeldVideoResolutionFrameRateReference      [H] src=uav_camera_capture_para_push  VA=0x394b980
+      @0xd:u8 @0xe:u8
+  HandheldCameraMode                             [H] src=uav_camera_push_camera_status_info_push  VA=0x393d440
+      @0x39:u8
+  HandheldCameraModeRangeTopic                   [H] src=uav_camera_camcap_hs_submode_rsp  VA=0x3a3ae50
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  HandheldCameraModeTopic                        [H] src=uav_camera_cam_handheld_smart_info_topic_t  VA=0x394731c
+      @0x0:u8 @0x5:u8
+  HistogramData                                  [H] src=uav_camera_bargraph_info_push  VA=0x3469d00
+      @0x0:u8  mask/shift=>>2 >>62 >>1 <<2
+  HistogramEnable                                [H] src=uav_camera_push_camera_status_info_push  VA=0x346422c
+      @0x20:u8  mask/shift=&0x1
+  IsHandheldCameraSlowmotionModeSupportedTopic   [H] src=uav_camera_camcap_hs_submode_rsp  VA=0x3a3b390
+      @0x3:u8 @0x4:u8
+  IsIgnoreStorageStateForCapturingTopic          [H] src=uav_camera_topic_cam_condition_rsp  VA=0x38dd6c0
+      @0x3:u8  mask/shift=bits[1:1]
+  IsIgnoreStorageStateForEnteringPlaybackTopic   [H] src=uav_camera_topic_cam_condition_rsp  VA=0x38dd858
+      @0x3:u8  mask/shift=&0x1
+  IsInImageEnhancement                           [H] src=uav_camera_push_camera_status_info_push  VA=0x364f834
+      @0x0:u32  mask/shift=>>31
+  IsPlayingBack                                  [H] src=uav_camera_push_camera_status_info_push  VA=0x3469f98
+      @0x0:u32 @0x4:u8  mask/shift=bits[30:30]
+  IsRecording                                    [H] src=uav_camera_push_camera_status_info_push  VA=0x345bd4c
+      @0x0:u32
+  IsShootingIntervalPhoto                        [H] src=uav_camera_push_camera_status_info_push  VA=0x349bf6c
+      @0x0:u32  mask/shift=bits[20:20]
+  IsShootingRAWBurstPhoto                        [H] src=uav_camera_push_camera_status_info_push  VA=0x348d744
+      @0x0:u32  mask/shift=&0x38
+  IsTriggeringShutter                            [H] src=uav_camera_push_camera_status_info_push  VA=0x348d5a4
+      @0x0:u32
+  LiveViewCameraSource                           [H] src=uav_camera_push_camera_status_info_push  VA=0x345c06c
+      @0x20:u8  mask/shift=>>1
+  MechanicalShutterEnabled                       [H] src=uav_camera_capture_para_push  VA=0x3451f3c
+      @0x5d:u8
+  PanoFilmFormatRangeTopic                       [H] src=uav_camera_camcap_photo_storage_format_rsp  VA=0x345d6a0
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  PanoramaFreeCantShootReasonTopic               [H] src=uav_camera_pano_status_rsp  VA=0x38cdd04
+      @0x1c:u8 @0x1d:u32
+  PanoramaFreeCurTaskComposedSupportTopic        [H] src=uav_camera_cam_pano_calc_result_rsp  VA=0x38cd930
+      @0x1:u8  mask/shift=bits[1:1]
+  PanoramaFreeFusionTimeTopic                    [H] src=uav_camera_cam_pano_calc_result_rsp  VA=0x38cd190
+      @0x6:u32
+  PanoramaFreeShootCountTopic                    [H] src=uav_camera_cam_pano_calc_result_rsp  VA=0x38cd560
+      @0x2:u32
+  PanoramaOriginalFileSettingRangeTopic          [H] src=uav_camera_camcap_photo_storage_format_rsp  VA=0x345dcb0
+      @0x3:u8
+  PhotoBurstCount                                [H] src=uav_camera_capture_para_push  VA=0x3451bec
+      @0x21:u8
+  PhotoBurstCountRangeTopic                      [H] src=uav_camera_camcap_photo_burst_count_rsp  VA=0x384accc
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  PhotoIntervalCountdown                         [H] src=uav_camera_capture_para_push  VA=0x3492d00
+      @0x30:u8
+  PhotoIntervalShootSettingsRangeTopic           [H] src=uav_camera_camcap_photo_timer_interval_rsp  VA=0x384b950
+      @0x7:u8  mask/shift=>>3 >>61 >>2 <<3
+  PhotoProcessingDurationTypeTopic               [H] src=uav_proto_camera_cam_photo_param_new_topic_t  VA=0x3aa7af8
+      @0x18:u8
+  PhotoProcessingRemainTimeTopic                 [H] src=uav_proto_camera_cam_cap_status_topic  VA=0x3aa7314
+      @0x7:s8  mask/shift=&0x7f
+  PhotoProcessingTotalTimeTopic                  [H] src=uav_proto_camera_cam_cap_status_topic  VA=0x3aa6b38
+      @0x7:s8
+  PhotoRatio                                     [H] src=uav_camera_capture_para_push  VA=0x3452b14
+      @0xa:u8
+  PhotoResolution                                [H] src=uav_camera_capture_para_push  VA=0x37138e4
+      @0x9:u8
+  PhotoSize                                      [H] src=uav_camera_capture_para_push  VA=0x3421f94
+      @0x9:u8
+  PhotoStorageFormat                             [H] src=uav_camera_capture_para_push  VA=0x3472c18
+      @0xc:u8
+  PhotoStorageFormatRangeTopic                   [H] src=uav_camera_camcap_photo_storage_format_rsp  VA=0x36d4b14
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  ProresProfileTypeRangeTopic                    [H] src=uav_camera_camcap_prores_profile_rsp  VA=0x36508dc
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  QuickCameraMode                                [H] src=uav_camera_push_camera_status_info_push  VA=0x353ad28
+      @0x39:u8
+  RecordingTime                                  [H] src=uav_camera_push_camera_status_info_push  VA=0x345bee0
+      @0x1d:u16
+  Sharpness                                      [H] src=uav_camera_capture_para_push  VA=0x368fbec
+      @0x1b:s8
+  ShootPhotoMode                                 [H] src=uav_camera_capture_para_push  VA=0x3452ca0
+      @0x22:u8 @0x39:u8 @0x49:u8
+  ShutterSpeed                                   [H] src=uav_camera_capture_para_push  VA=0x3444868
+      @0x2:u16 @0x4:u8 @0x14:u8 @0x28:u16 @0x2a:u8  mask/shift=>>15 &0x7fff
+  StartShootPhotoIsAvailable                     [H] src=uav_camera_push_camera_status_info_push  VA=0x346b438
+      @0x0:u32
+  StitchCalibrationInfo                          [H] src=uav_vision_camera_calibration_osd_push  VA=0x4288dd8
+      @0x1:u8 @0x2:f32 @0x6:u8 @0x7:u8
+  TimelapseFileFormat                            [H] src=uav_camera_capture_para_push  VA=0x34523fc
+      @0x4a:u8
+  UAV182ResolutionFrameRateAndFovRangeToHelperTopic [L] src=uav_camera_camcap_video_format_rsp  VA=0x3aeec94
+      (no direct read - via helper/nested; mode=typed)
+  UAV183ResolutionFrameRateAndFovRangeToHelperTopic [L] src=uav_camera_camcap_video_format_rsp  VA=0x3aeeb40
+      (no direct read - via helper/nested; mode=typed)
+  UAV185ResolutionFrameRateAndFovRangeToHelperTopic [L] src=uav_camera_camcap_video_format_rsp  VA=0x3aeede8
+      (no direct read - via helper/nested; mode=typed)
+  UAV75CameraColor                               [L] src=uav_camera_capture_para_push  VA=0x351e0fc
+      (no direct read - via helper/nested; mode=typed)
+  VideoEncryptStrategyRangeTopic                 [H] src=uav_camera_camcap_video_rate_mode_rsp  VA=0x3649164
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  VideoFileCompressionStandard                   [H] src=uav_camera_capture_para_push  VA=0x34a1530
+      @0x45:u8  mask/shift=&0xf
+  VideoFileCompressionStandardRangeTopic         [H] src=uav_camera_camcap_video_codec_rsp  VA=0x36d068c
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  VideoRecordMode                                [H] src=uav_camera_capture_para_push  VA=0x34520d0
+      @0x49:u8
+  VideoResolutionFrameRateAndFov                 [H] src=uav_camera_capture_para_push  VA=0x34ad1a4
+      @0xd:u8 @0xe:u8 @0xf:u8 @0x10:u16  mask/shift=bits[6:7] &0x3f bits[8:14] >>15
+  VideoResolutionFrameRateAndFovRangeTopic       [H] src=uav_camera_camcap_video_format_rsp  VA=0x36d4564
+      @0x3:u8
+  VideoStandardCommonCamera                      [H] src=uav_camera_capture_para_push  VA=0x3452594
+      @0x37:u8
+  VideoStandardThermalCamera                     [H] src=uav_camera_capture_para_push  VA=0x3452720
+      @0xd:u8 @0xe:u8
+  VideoStorageFormat                             [H] src=uav_camera_capture_para_push  VA=0x3452988
+      @0x13:u8
+  VideoStorageFormatRangeTopic                   [H] src=uav_camera_camcap_video_storage_format_rsp  VA=0x3651358
+      @0x3:u8  mask/shift=<<2 >>2 >>62 >>1
+  WhiteBalance                                   [H] src=uav_camera_capture_para_push  VA=0x34460d8
+      @0x17:u8 @0x18:u8
+  WhiteBalanceRangeTopic                         [H] src=uav_camera_camcap_wb_rsp  VA=0x3446544
+      @0xb:u8  mask/shift=<<2 >>2 >>62 >>1
+====================================================================================================
+### SUBSYSTEM: VISION / NAV / VPS   (111 fields)
+====================================================================================================
+  ARInfo                                         [H] src=uav_navigation_ar_sei_info_push  VA=0x3efebbc
+      @0x0:u32 @0xa:u8 @0xb:s16 @0xd:f32 @0xd:s16 @0xf:s16 @0x11:f64 @0x11:s16 @0x13:u16 @0x15:u16 @0x17:u16 @0x19:u16 @0x1b:u16 @0x1d:u16 @0x1f:f64 @0x1f:u16 @0x21:u16 @0x23:u16 @0x25:f64 @0x27:f32 @0x2d:f32  scale=x0.01,x0.001,x4.19095e-08,x1e-07,x0.05 mask/shift=>>5 >>63 >>18
+  EnterNavigationModeException                   [H] src=uav_vision_navigation_osd_push  VA=0x3e6509c
+      @0x6:u8
+  ExitHomingReason                               [L] src=uav_navigation_push_exit_homing_message_to_app_push  VA=0x3e6d84c
+      (no direct read - via helper/nested; mode=typed)
+  FCMCircleDirection                             [H] src=uav_vision_general_video_metadata_push  VA=0x3fd6220
+      @0x0:u8 @0x1:u16 @0x4:u8
+  FCMCompassType                                 [H] src=uav_vision_general_video_metadata_push  VA=0x3fd6620
+      @0x0:u8 @0x1:u16 @0x19:u8 @0x1a:u8 @0x1f:u8
+  FCMCurrentRelativeDirection                    [H] src=uav_vision_general_video_metadata_push  VA=0x3fd6a60
+      @0x0:u8 @0x1:u16 @0x3:u8
+  FCMCurrentShotType                             [H] src=uav_vision_general_video_metadata_push  VA=0x3fd80d4
+      @0x0:u8 @0x1:u16 @0x3:u8
+  FCMIsPreparingSwitchShotType                   [H] src=uav_vision_general_video_metadata_push  VA=0x3fd849c
+      @0x0:u8 @0x1:u16 @0x6:u8
+  FCMManumaticCurrentMode                        [H] src=uav_vision_general_video_metadata_push  VA=0x3fd8658
+      @0x0:u8 @0x1:u16 @0xf:u8
+  FCMMissionInfo                                 [H] src=uav_vision_general_video_metadata_push  VA=0x3fd6e60
+      @0x0:u8 @0x1:u16 @0x4:u8 @0xc:u8 @0xd:u8 @0xe:u8 @0x11:u8 @0x12:u8
+  FCMMissionStatus                               [H] src=uav_vision_general_video_metadata_push  VA=0x3fd704c
+      @0x0:u8 @0x1:u16 @0xd:u8
+  FCMRelativeDistance                            [H] src=uav_vision_general_video_metadata_push  VA=0x3fd744c
+      @0x0:u8 @0x1:u16 @0xf:f32
+  FCMRelativeHeight                              [H] src=uav_vision_general_video_metadata_push  VA=0x3fd7890
+      @0x0:u8 @0x1:u16 @0x13:f32
+  FixedSpeedNavigationFailedReason               [H] src=uav_navigation_push_keep_sticks_status_push  VA=0x3f01f14
+      @0x1:u8
+  GoHomeDuration                                 [H] src=uav_vision_NAV_V1_HOMING_STATE_TO_APP_push  VA=0x3e64a40
+      @0x0:u16
+  GoHomeMetObstacle                              [H] src=core::uav_cmd_rsp  VA=0x2bb6b20
+      @0x41:u8  mask/shift=bits[1:1]
+  GoHomeStage                                    [H] src=uav_vision_navigation_osd_push  VA=0x3e60958
+      @0x7:u16  mask/shift=>>12
+  HandHeldFunctionState                          [H] src=uav_navigation_handheld_func_osd_push  VA=0x3937340
+      @0x0:u8 @0x1:u8  mask/shift=<<1
+  HandHeldIntelligentFunctionMissionInfo         [H] src=uav_navigation_handheld_func_osd_push  VA=0x393bf24
+      @0x0:u8 @0x1:u8 @0x4:u8  mask/shift=<<1
+  HandHeldRunningMode                            [H] src=uav_navigation_handheld_func_osd_push  VA=0x393a850
+      @0x0:u8 @0x1:u8
+  HandHeldTargetScanState                        [H] src=uav_vision_target_manager_status_push  VA=0x3933780
+      @0x5:u8
+  HomingHeightChangedEvent                       [L] src=uav_navigation_is_homing_height_changed  VA=0x3e866b4
+      (no direct read - via helper/nested; mode=typed)
+  HyperlapseMode                                 [H] src=uav_vision_navigation_osd_push  VA=0x3e64b74
+      @0xb:u32  mask/shift=bits[1:7]
+  HyperlapseNavigationCanEnterFixedSpeed         [H] src=uav_vision_push_fixed_speed_status_push  VA=0x3f023f0
+      @0x0:u8
+  HyperlapseNavigationFixedSpeedStatus           [H] src=uav_vision_push_fixed_speed_status_push  VA=0x3f02520
+      @0x1:u8
+  IsAPASWorking                                  [H] src=uav_vision_get_NAV_V1_VISION_APAS_STATUS_TO_APP_req  VA=0x3e62f80
+      @0x1:u8
+  IsFixedSpeedNavigationCanAddingRc              [H] src=uav_navigation_push_keep_sticks_status_push  VA=0x3f01dec
+      @0x0:u8  mask/shift=bits[1:1]
+  IsGoHomeModeExecuting                          [H] src=uav_vision_navigation_osd_push  VA=0x3e651c4
+      @0x7:u16  mask/shift=bits[8:8]
+  IsHyperlapseModeExecuting                      [H] src=uav_vision_navigation_osd_push  VA=0x3e86d8c
+      @0xb:u32  mask/shift=&0x1
+  IsNavigationModeExecuting                      [H] src=uav_vision_navigation_osd_push  VA=0x3e86f24
+      @0x5:u8  mask/shift=&0x1
+  IsNearObstacle                                 [H] src=uav_vision_NAV_V1_HOMING_STATE_TO_APP_push  VA=0x3e60000
+      @0x2:u8
+  IsProcessingVisionPanoPhotos                   [H] src=uav_vision_pano_push  VA=0x35652f4
+      @0x1:u8 @0x2:u8
+  IsPseudoCameraShooting                         [H] src=uav_vision_pano_push  VA=0x3565438
+      @0x2:u8
+  IsQuickShotInAction                            [H] src=uav_vision_tips_info_push  VA=0x3df7028
+      @0x9:u8
+  IsQuickShotInActionBy2A                        [H] src=uav_vision_nav_v1_vision_app_nav_osd_t  VA=0x3df7150
+      @0x4:u8  mask/shift=>>7
+  IsShootingVisionBokehPhoto                     [H] src=uav_vision_pano_push  VA=0x35656bc
+      @0x1:u8 @0x2:u8
+  IsShootingVisionPanoramaPhoto                  [H] src=uav_vision_pano_push  VA=0x3565578
+      @0x1:u8 @0x2:u8
+  IsSmartEyeDisplayVirtualPoint                  [H] src=uav_vision_smart_eye_state_push_push  VA=0x3e87f80
+      @0x3:u8
+  IsSmartEyeModeExecuting                        [H] src=uav_vision_navigation_osd_push  VA=0x3e85ed0
+      @0x7:u16  mask/shift=&0x1
+  IsWaitingForNavigationModeSwitch               [H] src=uav_vision_navigation_osd_push  VA=0x3e64e40
+      @0x4:u8
+  MasterShotException                            [H] src=uav_vision_ms_push_running_info_push  VA=0x3eb692c
+      @0x2:u8
+  MasterShotExceptionByQsProtocol                [H] src=uav_vision_tips_info_push  VA=0x3ebd170
+      @0x8:u8
+  MasterShotMode                                 [H] src=uav_vision_navigation_osd_push  VA=0x3eb6230
+      @0x11:u8  mask/shift=>>1
+  MasterShotProgress                             [H] src=uav_vision_ms_push_running_info_push  VA=0x3eb6a54
+      @0x3:u8 @0x4:u8
+  MasterShotProgressByQsProtocol                 [H] src=uav_vision_tips_info_push  VA=0x3ebcccc
+      @0x6:u8  mask/shift=>>2 &0x-8
+  MasterShotState                                [H] src=uav_vision_ms_push_running_info_push  VA=0x3eb6804
+      @0x5:u8
+  MasterShotVideoInfos                           [H] src=uav_vision_push_ms_video_info_push  VA=0x3eb7a94
+      @0x0:u8
+  MultiQuickShotEnabledBy2A                      [H] src=uav_vision_nav_v1_vision_app_nav_osd_t  VA=0x3df82d0
+      @0xc:u16  mask/shift=bits[9:9]
+  MultiQuickShotEnabledBy5A                      [H] src=uav_vision_navigation_osd_push  VA=0x3df81a8
+      @0xb:u32  mask/shift=bits[16:16]
+  MultiTargetMasterShotAddedTargets              [H] src=uav_vision_mastershot_mult_obj_box_push_push  VA=0x4121594
+      @0x1:u8  mask/shift=>>3
+  MultiTargetMasterShotException                 [H] src=uav_vision_ms_push_running_info_push  VA=0x411f29c
+      @0x2:u8
+  MultiTargetMasterShotProgress                  [H] src=uav_vision_ms_push_running_info_push  VA=0x411f3c4
+      @0x3:u8 @0x4:u8
+  MultiTargetMasterShotState                     [H] src=uav_vision_ms_push_running_info_push  VA=0x411f174
+      @0x5:u8
+  MultipleTrackAvoidPassingStatus                [H] src=uav_vision_nav_v1_vision_app_nav_osd_t  VA=0x3e1d550
+      @0x5:u8  mask/shift=>>7 bits[6:6] bits[5:5] bits[4:4]
+  NavigationCanEnterFixedSpeed                   [H] src=uav_navigation_push_keep_sticks_status_push  VA=0x3f01b9c
+      @0x0:u8  mask/shift=bits[2:2]
+  NavigationFixedSpeedStatus                     [H] src=uav_navigation_push_keep_sticks_status_push  VA=0x3f01cc4
+      @0x0:u8  mask/shift=&0x1
+  NavigationMode                                 [H] src=uav_vision_navigation_osd_push  VA=0x3e64f70
+      @0x5:u8  mask/shift=bits[1:4]
+  NavigationVersion                              [H] src=uav_vision_navigation_osd_push  VA=0x3e64d20
+      @0x0:u32
+  PanoCurrentCaptureCount                        [H] src=uav_vision_pano_push  VA=0x3dfeb18
+      @0x0:u8 @0x8:u8 @0xc:u16
+  PanoNumberOfTotalCapture                       [H] src=uav_vision_pano_push  VA=0x3dfe974
+      @0x0:u8 @0x7:u8 @0xa:u16
+  PanoShotState                                  [H] src=uav_vision_pano_shot_position_and_process_to_navigation_push  VA=0x3556f60
+      @0x0:u8
+  PanoramaExitStatus                             [H] src=uav_vision_set_navigation_pano_shot_ack_to_app_req  VA=0x356b1ec
+      @0x0:u8
+  PanoramaFreeCurTaskDirection                   [H] src=uav_vision_free_pano_cap_area_gnd_pos_info_push  VA=0x38cd000
+      @0x35:u8
+  PanoramaFreePointInfo                          [H] src=uav_vision_free_pano_cap_area_gnd_pos_info_push  VA=0x38ccac8
+      @0x0:pair32 @0x8:f32 @0xc:pair32 @0x14:f32 @0x18:pair32 @0x20:f32 @0x24:pair32 @0x2c:f32 @0x30:f32
+  PanoramaFreeStartPoint                         [H] src=uav_vision_free_pano_cap_area_gnd_pos_info_push  VA=0x38ccd94
+      @0x0:pair32 @0x8:f32 @0xc:pair32 @0x14:f32 @0x18:pair32 @0x20:f32 @0x24:pair32 @0x2c:f32 @0x34:u8
+  PanoramaMode                                   [H] src=uav_vision_navigation_osd_push  VA=0x3e62dd4
+      @0xb:u32  mask/shift=bits[9:15]
+  PanoramaPhotoCaptureProgress                   [H] src=uav_vision_pano_push  VA=0x357aab8
+      @0x9:u8
+  QuickShotException                             [H] src=uav_vision_tips_info_push  VA=0x3df6de0
+      @0x8:u8
+  QuickShotMode                                  [H] src=uav_vision_navigation_osd_push  VA=0x3e630b0
+      @0xb:u32  mask/shift=bits[17:23]
+  QuickShotProgress                              [H] src=uav_vision_tips_info_push  VA=0x3df6f08
+      @0x6:u8
+  QuickShotRectMode                              [H] src=uav_vision_push_tracking_control_push  VA=0x3df7fc4
+      @0x0:u8
+  RCShutterButtonDown                            [H] src=uav_rc_channel_params_push  VA=0x2b17884
+      @0xa:u16 @0xc:u8  mask/shift=bits[22:22]
+  RcChannelParams                                [H] src=uav_rc_channel_params_push  VA=0x2b0ccbc
+      @0x0:f64
+  SOTBoxFusionState                              [H] src=uav_vision_SOT_BOX_FUSION_STATE_SEND_push  VA=0x407c340
+      @0x0:u8 @0x1:u8 @0x2:u8
+  SceneTypeRange                                 [H] src=uav_vision_general_video_metadata_push  VA=0x3fd92ac
+      @0x0:u8 @0x1:u16 @0xc:u32  mask/shift=>>2 >>62 >>1 <<2
+  ShootingVisionPanoCountInfo                    [H] src=uav_vision_pano_push  VA=0x3577734
+      @0x1:u8 @0x2:u8 @0x7:u8 @0x8:u8
+  SmartEyeException                              [H] src=uav_vision_smart_eye_state_push_push  VA=0x3e652ec
+      @0x4:u8
+  SmartEyeMode                                   [H] src=uav_vision_navigation_osd_push  VA=0x3e58368
+      @0x7:u16  mask/shift=bits[1:7]
+  SmartEyeScanSwitchState                        [H] src=uav_vision_smart_eye_state_push_push  VA=0x3e76678
+      @0x13:u8
+  SmartEyeState                                  [H] src=uav_vision_smart_eye_state_push_push  VA=0x3e5a69c
+      @0x0:u8
+  TimeLapseOrder                                 [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e5ce34
+      @0xd:u8
+  TimelapseCanFixSpeed                           [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e7389c
+      @0x34:u8  mask/shift=bits[1:1]
+  TimelapseClockwise                             [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e6601c
+      @0xd:u8
+  TimelapseCompassCalibrationStatus              [H] src=uav_vision_time_lapse_compass_cali_status_push_push  VA=0x412ea1c
+      @0x1:u8 @0x2:u8 @0x3:u8
+  TimelapseDeltaTime                             [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e66250
+      @0x3:u16
+  TimelapseDirection                             [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e73ba8
+      @0xd:u8
+  TimelapseDuration                              [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e632cc
+      @0x1c:u16
+  TimelapseException                             [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e73cc8
+      @0x12:u8
+  TimelapseFinishedShotCount                     [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e871e4
+      @0xe:u16
+  TimelapseFinishedTime                          [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e80fcc
+      @0x18:u32  mask/shift=>>35
+  TimelapseFrameRate                             [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e69b34
+      @0x2a:u8
+  TimelapseIsFixedSpeed                          [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e739c4
+      @0x34:u8  mask/shift=&0x1
+  TimelapseIsShooting                            [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e74e40
+      @0x11:u8
+  TimelapseMaxSuggestTime                        [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e86594
+      @0x30:u32
+  TimelapseMinSuggestTime                        [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e86474
+      @0x2c:u32
+  TimelapseProgress                              [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e71c20
+      @0x10:u8
+  TimelapsePrompt                                [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e6c914
+      @0x13:u8
+  TimelapseSubmodeType                           [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e6e558
+      @0x0:u8
+  TimelapseTotalPhotoCount                       [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e7f468
+      @0x1:u16
+  TimelapseTotalTime                             [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e7420c
+      @0x14:u32  mask/shift=>>35
+  TimelapseTrajId                                [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e6cabc
+      @0x5:u64
+  TimelapseUnlimitAvailable                      [H] src=uav_vision_time_lapse_status_sync_push  VA=0x3e870bc
+      @0x2b:u8
+  TrackingRelativeDirection                      [H] src=uav_vision_general_video_metadata_push  VA=0x3fd7cd4
+      @0x0:u8 @0x1:u16 @0xe:u8
+  TrackingSceneType                              [H] src=uav_vision_general_video_metadata_push  VA=0x3fd90f8
+      @0x0:u8 @0x1:u16 @0xb:u8
+  VisionMultipleActiveTrackStatus                [H] src=uav_vision_tracking_status_push  VA=0x3e880b0
+      @0x0:u8 @0x6:s8 @0x7:u8
+  VisionPOICircleRadius                          [H] src=uav_vision_poi_status_push  VA=0x3e7446c
+      @0xf:f32
+  VisionPOIException                             [H] src=uav_vision_poi_status_push  VA=0x3e74344
+      @0x2:u8
+  VisionPOITargetRadius                          [H] src=uav_vision_poi_status_push  VA=0x3e61510
+      @0x23:f32
+  VisionPOITargetResponse                        [H] src=uav_vision_poi_response_target_push  VA=0x3e74598
+      @0x0:u8 @0x1:f32 @0x5:f32 @0x9:f32 @0xd:f32
+  VisionPhotoPanoramaMissionState                [H] src=uav_vision_pano_push  VA=0x357ac50
+      @0x2:u8
+  VisionPhotoPanoramaMode                        [H] src=uav_vision_pano_push  VA=0x3573874
+      @0x1:u8
+====================================================================================================
+### SUBSYSTEM: ADS-B / REMOTE ID   (10 fields)
+====================================================================================================
+  IsCloudRIDSupported                            [H] src=uav_adsb_RID_WORKING_STATUS_push  VA=0x2e49b04
+      @0x0:u16  mask/shift=bits[10:10]
+  IsEURidSupported                               [H] src=uav_adsb_RID_WORKING_STATUS_push  VA=0x2e4a384
+      @0x0:u16  mask/shift=&0x1 bits[11:11]
+  IsEURidSupported0x11_0x1c                      [H] src=uav_adsb_RID_WORKING_STATUS_push  VA=0x2e4a608
+      @0x0:u16  mask/shift=&0xc00
+  IsEURidSupportedDefaultSupported               [H] src=uav_adsb_RID_WORKING_STATUS_push  VA=0x2e4a4d0
+      @0x0:u16  mask/shift=&0xc00
+  IsFREidSupported                               [H] src=uav_adsb_RID_WORKING_STATUS_push  VA=0x2e49ca4
+      @0x0:u16  mask/shift=&0x1 bits[13:13]
+  IsFREidSupportedDefaultNotSupported            [H] src=uav_adsb_RID_WORKING_STATUS_push  VA=0x2e4a110
+      @0x0:u16
+  IsFREidSupportedDefaultSupported               [H] src=uav_adsb_RID_WORKING_STATUS_push  VA=0x2e4a248
+      @0x0:u16
+  IsJapaneseRidSupported                         [H] src=uav_adsb_RID_WORKING_STATUS_push  VA=0x2e4a740
+      @0x0:u16
+  IsSupportReleaseLimitHeight                    [H] src=uav_adsb_flightrestrict_config_push  VA=0x2bebf5c
+      @0x0:u32  mask/shift=&0x1
+  IsUSRiddSupported                              [H] src=uav_adsb_RID_WORKING_STATUS_push  VA=0x2c2dd10
+      @0x0:u16  mask/shift=&0x1
+====================================================================================================
+### SUBSYSTEM: OTHER / MISC   (13 fields)
+====================================================================================================
+  ChipOverHeatLevel                              [H] src=uav_uav67_tomato_1860_check_state  VA=0x2c2ded0
+      @0x0:u32  mask/shift=&0x3000000
+  CloudsDetectionState                           [H] src=uav_perception_PUSH_DOWNWARD_EXCEPTION_DETECTION_STATUS_push  VA=0x2fd2bd4
+      @0x1:u8
+  ENS_4listINS2_15KeyWait                        [H] src=?  VA=0x22fb6dc
+      @0x0:f128 @0x10:u32 @0x30:pair64 @0x48:u8  mask/shift=>>2
+  ENS_4listINS3_15KeyWait                        [L] src=?  VA=0x22f1354
+      (no direct read - via helper/nested; mode=typed)
+  ENS_4listINS5_15KeyWait                        [H] src=?  VA=0x22f13a0
+      @0x18:u8 @0x30:u64 @0x50:pair64 @0x60:u64
+  FoldPowerOffShutDownReason                     [H] src=uav_esdd_shutdown_countdown_notice_push  VA=0x2fd5338
+      @0x5:u32
+  GNSSRawData                                    [H] src=uav_general_ce_info_show_push  VA=0x2e49808
+      @0x3:u16  mask/shift=&0xfc00 &0x3ff
+  ImuCoordinateTran                              [H] src=uav_fc2_uav_push_imu_coord_req  VA=0x2e49978
+      @0x0:f32
+  IsMultiControllerSingleLiveView                [H] src=uav_rc_GLASS_STATE_TO_APP_push  VA=0x2b0d774
+      @0x0:u8 @0x1:u8  mask/shift=&0x1
+  MultiControllerLiveViewMode                    [H] src=uav_rc_GLASS_STATE_TO_APP_push  VA=0x2b0d1fc
+      @0x0:u8 @0x1:u8
+  SelfDiagnosticStatus                           [L] src=uav_diag_get_sys_diag_progress_push_req  VA=0x2d20660
+      (no direct read - via helper/nested; mode=typed)
+  SimulatorState                                 [H] src=uav_simulator_sim_cmd_status_push  VA=0x2ba676c
+      @0x1:u8 @0x6:f32 @0xa:f32 @0xe:f64 @0x16:f32 @0x1a:f64  scale=x3.14159 mask/shift=&0x1
+  Wait                                           [L] src=?  VA=0x22fb7e4
+      (no direct read - via helper/nested; mode=typed)

@@ -1,0 +1,3054 @@
+[
+{
+"cmd_set": 0,
+"cmd_id": 0,
+"ver": 1,
+"req": "uav_general_ping_req",
+"rsp": "uav_general_ping_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 1,
+"ver": 1,
+"req": "uav_general_get_get_version_req",
+"rsp": "uav_general_get_get_version_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 11,
+"ver": 1,
+"req": "uav_general_set_reboot_device_req",
+"rsp": "uav_general_set_reboot_device_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 14,
+"ver": 1,
+"req": "uav_general_heartbeat_req",
+"rsp": "uav_general_heartbeat_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 18,
+"ver": 1,
+"req": "uav_general_find_uav_req",
+"rsp": "uav_general_find_uav_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 31,
+"ver": 1,
+"req": "uav_general_get_get_file_data_req",
+"rsp": "uav_general_get_get_file_data_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 32,
+"ver": 1,
+"req": "uav_general_get_get_file_list_req",
+"rsp": "uav_general_get_get_file_list_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 38,
+"ver": 1,
+"req": "uav_general_transfer_msg_req",
+"rsp": "uav_general_transfer_msg_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 40,
+"ver": 1,
+"req": "uav_general_delete_drive_file_req",
+"rsp": "uav_general_delete_file_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 42,
+"ver": 1,
+"req": "uav_general_general_file_transfer_req",
+"rsp": "uav_general_general_file_transfer_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 50,
+"ver": 1,
+"req": "uav_general_activate_device_req",
+"rsp": "uav_general_activate_device_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 52,
+"ver": 1,
+"req": "uav_general_buried_messages_req",
+"rsp": "uav_general_buried_messages_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 54,
+"ver": 1,
+"req": "uav_general_deactivate_device_req",
+"rsp": "uav_general_deactivate_device_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 68,
+"ver": 1,
+"req": "uav_general_set_temperature_test_set_req",
+"rsp": "uav_general_set_temperature_test_set_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 74,
+"ver": 1,
+"req": "uav_general_set_device_date_with_utc_req",
+"rsp": "uav_general_set_device_date_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 75,
+"ver": 1,
+"req": "uav_general_get_device_date_req",
+"rsp": "uav_general_get_device_date_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 79,
+"ver": 1,
+"req": "uav_general_get_get_version_config_req",
+"rsp": "uav_general_get_get_version_config_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 81,
+"ver": 1,
+"req": "uav_general_get_fetch_serial_number_req",
+"rsp": "uav_general_get_fetch_serial_number_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 106,
+"ver": 1,
+"req": "uav_general_time_manage_req",
+"rsp": "uav_general_set_device_date_v2_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 112,
+"ver": 1,
+"req": "uav_general_debug_cmd_req",
+"rsp": "uav_general_debug_cmd_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 114,
+"ver": 1,
+"req": "uav_general_set_upgrade_notification_req",
+"rsp": "uav_general_set_upgrade_notification_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 116,
+"ver": 1,
+"req": "uav_general_accesslocker_v1_encryption_result_req",
+"rsp": "uav_general_get_accesslocker_v1_common_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 118,
+"ver": 1,
+"req": "uav_general_event_track_push_push",
+"rsp": "uav_general_push_event_track_push_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 136,
+"ver": 1,
+"req": "uav_general_get_query_device_information_req",
+"rsp": "uav_general_get_query_device_information_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 140,
+"ver": 1,
+"req": "uav_general_download_status_push",
+"rsp": "uav_general_push_upgrade_file_download_status_push_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 141,
+"ver": 1,
+"req": "uav_general_set_sleep_negotiate_req",
+"rsp": "uav_general_set_sleep_negotiate_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 145,
+"ver": 1,
+"req": "uav_general_set_rndis_status_req",
+"rsp": "uav_general_set_rndis_status_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 150,
+"ver": 1,
+"req": "uav_general_get_enter_force_upgrade_req",
+"rsp": "uav_general_get_enter_force_upgrade_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 151,
+"ver": 1,
+"req": "uav_general_link_monitor_request",
+"rsp": "uav_general_link_monitor_response"
+},
+{
+"cmd_set": 0,
+"cmd_id": 153,
+"ver": 1,
+"req": "uav_general_united_pub_sub_agent_req",
+"rsp": "uav_general_united_pub_sub_agent_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 161,
+"ver": 1,
+"req": "uav_general_push_device_restart_time_push_rsp",
+"rsp": "uav_general_device_restart_time_push"
+},
+{
+"cmd_set": 0,
+"cmd_id": 164,
+"ver": 1,
+"req": "uav_general_model_auth_request",
+"rsp": "uav_general_model_auth_response"
+},
+{
+"cmd_set": 0,
+"cmd_id": 165,
+"ver": 1,
+"req": "uav_general_get_switch_upgrade_bin_req",
+"rsp": "uav_general_get_switch_upgrade_bin_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 166,
+"ver": 1,
+"req": "uav_general_get_gls_cp_status_req",
+"rsp": "uav_general_get_gls_cp_status_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 178,
+"ver": 1,
+"req": "uav_general_get_low_power_action_req",
+"rsp": "uav_general_get_low_power_action_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 181,
+"ver": 1,
+"req": "uav_general_get_exclusive_set_subscribe_req",
+"rsp": "uav_general_get_exclusive_set_subscribe_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 182,
+"ver": 1,
+"req": "uav_general_get_exclusive_set_push_req",
+"rsp": "uav_general_get_exclusive_set_push_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 183,
+"ver": 1,
+"req": "uav_general_get_static_cap_req",
+"rsp": "uav_general_get_static_cap_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 184,
+"ver": 1,
+"req": "uav_general_get_function_discover_req",
+"rsp": "uav_general_get_function_discover_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 213,
+"ver": 1,
+"req": "uav_general_get_lock_uav_req",
+"rsp": "uav_general_get_lock_uav_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 218,
+"ver": 1,
+"req": "uav_general_get_data_act_req",
+"rsp": "uav_general_get_data_act_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 221,
+"ver": 1,
+"req": "uav_general_get_UAV_CLOUD_CONTROL_req",
+"rsp": "uav_general_get_UAV_CLOUD_CONTROL_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 222,
+"ver": 1,
+"req": "uav_general_DEVICE_RESET_req",
+"rsp": "uav_general_DEVICE_RESET_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 223,
+"ver": 1,
+"req": "uav_general_log_space_control_req",
+"rsp": "uav_general_log_space_control_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 229,
+"ver": 1,
+"req": "uav_general_get_secure_binding_req",
+"rsp": "uav_general_get_secure_binding_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 230,
+"ver": 1,
+"req": "uav_general_get_secure_device_user_bind_req",
+"rsp": "uav_general_get_secure_device_user_bind_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 233,
+"ver": 1,
+"req": "uav_general_add_log_tag_rsp",
+"rsp": "uav_general_add_log_tag_req"
+},
+{
+"cmd_set": 0,
+"cmd_id": 234,
+"ver": 1,
+"req": "uav_general_log_export_control_req",
+"rsp": "uav_general_log_export_control_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 244,
+"ver": 1,
+"req": "uav_general_start_test_req",
+"rsp": "uav_general_start_test_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 254,
+"ver": 1,
+"req": "uav_general_heartbeat_req",
+"rsp": "uav_general_heartbeat_rsp"
+},
+{
+"cmd_set": 0,
+"cmd_id": 255,
+"ver": 1,
+"req": "uav_general_get_device_info_req",
+"rsp": "uav_general_get_device_info_rsp"
+},
+{
+"cmd_set": 1,
+"cmd_id": 1,
+"ver": 1,
+"req": "uav_special_special_ctrl_push",
+"rsp": "uav_special_special_ctrl_rsp"
+},
+{
+"cmd_set": 1,
+"cmd_id": 2,
+"ver": 1,
+"req": "uav_action_virtual_rc_joystick_req",
+"rsp": "uav_action_virtual_rc_joystick_rsp"
+},
+{
+"cmd_set": 1,
+"cmd_id": 10,
+"ver": 1,
+"req": "uav_special_SPECIAL_TLV_CMD_push",
+"rsp": "uav_special_push_SPECIAL_TLV_CMD_rsp"
+},
+{
+"cmd_set": 1,
+"cmd_id": 130,
+"ver": 1,
+"req": "uav_special_control_blackbox_folder_req",
+"rsp": "uav_special_control_blackbox_folder_rsp"
+},
+{
+"cmd_set": 1,
+"cmd_id": 131,
+"ver": 1,
+"req": "uav_special_get_get_blackbox_info_req",
+"rsp": "uav_special_get_get_blackbox_info_rsp"
+},
+{
+"cmd_set": 1,
+"cmd_id": 132,
+"ver": 1,
+"req": "uav_special_set_set_blackbox_info_req",
+"rsp": "uav_special_set_set_blackbox_info_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 1,
+"ver": 1,
+"req": "uav_camera_take_photo_req",
+"rsp": "uav_camera_take_photo_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 2,
+"ver": 1,
+"req": "uav_camera_record_video_req",
+"rsp": "uav_camera_record_video_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 9,
+"ver": 1,
+"req": "uav_camera_set_liveview_source_camera_req",
+"rsp": "uav_camera_set_liveview_source_camera_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 12,
+"ver": 1,
+"req": "uav_camera_switch_playbackmode_req",
+"rsp": "uav_camera_switch_playbackmode_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 16,
+"ver": 1,
+"req": "uav_camera_set_camera_working_mode_req",
+"rsp": "uav_camera_set_camera_working_mode_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 18,
+"ver": 1,
+"req": "uav_camera_set_camera_photo_size_req",
+"rsp": "uav_camera_set_camera_photo_size_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 20,
+"ver": 1,
+"req": "uav_camera_set_camera_photo_quality_req",
+"rsp": "uav_camera_set_camera_photo_quality_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 22,
+"ver": 1,
+"req": "uav_camera_set_camera_photo_storage_format_req",
+"rsp": "uav_camera_set_camera_photo_storage_format_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 24,
+"ver": 1,
+"req": "uav_camera_set_video_format_req",
+"rsp": "uav_camera_set_video_format_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 26,
+"ver": 1,
+"req": "uav_camera_set_camera_video_quality_req",
+"rsp": "uav_camera_set_camera_video_quality_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 28,
+"ver": 1,
+"req": "uav_camera_set_camera_video_storage_format_req",
+"rsp": "uav_camera_set_camera_video_storage_format_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 30,
+"ver": 1,
+"req": "uav_camera_set_camera_exposure_mode_req",
+"rsp": "uav_camera_set_camera_exposure_mode_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 32,
+"ver": 1,
+"req": "uav_camera_set_camera_scene_mode_req",
+"rsp": "uav_camera_set_camera_scene_mode_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 33,
+"ver": 1,
+"req": "uav_camera_get_camera_scene_mode_req",
+"rsp": "uav_camera_get_camera_scene_mode_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 34,
+"ver": 1,
+"req": "uav_camera_set_camera_metering_mode_req",
+"rsp": "uav_camera_set_camera_metering_mode_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 36,
+"ver": 1,
+"req": "uav_camera_set_camera_focus_mode_req",
+"rsp": "uav_camera_set_camera_focus_mode_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 38,
+"ver": 1,
+"req": "uav_camera_set_aperture_size_req",
+"rsp": "uav_camera_set_aperture_size_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 40,
+"ver": 1,
+"req": "uav_camera_set_camera_shutter_speed_req",
+"rsp": "uav_camera_set_camera_shutter_speed_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 41,
+"ver": 1,
+"req": "uav_camera_get_camera_shutter_speed_req",
+"rsp": "uav_camera_get_camera_shutter_speed_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 42,
+"ver": 1,
+"req": "uav_camera_set_camera_iso_para_req",
+"rsp": "uav_camera_set_camera_iso_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 43,
+"ver": 1,
+"req": "uav_camera_get_camera_iso_para_req",
+"rsp": "uav_camera_get_camera_iso_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 44,
+"ver": 1,
+"req": "uav_camera_set_camera_white_balance_req",
+"rsp": "uav_camera_set_camera_white_balance_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 46,
+"ver": 1,
+"req": "uav_camera_set_camera_exposure_compensation_req",
+"rsp": "uav_camera_set_camera_exposure_compensation_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 48,
+"ver": 1,
+"req": "uav_camera_set_focus_area_req",
+"rsp": "uav_camera_set_focus_area_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 50,
+"ver": 1,
+"req": "uav_camera_set_spot_focus_area_req",
+"rsp": "uav_camera_set_spot_focus_area_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 51,
+"ver": 1,
+"req": "uav_camera_get_spot_focus_area_req",
+"rsp": "uav_camera_get_spot_focus_area_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 52,
+"ver": 1,
+"req": "uav_camera_set_focus_zoom_para_req",
+"rsp": "uav_camera_set_focus_zoom_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 56,
+"ver": 1,
+"req": "uav_camera_set_sharpness_para_req",
+"rsp": "uav_camera_set_sharpness_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 58,
+"ver": 1,
+"req": "uav_camera_set_contrast_para_req",
+"rsp": "uav_camera_set_contrast_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 60,
+"ver": 1,
+"req": "uav_camera_set_saturation_para_req",
+"rsp": "uav_camera_set_saturation_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 62,
+"ver": 1,
+"req": "uav_camera_set_colortone_para_req",
+"rsp": "uav_camera_set_colortone_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 66,
+"ver": 1,
+"req": "uav_camera_set_digital_filter_req",
+"rsp": "uav_camera_set_digital_filter_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 68,
+"ver": 1,
+"req": "uav_camera_set_digital_denoising_req",
+"rsp": "uav_camera_set_digital_denoising_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 70,
+"ver": 1,
+"req": "uav_camera_set_anti_filcker_req",
+"rsp": "uav_camera_set_anti_filcker_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 72,
+"ver": 1,
+"req": "uav_camera_set_continue_para_req",
+"rsp": "uav_camera_set_continue_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 74,
+"ver": 1,
+"req": "uav_camera_set_timelapse_para_req",
+"rsp": "uav_camera_set_timelapse_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 75,
+"ver": 1,
+"req": "uav_camera_get_timelapse_para_req",
+"rsp": "uav_camera_get_timelapse_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 76,
+"ver": 1,
+"req": "uav_camera_set_video_out_para_req",
+"rsp": "uav_camera_set_video_out_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 77,
+"ver": 1,
+"req": "uav_camera_get_video_out_para_req",
+"rsp": "uav_camera_get_video_out_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 84,
+"ver": 1,
+"req": "uav_camera_set_date_para_req",
+"rsp": "uav_camera_set_date_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 86,
+"ver": 1,
+"req": "uav_camera_set_language_para_req",
+"rsp": "uav_camera_set_language_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 87,
+"ver": 1,
+"req": "uav_camera_get_language_para_req",
+"rsp": "uav_camera_get_language_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 88,
+"ver": 1,
+"req": "uav_camera_set_gps_coordinate_req",
+"rsp": "uav_camera_set_gps_coordinate_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 89,
+"ver": 1,
+"req": "uav_camera_get_gps_coordinate_req",
+"rsp": "uav_camera_get_gps_coordinate_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 92,
+"ver": 1,
+"req": "uav_camera_set_file_index_mode_req",
+"rsp": "uav_camera_set_file_index_mode_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 94,
+"ver": 1,
+"req": "uav_camera_set_aeb_continues_req",
+"rsp": "uav_camera_set_aeb_continues_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 95,
+"ver": 1,
+"req": "uav_camera_get_aeb_continues_req",
+"rsp": "uav_camera_get_aeb_continues_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 96,
+"ver": 1,
+"req": "uav_camera_set_histogram_push_enable_req",
+"rsp": "uav_camera_set_histogram_push_enable_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 97,
+"ver": 1,
+"req": "uav_camera_get_histogram_push_enable_req",
+"rsp": "uav_camera_get_histogram_push_enable_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 98,
+"ver": 1,
+"req": "uav_camera_set_video_caption_req",
+"rsp": "uav_camera_set_video_caption_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 99,
+"ver": 1,
+"req": "uav_camera_get_video_caption_req",
+"rsp": "uav_camera_get_video_caption_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 102,
+"ver": 1,
+"req": "uav_camera_set_ntspal_type_req",
+"rsp": "uav_camera_set_ntspal_type_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 104,
+"ver": 1,
+"req": "uav_camera_set_ae_lock_req",
+"rsp": "uav_camera_set_ae_lock_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 105,
+"ver": 1,
+"req": "uav_camera_get_ae_lock_req",
+"rsp": "uav_camera_get_ae_lock_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 106,
+"ver": 1,
+"req": "uav_camera_set_capture_type_req",
+"rsp": "uav_camera_set_capture_type_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 108,
+"ver": 1,
+"req": "uav_camera_set_recording_mode_req",
+"rsp": "uav_camera_set_recording_mode_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 110,
+"ver": 1,
+"req": "uav_camera_set_pano_mode_req",
+"rsp": "uav_camera_set_pano_mode_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 111,
+"ver": 1,
+"req": "uav_camera_get_pano_mode_req",
+"rsp": "uav_camera_get_pano_mode_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 114,
+"ver": 1,
+"req": "uav_camera_format_sdcard_req",
+"rsp": "uav_camera_format_sdcard_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 119,
+"ver": 1,
+"req": "uav_camera_save_camera_para_req",
+"rsp": "uav_camera_save_camera_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 120,
+"ver": 1,
+"req": "uav_camera_load_camera_para_req",
+"rsp": "uav_camera_load_camera_para_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 121,
+"ver": 1,
+"req": "uav_camera_delete_photo_req",
+"rsp": "uav_camera_delete_photo_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 122,
+"ver": 1,
+"req": "uav_camera_video_playback_control_req",
+"rsp": "uav_camera_video_playback_control_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 123,
+"ver": 1,
+"req": "uav_camera_single_playback_select_req",
+"rsp": "uav_camera_single_playback_select_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 142,
+"ver": 1,
+"req": "uav_camera_parameter_option_req",
+"rsp": "uav_camera_parameter_option_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 143,
+"ver": 1,
+"req": "uav_camera_push_settings_update_notify_rsp",
+"rsp": "uav_camera_settings_update_notify_push"
+},
+{
+"cmd_set": 2,
+"cmd_id": 144,
+"ver": 1,
+"req": "uav_camera_serial_number_req",
+"rsp": "uav_camera_serial_number_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 146,
+"ver": 1,
+"req": "uav_camera_get_video_recording_info_req",
+"rsp": "uav_camera_get_video_recording_info_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 147,
+"ver": 1,
+"req": "uav_camera_set_video_clip_info_req",
+"rsp": "uav_camera_set_video_clip_info_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 149,
+"ver": 1,
+"req": "uav_camera_set_focus_engine_value_req",
+"rsp": "uav_camera_set_focus_engine_value_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 152,
+"ver": 1,
+"req": "uav_camera_get_file_system_info_req",
+"rsp": "uav_camera_get_file_system_info_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 159,
+"ver": 1,
+"req": "uav_camera_set_audio_param_req",
+"rsp": "uav_camera_set_audio_param_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 160,
+"ver": 1,
+"req": "uav_camera_get_audio_param_req",
+"rsp": "uav_camera_get_audio_param_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 162,
+"ver": 1,
+"req": "uav_camera_set_lens_focal_distance_req",
+"rsp": "uav_camera_set_lens_focal_distance_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 163,
+"ver": 1,
+"req": "uav_camera_set_calibration_control_req",
+"rsp": "uav_camera_set_calibration_control_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 168,
+"ver": 1,
+"req": "uav_camera_set_ae_lock_type_req",
+"rsp": "uav_camera_set_ae_lock_type_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 171,
+"ver": 1,
+"req": "uav_camera_set_video_coding_standard_req",
+"rsp": "uav_camera_set_video_coding_standard_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 175,
+"ver": 1,
+"req": "uav_camera_set_pro_video_format_req",
+"rsp": "uav_camera_set_pro_video_format_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 176,
+"ver": 1,
+"req": "uav_camera_get_pro_video_format_req",
+"rsp": "uav_camera_get_pro_video_format_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 179,
+"ver": 1,
+"req": "uav_camera_get_app_request_i_frame_req",
+"rsp": "uav_camera_get_app_request_i_frame_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 181,
+"ver": 1,
+"req": "uav_camera_get_sensor_id_req",
+"rsp": "uav_camera_get_sensor_id_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 182,
+"ver": 1,
+"req": "uav_camera_set_front_led_auto_close_req",
+"rsp": "uav_camera_set_front_led_auto_close_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 184,
+"ver": 1,
+"req": "uav_camera_set_control_zoom_req",
+"rsp": "uav_camera_set_control_zoom_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 185,
+"ver": 1,
+"req": "uav_camera_set_image_orientation_req",
+"rsp": "uav_camera_set_image_orientation_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 187,
+"ver": 1,
+"req": "uav_camera_set_lock_gimbal_when_capture_req",
+"rsp": "uav_camera_set_lock_gimbal_when_capture_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 191,
+"ver": 1,
+"req": "uav_camera_set_file_tag_req",
+"rsp": "uav_camera_set_file_tag_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 196,
+"ver": 1,
+"req": "uav_camera_set_tap_zoom_enable_req",
+"rsp": "uav_camera_set_tap_zoom_enable_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 197,
+"ver": 1,
+"req": "uav_camera_get_tap_zoom_enable_req",
+"rsp": "uav_camera_get_tap_zoom_enable_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 198,
+"ver": 1,
+"req": "uav_camera_set_tap_zoom_target_req",
+"rsp": "uav_camera_set_tap_zoom_target_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 206,
+"ver": 1,
+"req": "uav_camera_get_calibration_control_req",
+"rsp": "uav_camera_get_calibration_control_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 215,
+"ver": 1,
+"req": "uav_camera_set_user_custom_data_req",
+"rsp": "uav_camera_set_user_custom_data_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 216,
+"ver": 1,
+"req": "uav_camera_get_user_custom_data_req",
+"rsp": "uav_camera_get_user_custom_data_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 218,
+"ver": 1,
+"req": "uav_camera_storage_config_req",
+"rsp": "uav_camera_storage_config_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 225,
+"ver": 1,
+"req": "uav_camera_set_set_mode_profile_req",
+"rsp": "uav_camera_set_set_mode_profile_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 229,
+"ver": 1,
+"req": "uav_camera_set_watermark_req",
+"rsp": "uav_camera_set_watermark_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 231,
+"ver": 1,
+"req": "uav_camera_set_original_photo_saved_configuration_req",
+"rsp": "uav_camera_set_original_photo_saved_configuration_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 232,
+"ver": 1,
+"req": "uav_camera_get_original_photo_saved_configuration_req",
+"rsp": "uav_camera_get_original_photo_saved_configuration_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 235,
+"ver": 1,
+"req": "uav_camera_set_camera_status_subscribe_req",
+"rsp": "uav_camera_set_camera_status_subscribe_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 254,
+"ver": 1,
+"req": "uav_camera_set_set_baseband_req",
+"rsp": "uav_camera_set_set_baseband_rsp"
+},
+{
+"cmd_set": 2,
+"cmd_id": 255,
+"ver": 1,
+"req": "uav_camera_cam_expan_cmd",
+"rsp": "uav_camera_camera_expansion_cmd_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 42,
+"ver": 1,
+"req": "uav_fc_blade_calibration_req",
+"rsp": "uav_fc_function_control_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 47,
+"ver": 1,
+"req": "uav_fc_set_voltage_alert_req",
+"rsp": "uav_fc_set_voltage_alert_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 48,
+"ver": 1,
+"req": "uav_fc_get_voltage_alert_req",
+"rsp": "uav_fc_get_voltage_alert_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 49,
+"ver": 1,
+"req": "uav_fc_set_homepoint_req",
+"rsp": "uav_fc_set_homepoint_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 51,
+"ver": 1,
+"req": "uav_fc_set_aircraft_name_req",
+"rsp": "uav_fc_set_aircraft_name_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 52,
+"ver": 1,
+"req": "uav_fc_get_aircraft_name_req",
+"rsp": "uav_fc_get_aircraft_name_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 57,
+"ver": 1,
+"req": "uav_fc_switch_to_read_data_mode_req",
+"rsp": "uav_fc_switch_to_read_data_mode_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 59,
+"ver": 1,
+"req": "uav_fc_set_fail_safe_action_req",
+"rsp": "uav_fc_set_fail_safe_action_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 60,
+"ver": 1,
+"req": "uav_fc_get_fail_safe_action_req",
+"rsp": "uav_fc_get_fail_safe_action_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 70,
+"ver": 1,
+"req": "uav_fc_switch_gps_snr_push_req",
+"rsp": "uav_fc_switch_gps_snr_push_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 82,
+"ver": 1,
+"req": "uav_fc_confirm_electricity_gohome_req",
+"rsp": "uav_fc_confirm_electricity_gohome_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 91,
+"ver": 1,
+"req": "uav_fc_capability_set_subscribe_push",
+"rsp": "uav_fc_push_capability_set_subscribe_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 92,
+"ver": 1,
+"req": "uav_fc_capability_set_push_push",
+"rsp": "uav_fc_push_capability_set_push_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 119,
+"ver": 1,
+"req": "uav_fc_handle_eid_switch",
+"rsp": "uav_fc_eid_switch_status"
+},
+{
+"cmd_set": 3,
+"cmd_id": 120,
+"ver": 1,
+"req": "uav_fc_action_rid_set_and_delete_opid",
+"rsp": "uav_fc_action_rid_set_and_delete_opid_ack"
+},
+{
+"cmd_set": 3,
+"cmd_id": 128,
+"ver": 1,
+"req": "uav_fc_set_ground_station_on_off_req",
+"rsp": "uav_fc_set_ground_station_on_off_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 143,
+"ver": 1,
+"req": "uav_fc_recorder_rpc_rsp",
+"rsp": "uav_fc_recorder_rpc_req"
+},
+{
+"cmd_set": 3,
+"cmd_id": 156,
+"ver": 1,
+"req": "uav_fc_set_waypoint_auto_flight_speed_req",
+"rsp": "uav_fc_set_waypoint_auto_flight_speed_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 157,
+"ver": 1,
+"req": "uav_fc_get_waypoint_auto_flight_speed_req",
+"rsp": "uav_fc_get_waypoint_auto_flight_speed_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 160,
+"ver": 1,
+"req": "uav_fc_agnss_pos_and_time_data_push",
+"rsp": "uav_fc_push_agnss_pos_and_time_data_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 162,
+"ver": 1,
+"req": "uav_fc_agps_online_push_push",
+"rsp": "uav_fc_push_agps_online_push_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 175,
+"ver": 1,
+"req": "uav_fc_get_product_config_req",
+"rsp": "uav_fc_get_product_config_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 180,
+"ver": 1,
+"req": "uav_fc_get_uav_uav_code_req",
+"rsp": "uav_fc_get_uav_uav_code_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 184,
+"ver": 1,
+"req": "uav_fc_get_redundancy_system_req",
+"rsp": "uav_fc_get_redundancy_system_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 187,
+"ver": 1,
+"req": "uav_fc_get_nfzdb_upgrade_status_query_req",
+"rsp": "uav_fc_get_nfzdb_upgrade_status_query_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 188,
+"ver": 1,
+"req": "uav_fc_fmu_api_register_led_action_req",
+"rsp": "uav_fc_fmu_api_register_led_action_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 189,
+"ver": 1,
+"req": "uav_fc_fmu_api_logout_led_action_req",
+"rsp": "uav_fc_fmu_api_logout_led_action_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 190,
+"ver": 1,
+"req": "uav_fc_fmu_api_set_led_action_req",
+"rsp": "uav_fc_fmu_api_set_led_action_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 215,
+"ver": 1,
+"req": "uav_fc_recorder_rpc_rsp",
+"rsp": "uav_fc_recorder_rpc_req"
+},
+{
+"cmd_set": 3,
+"cmd_id": 218,
+"ver": 1,
+"req": "uav_fc_mc_monitor_req",
+"rsp": "uav_fc_mc_monitor_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 233,
+"ver": 1,
+"req": "uav_fc_set_cmd_handler_req",
+"rsp": "uav_fc_set_cmd_handler_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 237,
+"ver": 1,
+"req": "uav_fc_esc_echo_cmd_info_req",
+"rsp": "uav_fc_esc_echo_cmd_info_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 238,
+"ver": 1,
+"req": "uav_fc_get_app_count_down_push_req",
+"rsp": "uav_general_set_device_date_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 243,
+"ver": 1,
+"req": "uav_fc_reset_cfg_item_req",
+"rsp": "uav_fc_reset_cfg_item_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 245,
+"ver": 1,
+"req": "uav_fc_get_get_set_driver_licesen_info_req",
+"rsp": "uav_fc_get_get_set_driver_licesen_info_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 247,
+"ver": 1,
+"req": "uav_fc_get_get_cfg_item_info_by_hash_req",
+"rsp": "uav_fc_get_get_cfg_item_info_by_hash_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 248,
+"ver": 1,
+"req": "uav_fc_read_hash_param_req",
+"rsp": "uav_fc_read_hash_param_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 249,
+"ver": 1,
+"req": "uav_fc_set_write_hash_param_req",
+"rsp": "uav_fc_set_write_hash_param_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 250,
+"ver": 1,
+"req": "uav_fc_set_reset_cfg_item_by_hash_req",
+"rsp": "uav_fc_set_reset_cfg_item_by_hash_rsp"
+},
+{
+"cmd_set": 3,
+"cmd_id": 254,
+"ver": 1,
+"req": "uav_fc_set_set_motor_force_disable_flag_req",
+"rsp": "uav_fc_set_set_motor_force_disable_flag_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 1,
+"ver": 1,
+"req": "uav_gimbal_set_motion_control_req",
+"rsp": "uav_gimbal_set_motion_control_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 7,
+"ver": 1,
+"req": "uav_gimbal_set_roll_trimming_adjust_req",
+"rsp": "uav_gimbal_set_roll_trimming_adjust_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 8,
+"ver": 1,
+"req": "uav_gimbal_auto_calibration_req",
+"rsp": "uav_gimbal_auto_calibration_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 10,
+"ver": 1,
+"req": "uav_gimbal_set_control_gimbal_angle_req",
+"rsp": "uav_gimbal_set_control_gimbal_angle_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 12,
+"ver": 1,
+"req": "uav_gimbal_set_cmd_custom_ctrl_speed_req",
+"rsp": "uav_gimbal_set_cmd_custom_ctrl_speed_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 13,
+"ver": 1,
+"req": "uav_gimbal_set_turn_on_off_control_req",
+"rsp": "uav_gimbal_set_turn_on_off_control_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 15,
+"ver": 1,
+"req": "uav_gimbal_set_user_params_req",
+"rsp": "uav_gimbal_set_user_params_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 16,
+"ver": 1,
+"req": "uav_gimbal_read_params_req",
+"rsp": "uav_gimbal_read_params_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 18,
+"ver": 1,
+"req": "uav_gimbal_get_message_subscription_req",
+"rsp": "uav_gimbal_get_message_subscription_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 19,
+"ver": 1,
+"req": "uav_gimbal_reset_default_params_req",
+"rsp": "uav_gimbal_reset_default_params_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 20,
+"ver": 1,
+"req": "uav_gimbal_set_control_gimbal_angle_ex_req",
+"rsp": "uav_gimbal_set_control_gimbal_angle_ex_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 37,
+"ver": 1,
+"req": "uav_gimbal_set_gimbal_timelapse_control_req",
+"rsp": "uav_gimbal_set_gimbal_timelapse_control_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 58,
+"ver": 1,
+"req": "uav_gimbal_set_coordinate_system_rotate_req",
+"rsp": "uav_gimbal_set_coordinate_system_rotate_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 68,
+"ver": 1,
+"req": "uav_gimbal_set_gimbal_work_mode_req",
+"rsp": "uav_gimbal_set_gimbal_work_mode_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 76,
+"ver": 1,
+"req": "uav_gimbal_set_work_mode_and_return_center_req",
+"rsp": "uav_gimbal_set_work_mode_and_return_center_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 80,
+"ver": 1,
+"req": "uav_gimbal_gimbal_system_param_req",
+"rsp": "uav_gimbal_gimbal_system_param_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 103,
+"ver": 1,
+"req": "uav_gimbal_set_gimbal_esc_extern_command_req",
+"rsp": "uav_gimbal_set_gimbal_esc_extern_command_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 104,
+"ver": 1,
+"req": "uav_gimbal_cali_data_exist_req",
+"rsp": "uav_gimbal_cali_data_exist_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 114,
+"ver": 1,
+"req": "uav_gimbal_get_get_gimbal_info_extend_req",
+"rsp": "uav_gimbal_get_get_gimbal_info_extend_rsp"
+},
+{
+"cmd_set": 4,
+"cmd_id": 119,
+"ver": 1,
+"req": "uav_gimbal_get_gimbal_capability_req",
+"rsp": "uav_gimbal_get_gimbal_capability_rsp"
+},
+{
+"cmd_set": 5,
+"cmd_id": 8,
+"ver": 1,
+"req": "uav_centerboard_get_request_battery_history_state_req",
+"rsp": "uav_centerboard_get_request_battery_history_state_rsp"
+},
+{
+"cmd_set": 5,
+"cmd_id": 9,
+"ver": 1,
+"req": "uav_centerboard_battery_self_discharge_req",
+"rsp": "uav_centerboard_battery_self_discharge_rsp"
+},
+{
+"cmd_set": 5,
+"cmd_id": 33,
+"ver": 1,
+"req": "uav_centerboard_get_request_battery_static_info_req",
+"rsp": "uav_centerboard_get_request_battery_static_info_rsp"
+},
+{
+"cmd_set": 5,
+"cmd_id": 51,
+"ver": 1,
+"req": "uav_centerboard_get_get_battery_barcode_req",
+"rsp": "uav_centerboard_get_get_battery_barcode_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 3,
+"ver": 1,
+"req": "uav_rc_calibrate_channels_req",
+"rsp": "uav_rc_calibrate_channels_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 6,
+"ver": 1,
+"req": "uav_rc_set_machine_mode_req",
+"rsp": "uav_rc_set_machine_mode_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 7,
+"ver": 1,
+"req": "uav_rc_get_machine_mode_req",
+"rsp": "uav_rc_get_machine_mode_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 10,
+"ver": 1,
+"req": "uav_rc_set_local_machine_password_req",
+"rsp": "uav_rc_set_local_machine_password_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 11,
+"ver": 1,
+"req": "uav_rc_get_local_machine_password_req",
+"rsp": "uav_rc_get_local_machine_password_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 17,
+"ver": 1,
+"req": "uav_rc_set_machine_function_switch_req",
+"rsp": "uav_rc_set_machine_function_switch_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 18,
+"ver": 1,
+"req": "uav_rc_get_machine_function_switch_req",
+"rsp": "uav_rc_get_machine_function_switch_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 25,
+"ver": 1,
+"req": "uav_rc_set_controller_mode_req",
+"rsp": "uav_rc_set_controller_mode_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 26,
+"ver": 1,
+"req": "uav_rc_get_controller_mode_req",
+"rsp": "uav_rc_get_controller_mode_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 33,
+"ver": 1,
+"req": "uav_rc_get_ce_fcc_req",
+"rsp": "uav_rc_get_ce_fcc_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 34,
+"ver": 1,
+"req": "uav_rc_get_gimbal_control_req",
+"rsp": "uav_rc_get_gimbal_control_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 35,
+"ver": 1,
+"req": "uav_rc_request_gimbal_control_rsp",
+"rsp": null
+},
+{
+"cmd_set": 6,
+"cmd_id": 42,
+"ver": 1,
+"req": "uav_rc_get_slave_control_mode_req",
+"rsp": "uav_rc_get_slave_control_mode_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 44,
+"ver": 1,
+"req": "uav_rc_get_gimbal_control_speed_req",
+"rsp": "uav_rc_get_gimbal_control_speed_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 45,
+"ver": 1,
+"req": "uav_rc_set_customized_btn_function_req",
+"rsp": "uav_rc_set_customized_btn_function_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 46,
+"ver": 1,
+"req": "uav_rc_get_customized_btn_function_req",
+"rsp": "uav_rc_get_customized_btn_function_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 47,
+"ver": 1,
+"req": "uav_rc_pair_frequency_req",
+"rsp": "uav_rc_pair_frequency_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 50,
+"ver": 1,
+"req": "uav_rc_get_rtc_clock_req",
+"rsp": "uav_rc_get_rtc_clock_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 52,
+"ver": 1,
+"req": "uav_rc_get_gimbal_control_gain_req",
+"rsp": "uav_rc_get_gimbal_control_gain_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 54,
+"ver": 1,
+"req": "uav_rc_get_gimbal_control_mode_req",
+"rsp": "uav_rc_get_gimbal_control_mode_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 58,
+"ver": 1,
+"req": "uav_rc_set_usb_mode_2014rc_req",
+"rsp": "uav_rc_set_usb_mode_2014rc_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 61,
+"ver": 1,
+"req": "uav_rc_mutil_device_pair_t20_req",
+"rsp": "uav_rc_mutil_device_pair_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 70,
+"ver": 1,
+"req": "uav_rc_mutil_device_select_target_aircraft_req",
+"rsp": "uav_rc_mutil_device_select_target_aircraft_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 71,
+"ver": 1,
+"req": "uav_rc_custom_function_control_req",
+"rsp": "uav_rc_custom_function_control_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 72,
+"ver": 1,
+"req": "uav_rc_param_request_req",
+"rsp": "uav_rc_param_request_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 73,
+"ver": 1,
+"req": "uav_rc_mutil_device_enable_rtk_req",
+"rsp": "uav_rc_mutil_device_enable_rtk_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 74,
+"ver": 1,
+"req": "uav_rc_mutil_device_enable_4g_req",
+"rsp": "uav_rc_mutil_device_enable_4g_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 83,
+"ver": 1,
+"req": "uav_rc_get_unit_language_req",
+"rsp": "uav_rc_get_unit_language_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 84,
+"ver": 1,
+"req": "uav_rc_set_unit_language_req",
+"rsp": "uav_rc_set_unit_language_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 89,
+"ver": 1,
+"req": "uav_rc_set_set_pts_channel_req",
+"rsp": "uav_rc_set_set_pts_channel_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 107,
+"ver": 1,
+"req": "uav_rc_UAV_RACING_RC_VIBRATING_MOTOR_CTRL_push",
+"rsp": "uav_rc_push_UAV_RACING_RC_VIBRATING_MOTOR_CTRL_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 114,
+"ver": 1,
+"req": "uav_rc_set_stick_value_lock_req",
+"rsp": "uav_rc_set_stick_value_lock_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 116,
+"ver": 1,
+"req": "uav_rc_get_stick_value_lock_status_req",
+"rsp": "uav_rc_get_stick_value_lock_status_with_ch4_func_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 121,
+"ver": 1,
+"req": "uav_rc_get_get_rc_firmware_info_req",
+"rsp": "uav_rc_get_get_rc_firmware_info_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 140,
+"ver": 1,
+"req": "uav_rc_set_app_work_stage_set_req",
+"rsp": "uav_rc_set_app_work_stage_set_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 141,
+"ver": 1,
+"req": "uav_rc_set_self_def_key_list_req",
+"rsp": "uav_rc_set_self_def_key_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 142,
+"ver": 1,
+"req": "uav_rc_get_self_def_key_list_req",
+"rsp": "uav_rc_get_self_def_key_list_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 161,
+"ver": 1,
+"req": "uav_rc_push_data_sync_rsp",
+"rsp": null
+},
+{
+"cmd_set": 6,
+"cmd_id": 170,
+"ver": 1,
+"req": "uav_rc_rocker_control_gimbal_mode_req",
+"rsp": "uav_rc_rocker_control_gimbal_mode_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 229,
+"ver": 1,
+"req": "uav_rc_get_custom_setting_support_info_req",
+"rsp": "uav_rc_get_custom_setting_support_info_rsp"
+},
+{
+"cmd_set": 6,
+"cmd_id": 241,
+"ver": 1,
+"req": "uav_rc_set_app_to_pc_control_req",
+"rsp": "uav_rc_set_app_to_pc_control_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 5,
+"ver": 1,
+"req": "uav_wifi_set_ap_power_req",
+"rsp": "uav_wifi_set_ap_power_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 6,
+"ver": 1,
+"req": "uav_wifi_get_ap_power_req",
+"rsp": "uav_wifi_get_ap_power_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 7,
+"ver": 1,
+"req": "uav_wifi_get_ssid_req",
+"rsp": "uav_wifi_get_ssid_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 8,
+"ver": 1,
+"req": "uav_wifi_set_ssid_req",
+"rsp": "uav_wifi_set_ssid_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 12,
+"ver": 1,
+"req": "uav_wifi_get_mac_req",
+"rsp": "uav_wifi_get_mac_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 13,
+"ver": 1,
+"req": "uav_wifi_set_password_req",
+"rsp": "uav_wifi_set_password_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 14,
+"ver": 1,
+"req": "uav_wifi_get_password_req",
+"rsp": "uav_wifi_get_password_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 16,
+"ver": 1,
+"req": "uav_wifi_set_frequency_switch_req",
+"rsp": "uav_wifi_set_frequency_switch_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 21,
+"ver": 1,
+"req": "uav_wifi_restart_req",
+"rsp": "uav_wifi_restart_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 22,
+"ver": 1,
+"req": "uav_wifi_set_auto_freq_req",
+"rsp": "uav_wifi_set_auto_freq_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 23,
+"ver": 1,
+"req": "uav_wifi_get_auto_freq_req",
+"rsp": "uav_wifi_get_auto_freq_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 24,
+"ver": 1,
+"req": "uav_wifi_set_country_code_req",
+"rsp": "uav_wifi_set_country_code_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 25,
+"ver": 1,
+"req": "uav_wifi_get_country_code_req",
+"rsp": "uav_wifi_get_country_code_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 40,
+"ver": 1,
+"req": "uav_wifi_get_sdr_channel_info_req",
+"rsp": "uav_wifi_get_sdr_channel_info_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 41,
+"ver": 1,
+"req": "uav_wifi_request_snr_req",
+"rsp": "uav_wifi_request_snr_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 43,
+"ver": 1,
+"req": "uav_wifi_set_wifi_frequecy_req",
+"rsp": "uav_wifi_set_ssid_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 46,
+"ver": 1,
+"req": "uav_wifi_set_frequency_support_req",
+"rsp": "uav_wifi_set_frequency_support_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 48,
+"ver": 1,
+"req": "uav_wifi_set_country_code_ext_req",
+"rsp": "uav_wifi_set_country_code_ext_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 51,
+"ver": 1,
+"req": "uav_wifi_get_is_support_area_code_req",
+"rsp": "uav_wifi_get_is_support_area_code_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 65,
+"ver": 1,
+"req": "uav_wifi_start_ground_wifi_req",
+"rsp": "uav_wifi_start_ground_wifi_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 66,
+"ver": 1,
+"req": "uav_wifi_stop_ground_wifi_req",
+"rsp": "uav_wifi_stop_ground_wifi_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 68,
+"ver": 1,
+"req": "uav_wifi_get_get_frequency_req",
+"rsp": "uav_wifi_get_get_frequency_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 69,
+"ver": 1,
+"req": "uav_wifi_device_permission_verification_req",
+"rsp": "uav_wifi_device_permission_verification_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 70,
+"ver": 1,
+"req": "uav_wifi_push_device_permission_verification_asyn_result_rsp",
+"rsp": null
+},
+{
+"cmd_set": 7,
+"cmd_id": 71,
+"ver": 1,
+"req": "uav_wifi_connect_ap_req",
+"rsp": "uav_wifi_connect_ap_rsp"
+},
+{
+"cmd_set": 7,
+"cmd_id": 147,
+"ver": 1,
+"req": "uav_wifi_sw_dev_info_1_push",
+"rsp": "uav_wifi_request_snr_rsp"
+},
+{
+"cmd_set": 8,
+"cmd_id": 1,
+"ver": 1,
+"req": "uav_dm368_set_ground_side_param_req",
+"rsp": "uav_dm368_set_ground_side_param_rsp"
+},
+{
+"cmd_set": 8,
+"cmd_id": 2,
+"ver": 1,
+"req": "uav_dm368_read_ground_side_param_req",
+"rsp": "uav_dm368_read_ground_side_param_rsp"
+},
+{
+"cmd_set": 8,
+"cmd_id": 50,
+"ver": 1,
+"req": "uav_dm368_sdr_data_report_push_push",
+"rsp": "uav_dm368_push_sdr_data_report_push_rsp"
+},
+{
+"cmd_set": 8,
+"cmd_id": 65,
+"ver": 1,
+"req": "uav_dm368_send_decode_capability_req",
+"rsp": "uav_dm368_send_decode_capability_rsp"
+},
+{
+"cmd_set": 8,
+"cmd_id": 66,
+"ver": 1,
+"req": "uav_dm368_action_send_decode_framerate_ability_req",
+"rsp": "uav_dm368_action_send_decode_framerate_ability_rsp"
+},
+{
+"cmd_set": 8,
+"cmd_id": 67,
+"ver": 1,
+"req": "uav_dm368_set_auto_framerate_state_req",
+"rsp": "uav_dm368_set_auto_framerate_state_rsp"
+},
+{
+"cmd_set": 8,
+"cmd_id": 105,
+"ver": 1,
+"req": "uav_dm368_set_liveview_priority_bandwidth_req",
+"rsp": "uav_dm368_set_liveview_priority_bandwidth_rsp"
+},
+{
+"cmd_set": 8,
+"cmd_id": 120,
+"ver": 1,
+"req": "uav_dm368_set_sh_start_live_streaming_req",
+"rsp": "uav_dm368_set_sh_start_live_streaming_rsp"
+},
+{
+"cmd_set": 8,
+"cmd_id": 121,
+"ver": 1,
+"req": "uav_dm368_get_sh_get_live_streaming_setting_info_req",
+"rsp": "uav_dm368_get_sh_get_live_streaming_setting_info_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 9,
+"ver": 1,
+"req": "uav_ofdm_frequency_power_push_request_req",
+"rsp": "uav_ofdm_frequency_power_push_request_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 13,
+"ver": 1,
+"req": "uav_ofdm_set_config_info_req",
+"rsp": "uav_ofdm_set_config_info_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 33,
+"ver": 1,
+"req": "uav_ofdm_get_sdr_conf_req",
+"rsp": "uav_ofdm_get_sdr_conf_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 38,
+"ver": 1,
+"req": "uav_ofdm_read_sdr_param_req",
+"rsp": "uav_ofdm_read_sdr_param_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 39,
+"ver": 1,
+"req": "uav_ofdm_set_sdr_param_req",
+"rsp": "uav_ofdm_set_sdr_param_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 57,
+"ver": 1,
+"req": "uav_ofdm_set_sdr_config_info_req",
+"rsp": "uav_ofdm_set_sdr_config_info_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 68,
+"ver": 1,
+"req": "uav_ofdm_sdr_role_revert_req",
+"rsp": "uav_ofdm_sdr_role_revert_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 75,
+"ver": 1,
+"req": "device_ofdm_sdr_dongle_state_req",
+"rsp": "device_ofdm_sdr_dongle_state_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 77,
+"ver": 1,
+"req": "uav_ofdm_get_hdvt_mode_get_req",
+"rsp": "uav_ofdm_get_hdvt_mode_get_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 78,
+"ver": 1,
+"req": "uav_ofdm_set_hdvt_mode_switch_req",
+"rsp": "uav_ofdm_set_hdvt_mode_switch_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 160,
+"ver": 1,
+"req": "uav_ofdm_get_sssfn_req",
+"rsp": "uav_ofdm_get_sssfn_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 179,
+"ver": 1,
+"req": "uav_ofdm_set_selete_fpv_req",
+"rsp": "uav_ofdm_set_selete_fpv_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 249,
+"ver": 1,
+"req": "uav_ofdm_RELAY_FREQ_PEER_START_req",
+"rsp": "uav_ofdm_RELAY_FREQ_PEER_START_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 250,
+"ver": 1,
+"req": "uav_ofdm_RELAY_FUNC_req",
+"rsp": "uav_ofdm_RELAY_FUNC_rsp"
+},
+{
+"cmd_set": 9,
+"cmd_id": 253,
+"ver": 1,
+"req": "uav_ofdm_gnd_decoder_ability_feedback_push",
+"rsp": "uav_ofdm_push_gnd_decoder_ability_feedback_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 9,
+"ver": 1,
+"req": "uav_vision_set_debug_upload_req",
+"rsp": "uav_vision_set_debug_upload_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 27,
+"ver": 1,
+"req": "uav_vision_free_pano_cap_area_info_push",
+"rsp": "uav_vision_push_free_pano_cap_area_info_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 32,
+"ver": 1,
+"req": "uav_vision_set_tracking_select_req",
+"rsp": "uav_vision_set_tracking_select_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 39,
+"ver": 1,
+"req": "uav_vision_set_common_ctrl_req",
+"rsp": "uav_vision_set_common_ctrl_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 40,
+"ver": 1,
+"req": "uav_vision_get_get_param_req",
+"rsp": "uav_vision_get_get_param_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 41,
+"ver": 1,
+"req": "uav_vision_set_set_param_req",
+"rsp": "uav_vision_set_set_param_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 62,
+"ver": 1,
+"req": "uav_vision_set_pano_control_req",
+"rsp": "uav_vision_set_pano_control_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 74,
+"ver": 1,
+"req": "uav_vision_set_action_cmd_req",
+"rsp": "uav_vision_set_action_cmd_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 86,
+"ver": 1,
+"req": "uav_vision_set_set_perception_switch_cmds_req",
+"rsp": "uav_vision_set_set_perception_switch_cmds_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 88,
+"ver": 1,
+"req": "uav_vision_get_get_perception_switch_cmds_req",
+"rsp": "uav_vision_get_get_perception_switch_cmds_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 91,
+"ver": 1,
+"req": "uav_vision_set_switch_navigation_function_req",
+"rsp": "uav_vision_set_switch_navigation_function_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 92,
+"ver": 1,
+"req": "uav_vision_set_switch_fixed_speed_req",
+"rsp": "uav_vision_set_switch_fixed_speed_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 98,
+"ver": 1,
+"req": "uav_vision_set_visual_stablize_app_state_req",
+"rsp": "uav_vision_set_visual_stablize_app_state_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 116,
+"ver": 1,
+"req": "uav_vision_set_time_lapse_submode_req_v1",
+"rsp": "uav_vision_set_time_lapse_submode_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 118,
+"ver": 1,
+"req": "uav_vision_set_time_lapse_waypoint_record_action_req",
+"rsp": "uav_vision_set_time_lapse_waypoint_record_action_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 119,
+"ver": 1,
+"req": "uav_vision_get_time_lapse_waypoint_download_req",
+"rsp": "uav_vision_get_time_lapse_waypoint_download_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 120,
+"ver": 1,
+"req": "uav_vision_set_time_lapse_start_req",
+"rsp": "uav_vision_set_time_lapse_start_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 122,
+"ver": 1,
+"req": "uav_vision_set_time_lapse_pause_stop_req",
+"rsp": "uav_vision_set_time_lapse_pause_stop_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 123,
+"ver": 1,
+"req": "uav_vision_set_time_lapse_set_param_req",
+"rsp": "uav_vision_set_time_lapse_set_param_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 124,
+"ver": 1,
+"req": "uav_vision_set_time_lapse_load_task_req",
+"rsp": "uav_vision_set_time_lapse_load_task_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 125,
+"ver": 1,
+"req": "uav_vision_set_app_camera_calibration_cmd_req",
+"rsp": "uav_vision_set_app_camera_calibration_cmd_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 129,
+"ver": 1,
+"req": "uav_vision_set_start_stop_uav_req",
+"rsp": "uav_vision_set_start_stop_uav_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 141,
+"ver": 1,
+"req": "uav_vision_time_lapse_compass_cali_req_req",
+"rsp": "uav_vision_time_lapse_compass_cali_req_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 148,
+"ver": 1,
+"req": "uav_vision_set_SetTrackingTarget_req",
+"rsp": "uav_vision_set_SetTrackingTarget_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 151,
+"ver": 1,
+"req": "uav_vision_set_StopMultiTracking_req",
+"rsp": "uav_general_set_device_date_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 154,
+"ver": 1,
+"req": "uav_vision_set_smart_eye_select_target_req",
+"rsp": "uav_vision_set_smart_eye_select_target_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 155,
+"ver": 1,
+"req": "uav_vision_ack",
+"rsp": "uav_vision_get_pano_image_buf_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 186,
+"ver": 1,
+"req": "uav_vision_target_manager_cmd_req",
+"rsp": "uav_vision_target_manager_cmd_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 193,
+"ver": 1,
+"req": "uav_vision_set_poi_init_target_req",
+"rsp": "uav_vision_set_poi_init_target_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 196,
+"ver": 1,
+"req": "uav_vision_set_poi_set_param_req",
+"rsp": "uav_vision_set_poi_set_param_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 231,
+"ver": 1,
+"req": "uav_vision_tracking_box_to_nav_push",
+"rsp": "uav_vision_push_tracking_box_to_nav_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 236,
+"ver": 1,
+"req": "uav_vision_get_navi_homing_receive_msg_from_APP_req",
+"rsp": "uav_vision_get_navi_homing_receive_msg_from_APP_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 246,
+"ver": 1,
+"req": "uav_vision_set_mastershot_set_param_req",
+"rsp": "uav_vision_set_mastershot_set_param_rsp"
+},
+{
+"cmd_set": 10,
+"cmd_id": 249,
+"ver": 1,
+"req": "uav_vision_set_multi_target_mastershot_param_req_req",
+"rsp": "uav_vision_set_multi_target_mastershot_param_req_rsp"
+},
+{
+"cmd_set": 11,
+"cmd_id": 1,
+"ver": 1,
+"req": "uav_simulator_get_sim_scan_req",
+"rsp": "uav_simulator_get_sim_scan_rsp"
+},
+{
+"cmd_set": 11,
+"cmd_id": 2,
+"ver": 1,
+"req": "uav_simulator_get_sim_para_req",
+"rsp": "uav_simulator_get_sim_para_rsp"
+},
+{
+"cmd_set": 11,
+"cmd_id": 4,
+"ver": 1,
+"req": "uav_simulator_get_sim_command_req",
+"rsp": "uav_simulator_get_sim_command_rsp"
+},
+{
+"cmd_set": 13,
+"cmd_id": 1,
+"ver": 1,
+"req": "uav_smart_battery_get_static_info_req",
+"rsp": "uav_smart_battery_get_static_info_rsp"
+},
+{
+"cmd_set": 13,
+"cmd_id": 2,
+"ver": 1,
+"req": "uav_smart_battery_get_dynamic_info_req",
+"rsp": "uav_smart_battery_get_dynamic_info_rsp"
+},
+{
+"cmd_set": 13,
+"cmd_id": 3,
+"ver": 1,
+"req": "uav_smart_battery_get_cell_voltage_req",
+"rsp": "uav_smart_battery_get_cell_voltage_rsp"
+},
+{
+"cmd_set": 13,
+"cmd_id": 4,
+"ver": 1,
+"req": "uav_smart_battery_get_get_barcode_req",
+"rsp": "uav_smart_battery_get_get_barcode_rsp"
+},
+{
+"cmd_set": 13,
+"cmd_id": 17,
+"ver": 1,
+"req": "uav_smart_battery_set_self_discharge_req",
+"rsp": "uav_smart_battery_set_self_discharge_rsp"
+},
+{
+"cmd_set": 13,
+"cmd_id": 36,
+"ver": 1,
+"req": "uav_smart_battery_param_collect_req",
+"rsp": "uav_smart_battery_param_collect_rsp"
+},
+{
+"cmd_set": 13,
+"cmd_id": 196,
+"ver": 1,
+"req": "uav_smart_battery_get_full_charge_condition_req",
+"rsp": "uav_smart_battery_get_full_charge_condition_rsp"
+},
+{
+"cmd_set": 13,
+"cmd_id": 239,
+"ver": 1,
+"req": "uav_smart_battery_clear_user_pd_blacklist_req",
+"rsp": "uav_smart_battery_clear_user_pd_blacklist_rsp"
+},
+{
+"cmd_set": 16,
+"cmd_id": 16,
+"ver": 1,
+"req": "uav_test_fstest_enable_req",
+"rsp": "uav_test_fstest_enable_rsp"
+},
+{
+"cmd_set": 16,
+"cmd_id": 17,
+"ver": 1,
+"req": "uav_test_fstest_run_case_req",
+"rsp": "uav_test_fstest_run_case_rsp"
+},
+{
+"cmd_set": 16,
+"cmd_id": 18,
+"ver": 1,
+"req": "uav_test_fstest_get_case_status_req",
+"rsp": "uav_test_fstest_get_case_status_rsp"
+},
+{
+"cmd_set": 16,
+"cmd_id": 19,
+"ver": 1,
+"req": "uav_test_get_fs_test_case_req",
+"rsp": "uav_test_fstest_case_case_cnt_rsp"
+},
+{
+"cmd_set": 16,
+"cmd_id": 20,
+"ver": 1,
+"req": "uav_test_fstest_get_case_info_req",
+"rsp": "uav_test_fstest_get_case_info_rsp"
+},
+{
+"cmd_set": 17,
+"cmd_id": 12,
+"ver": 1,
+"req": "uav_adsb_get_adsb_on_off_req",
+"rsp": "uav_adsb_get_adsb_on_off_rsp"
+},
+{
+"cmd_set": 17,
+"cmd_id": 55,
+"ver": 1,
+"req": "uav_adsb_set_set_adsb_agent_switch_req",
+"rsp": "uav_adsb_set_set_adsb_agent_switch_rsp"
+},
+{
+"cmd_set": 17,
+"cmd_id": 57,
+"ver": 1,
+"req": "uav_adsb_set_adsb_test_data_req",
+"rsp": "uav_adsb_set_adsb_test_data_rsp"
+},
+{
+"cmd_set": 17,
+"cmd_id": 67,
+"ver": 1,
+"req": "uav_adsb_set_app_update_pos_enc_req",
+"rsp": "uav_adsb_set_app_update_pos_enc_rsp"
+},
+{
+"cmd_set": 17,
+"cmd_id": 75,
+"ver": 1,
+"req": "uav_adsb_set_rid_registed_shared_key_query_req",
+"rsp": "uav_adsb_set_rid_registed_shared_key_query_rsp"
+},
+{
+"cmd_set": 17,
+"cmd_id": 80,
+"ver": 1,
+"req": "uav_adsb_get_drone_dynamic_max_height_req",
+"rsp": "uav_adsb_get_drone_dynamic_max_height_rsp"
+},
+{
+"cmd_set": 17,
+"cmd_id": 209,
+"ver": 1,
+"req": "uav_adsb_get_realname_check_protocol_req",
+"rsp": "uav_adsb_get_realname_check_protocol_rsp"
+},
+{
+"cmd_set": 17,
+"cmd_id": 213,
+"ver": 1,
+"req": "uav_adsb_china_oid_publish_push",
+"rsp": "uav_adsb_push_china_oid_publish_rsp"
+},
+{
+"cmd_set": 17,
+"cmd_id": 214,
+"ver": 1,
+"req": "uav_adsb_set_china_uom_realname_tag_req",
+"rsp": "uav_adsb_set_china_uom_realname_tag_rsp"
+},
+{
+"cmd_set": 18,
+"cmd_id": 7,
+"ver": 1,
+"req": "uav_bt_get_get_ble_name_req",
+"rsp": "uav_bt_get_get_ble_name_rsp"
+},
+{
+"cmd_set": 18,
+"cmd_id": 8,
+"ver": 1,
+"req": "uav_bt_set_set_ble_name_req",
+"rsp": "uav_bt_set_set_ble_name_rsp"
+},
+{
+"cmd_set": 18,
+"cmd_id": 12,
+"ver": 1,
+"req": "uav_bt_get_bt_mac_addr_req",
+"rsp": "uav_bt_get_bt_mac_addr_rsp"
+},
+{
+"cmd_set": 18,
+"cmd_id": 33,
+"ver": 1,
+"req": "bt_get_ibeacon_uuid_req",
+"rsp": "bt_get_ibeacon_uuid_rsp"
+},
+{
+"cmd_set": 18,
+"cmd_id": 142,
+"ver": 1,
+"req": "uav_bt_network_report_action_req",
+"rsp": "uav_bt_network_report_action_rsp"
+},
+{
+"cmd_set": 21,
+"cmd_id": 53,
+"ver": 1,
+"req": "uav_goggles_app_to_glass_push_data_push",
+"rsp": "uav_goggles_push_app_to_glass_push_data_rsp"
+},
+{
+"cmd_set": 24,
+"cmd_id": 21,
+"ver": 1,
+"req": "uav_cellular4g_lte_apn_request_info",
+"rsp": "uav_cellular4g_lte_apn_response_info"
+},
+{
+"cmd_set": 24,
+"cmd_id": 67,
+"ver": 1,
+"req": "uav_cellular4g_get_lte_dongle_fw_release_note_req",
+"rsp": "uav_cellular4g_get_lte_dongle_fw_release_note_rsp"
+},
+{
+"cmd_set": 24,
+"cmd_id": 69,
+"ver": 1,
+"req": "uav_cellular4g_get_dongle_subscribe_info_req",
+"rsp": "uav_cellular4g_get_dongle_subscribe_info_rsp"
+},
+{
+"cmd_set": 24,
+"cmd_id": 75,
+"ver": 1,
+"req": "uav_cellular4g_lte_esim_set_info",
+"rsp": "uav_cellular4g_lte_esim_response_info"
+},
+{
+"cmd_set": 25,
+"cmd_id": 49,
+"ver": 1,
+"req": "uav_extend_log_export_control_req",
+"rsp": "uav_extend_log_export_control_rsp"
+},
+{
+"cmd_set": 25,
+"cmd_id": 64,
+"ver": 1,
+"req": "uav_extend_lock_right_of_control_req",
+"rsp": "uav_extend_lock_right_of_control_rsp"
+},
+{
+"cmd_set": 25,
+"cmd_id": 65,
+"ver": 1,
+"req": "uav_extend_preempt_right_of_control_req",
+"rsp": "uav_extend_preempt_right_of_control_rsp"
+},
+{
+"cmd_set": 25,
+"cmd_id": 66,
+"ver": 1,
+"req": "uav_extend_owner_ack",
+"rsp": null
+},
+{
+"cmd_set": 25,
+"cmd_id": 69,
+"ver": 1,
+"req": "uav_extend_set_notify_uncontrol_action_req",
+"rsp": "uav_extend_set_notify_uncontrol_action_rsp"
+},
+{
+"cmd_set": 25,
+"cmd_id": 70,
+"ver": 1,
+"req": "uav_extend_set_task_occupy_control_req",
+"rsp": "uav_extend_set_task_occupy_control_rsp"
+},
+{
+"cmd_set": 33,
+"cmd_id": 4,
+"ver": 1,
+"req": "uav_heathy_set_inject_test_req",
+"rsp": "uav_heathy_set_inject_test_rsp"
+},
+{
+"cmd_set": 33,
+"cmd_id": 5,
+"ver": 1,
+"req": "uav_heathy_set_set_subscriber_req",
+"rsp": "uav_heathy_set_set_subscriber_rsp"
+},
+{
+"cmd_set": 33,
+"cmd_id": 10,
+"ver": 1,
+"req": "uav_heathy_get_history_cmd",
+"rsp": "uav_heathy_get_history_cmd_rsp"
+},
+{
+"cmd_set": 34,
+"cmd_id": 29,
+"ver": 1,
+"req": "uav_fc2_get_get_waypoint_info_req",
+"rsp": "uav_fc2_get_get_waypoint_info_rsp"
+},
+{
+"cmd_set": 34,
+"cmd_id": 39,
+"ver": 1,
+"req": "uav_fc2_get_API_WP2_GET_BREAK_POINT_INFO_req",
+"rsp": "uav_fc2_get_API_WP2_GET_BREAK_POINT_INFO_rsp"
+},
+{
+"cmd_set": 34,
+"cmd_id": 40,
+"ver": 1,
+"req": "uav_fc2_FC_FACTORY_CMD_req",
+"rsp": "uav_fc2_FC_FACTORY_CMD_rsp"
+},
+{
+"cmd_set": 34,
+"cmd_id": 72,
+"ver": 1,
+"req": "uav_fc2_get_afqt_on_off_cmd_req",
+"rsp": "uav_fc2_get_afqt_on_off_cmd_rsp"
+},
+{
+"cmd_set": 34,
+"cmd_id": 96,
+"ver": 1,
+"req": "uav_fc2_get_display_mode_on_off_req",
+"rsp": "uav_fc2_g"
+},
+{
+"cmd_set": 34,
+"cmd_id": 103,
+"ver": 1,
+"req": "uav_fc2_get_GET_ESC_DATA_API_req",
+"rsp": "uav_fc2_get_GET_ESC_DATA_API_rsp"
+},
+{
+"cmd_set": 34,
+"cmd_id": 128,
+"ver": 1,
+"req": "uav_fc_fs_cnt_down_to_app_push",
+"rsp": "uav_fc_push_fs_cnt_down_to_app_rsp"
+},
+{
+"cmd_set": 34,
+"cmd_id": 171,
+"ver": 1,
+"req": "uav_fc2_start_stop_wpmz_mission_req",
+"rsp": "uav_fc2_start_stop_wpmz_mission_rsp"
+},
+{
+"cmd_set": 34,
+"cmd_id": 172,
+"ver": 1,
+"req": "uav_fc2_break_resume_wpmz_mission_req",
+"rsp": "uav_fc2_break_resume_wpmz_mission_rsp"
+},
+{
+"cmd_set": 34,
+"cmd_id": 174,
+"ver": 1,
+"req": "uav_fc2_get_wp3_query_result_req",
+"rsp": "uav_fc2_get_wp3_query_result_rsp"
+},
+{
+"cmd_set": 34,
+"cmd_id": 175,
+"ver": 1,
+"req": "uav_fc2_get_wp3_query_breakpoint_info_req",
+"rsp": "uav_fc2_get_wp3_query_breakpoint_info_rsp"
+},
+{
+"cmd_set": 34,
+"cmd_id": 203,
+"ver": 1,
+"req": "uav_fc2_RC_DYN_HOMEPOINT_INFO_push",
+"rsp": "uav_fc2_push_RC_DYN_HOMEPOINT_INFO_rsp"
+},
+{
+"cmd_set": 35,
+"cmd_id": 4,
+"ver": 1,
+"req": "uav_navigation_api_msg_result_ind_t_push",
+"rsp": "uav_navigation_push_api_msg_result_ind_t_rsp"
+},
+{
+"cmd_set": 35,
+"cmd_id": 18,
+"ver": 1,
+"req": "uav_navigation_get_precise_photo_file_action_req",
+"rsp": "uav_navigation_get_precise_photo_file_action_rsp"
+},
+{
+"cmd_set": 35,
+"cmd_id": 19,
+"ver": 1,
+"req": "uav_navigation_handheld_func_req",
+"rsp": "uav_navigation_handheld_func_rsp"
+},
+{
+"cmd_set": 35,
+"cmd_id": 21,
+"ver": 1,
+"req": "uav_navigation_handheld_func_exit_req",
+"rsp": "uav_navigation_handheld_func_exit_rsp"
+},
+{
+"cmd_set": 35,
+"cmd_id": 22,
+"ver": 1,
+"req": "uav_navigation_set_handheld_func_param_req",
+"rsp": "uav_navigation_set_handheld_func_param_rsp"
+},
+{
+"cmd_set": 35,
+"cmd_id": 24,
+"ver": 1,
+"req": "navigation_smart_portrait_ctrl_action_req",
+"rsp": "navigation_smart_portrait_ctrl_action_rsp"
+},
+{
+"cmd_set": 35,
+"cmd_id": 25,
+"ver": 1,
+"req": "navigation_get_smart_portrait_template_get_req",
+"rsp": "navigation_get_smart_portrait_template_get_rsp"
+},
+{
+"cmd_set": 35,
+"cmd_id": 160,
+"ver": 1,
+"req": "uav_navigation_set_keep_sticks_switch_req",
+"rsp": "uav_navigation_set_keep_sticks_switch_rsp"
+},
+{
+"cmd_set": 35,
+"cmd_id": 182,
+"ver": 1,
+"req": "uav_navigation_fancy_mode_intend_from_app_req",
+"rsp": "uav_navigation_push_fancy_mode_intend_from_app_rsp"
+},
+{
+"cmd_set": 35,
+"cmd_id": 192,
+"ver": 1,
+"req": "uav_navigation_offline_map_service_req",
+"rsp": "uav_navigation_offline_map_service_rsp"
+},
+{
+"cmd_set": 36,
+"cmd_id": 40,
+"ver": 1,
+"req": "uav_perception_get_vps_cali_token_req",
+"rsp": "uav_perception_get_vps_cali_token_rsp"
+},
+{
+"cmd_set": 73,
+"cmd_id": 128,
+"ver": 1,
+"req": "uav_sdk_get_or_release_control_auth_t",
+"rsp": "uav_sdk_get_or_release_control_auth_ack_t"
+},
+{
+"cmd_set": 80,
+"cmd_id": 5,
+"ver": 1,
+"req": "uav_esdd_get_get_remote_audio_remux_state_req",
+"rsp": "uav_esdd_get_get_remote_audio_remux_state_rsp"
+},
+{
+"cmd_set": 80,
+"cmd_id": 8,
+"ver": 1,
+"req": "uav_esdd_get_rgb_led_control_req",
+"rsp": "uav_esdd_get_rgb_led_control_rsp"
+},
+{
+"cmd_set": 81,
+"cmd_id": 2,
+"ver": 1,
+"req": "uav_wlm_get_link_mode_switch_req",
+"rsp": "uav_wlm_get_link_mode_switch_rsp"
+},
+{
+"cmd_set": 81,
+"cmd_id": 9,
+"ver": 1,
+"req": "uav_wlm_wlm_test_info_req",
+"rsp": "uav_wlm_wlm_test_info_rsp"
+},
+{
+"cmd_set": 81,
+"cmd_id": 13,
+"ver": 1,
+"req": "uav_wlm_get_wlm_debug_control_req",
+"rsp": "uav_wlm_get_wlm_debug_control_rsp"
+},
+{
+"cmd_set": 81,
+"cmd_id": 21,
+"ver": 1,
+"req": "uav_wlm_get_dev_select_req",
+"rsp": "uav_wlm_get_dev_select_rsp"
+},
+{
+"cmd_set": 81,
+"cmd_id": 26,
+"ver": 1,
+"req": "uav_wlm_service_mode_switch_req",
+"rsp": "uav_wlm_service_mode_switch_rsp"
+},
+{
+"cmd_set": 81,
+"cmd_id": 30,
+"ver": 1,
+"req": "uav_wlm_DUSS_MB_CMD_WL_MANAGE_RM_CTRL_REPORT_push",
+"rsp": "uav_wlm_push_DUSS_MB_CMD_WL_MANAGE_RM_CTRL_REPORT_rsp"
+},
+{
+"cmd_set": 81,
+"cmd_id": 43,
+"ver": 1,
+"req": "uav_wlm_wlm_app_conn_product_info_push",
+"rsp": "uav_wlm_push_wlm_app_conn_product_info_rsp"
+},
+{
+"cmd_set": 81,
+"cmd_id": 66,
+"ver": 1,
+"req": "uav_wlm_wlm_ability_nego_result_req",
+"rsp": "uav_wlm_wlm_ability_nego_result_rsp"
+},
+{
+"cmd_set": 82,
+"cmd_id": 1,
+"ver": 1,
+"req": "uav_af_rc_start_autoflight_req",
+"rsp": "uav_af_set_rc_start_autoflight_rsp"
+},
+{
+"cmd_set": 89,
+"cmd_id": 1,
+"ver": 1,
+"req": "uav_diag_sys_diag_mode_switch_req",
+"rsp": "uav_diag_sys_diag_mode_switch_rsp"
+},
+{
+"cmd_set": 89,
+"cmd_id": 2,
+"ver": 1,
+"req": "uav_diag_get_sys_diag_capability_req",
+"rsp": "uav_diag_get_sys_diag_capability_rsp"
+},
+{
+"cmd_set": 89,
+"cmd_id": 3,
+"ver": 1,
+"req": "uav_diag_get_sys_diag_keep_alive_req",
+"rsp": "uav_diag_get_sys_diag_keep_alive_rsp"
+},
+{
+"cmd_set": 89,
+"cmd_id": 4,
+"ver": 1,
+"req": "uav_diag_sys_diag_execute_req",
+"rsp": "uav_diag_sys_diag_execute_rsp"
+},
+{
+"cmd_set": 89,
+"cmd_id": 5,
+"ver": 1,
+"req": "uav_diag_sys_diag_terminate_req",
+"rsp": "uav_diag_sys_diag_terminate_rsp"
+},
+{
+"cmd_set": 89,
+"cmd_id": 7,
+"ver": 1,
+"req": "uav_diag_get_diag_result_cmd",
+"rsp": "uav_diag_get_diag_result_cmd_rsp"
+},
+{
+"cmd_set": 238,
+"cmd_id": 2,
+"ver": 1,
+"req": "uav_app_phone_camera_info_push",
+"rsp": "uav_app_push_phone_camera_info_rsp"
+},
+{
+"cmd_set": 238,
+"cmd_id": 7,
+"ver": 1,
+"req": "uav_app_app_running_state_push",
+"rsp": "uav_app_push_app_running_state_rsp"
+},
+{
+"cmd_set": 238,
+"cmd_id": 8,
+"ver": 1,
+"req": "uav_app_get_app_running_state_rsp",
+"rsp": "uav_app_get_app_running_state_req"
+},
+{
+"cmd_set": 238,
+"cmd_id": 18,
+"ver": 1,
+"req": "uav_app_push_app_state_sync_req",
+"rsp": "uav_app_push_app_state_sync_rsp"
+},
+{
+"cmd_set": 238,
+"cmd_id": 44,
+"ver": 1,
+"req": "uav_app_set_language_settings_req",
+"rsp": "uav_app_set_language_settings_rsp"
+}
+]
