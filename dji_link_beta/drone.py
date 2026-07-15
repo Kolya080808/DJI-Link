@@ -184,6 +184,14 @@ class Drone:
         # 0x02/0x10 set work mode (0=photo,1=video... SDK enum identity)
         self._cmd(CMDSET_CAMERA, 0x10, bytes([mode & 0xFF]), receiver=DEV_CAMERA)
     # --- liveview (video) — start commands from reversing ---
+    def request_i_frame(self) -> None:
+        """Ask the camera for an immediate keyframe (uav_camera_get_app_request_i_frame).
+
+        HEVC needs an IRAP to start decoding, and the drone only emits one every ~46
+        frames, so a client joining mid-stream stays blank until this is sent.
+        """
+        self._cmd(0x02, 0xB3, b"", receiver=DEV_CAMERA)
+
     def start_liveview(self, camera_source: int = 0) -> None:
         """Start the video stream: select the camera + tell it the decoder/fps/bandwidth.
         Receivers/payloads are partly a hypothesis — to be refined on a live Pi."""

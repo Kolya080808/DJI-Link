@@ -1,8 +1,8 @@
-# Доступ без sudo к телефону в обычном режиме и в AOA accessory-режиме.
-# Скопировать: sudo cp 99-dji-aoa.rules /etc/udev/rules.d/ && sudo udevadm control --reload
-# (при необходимости добавь VID своего телефона первой строкой)
+# Sudo-less access to the phone, both in normal mode and in AOA accessory mode.
+# Install: sudo cp 99-dji-aoa.rules /etc/udev/rules.d/ && sudo udevadm control --reload
+# (if needed, add your phone's VID as the first line)
 
-# Google AOA accessory PID'ы (телефон после START)
+# Google AOA accessory PIDs (the phone after START)
 SUBSYSTEM=="usb", ATTR{idVendor}=="18d1", ATTR{idProduct}=="2d00", MODE="0666"
 SUBSYSTEM=="usb", ATTR{idVendor}=="18d1", ATTR{idProduct}=="2d01", MODE="0666"
 SUBSYSTEM=="usb", ATTR{idVendor}=="18d1", ATTR{idProduct}=="2d04", MODE="0666"

@@ -89,10 +89,25 @@ FLYC_STATE = {
 
 
 def motor_fail_text(value: int) -> str:
-    """Human-readable description of the motor start failure cause from byte +0x33."""
-    if value in MOTOR_FAIL_NAME:
-        return MOTOR_FAIL_NAME[value]
+    """Human-readable description of the motor start failure cause from byte +0x33.
+
+    Resolves the whole chain automatically: name table -> DiagnosticCode -> code text.
+    The caller should never have to look anything up by hand.
+    """
+    name = MOTOR_FAIL_NAME.get(value)
     code = MOTOR_NOT_START.get(value)
+    text = DIAG_TEXT.get(code) if code else None
+
+    # The name and the DiagnosticCode come from two different namespaces and can
+    # disagree (e.g. 147 is BACKUP_COMMUNICATE_FAIL, yet maps to code 30239 whose text
+    # is about GPS). The name describes this very value, so it wins; the code is only
+    # ever reported as a number alongside it, never as a competing explanation.
+    if name:
+        return f"{name} [code {code}]" if code else name
+    if text:
+        return f"{text} [code {code}]"
     if code:
-        return f"DiagnosticCode {code} (text in the app's HMS resources)"
-    return f"unknown code {value}"
+        # Mapped to a DiagnosticCode, but its text lives on DJI's HMS server and is not
+        # in the APK — the number is still the actionable part.
+        return f"DiagnosticCode {code} (value {value}; text only on DJI's HMS server)"
+    return f"unknown cause, raw value {value}"

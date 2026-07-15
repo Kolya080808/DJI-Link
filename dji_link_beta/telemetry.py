@@ -36,14 +36,10 @@ FLYC_STATE = {
 }
 
 # Motor start failure cause (payload +0x33) — standard DJI enum (low codes)
-MOTOR_FAIL_CAUSE = {
-    0: "NONE (all ok)", 1: "COMPASS_ERROR", 2: "ASSISTANT_PROTECTED",
-    3: "DEVICE_LOCKED", 4: "DISTANCE_LIMIT", 5: "IMU_NEED_CALIBRATION",
-    6: "IMU_SN_ERROR", 7: "IMU_PREHEATING", 8: "COMPASS_CALIBRATING",
-    9: "IMU_NO_ATTITUDE", 10: "NO_GPS_AND_NOVICE", 11: "BATTERY_CELL_ERROR",
-    12: "BATTERY_COMMUNICATION_ERROR", 13: "SERIOUS_LOW_VOLTAGE",
-    14: "SERIOUS_LOW_POWER", 15: "LOW_VOLTAGE",
-}
+# The motor-failure cause is decoded by diag_codes.motor_fail_text, which walks the whole
+# chain (name -> DiagnosticCode -> code text) from the tables reversed out of libsdk_jni.
+# Keeping a second, shorter copy of that table here only invited them to drift apart.
+from diag_codes import motor_fail_text
 
 
 @dataclass
@@ -140,7 +136,7 @@ class Telemetry:
         mf = u8(p, 0x33)
         if mf is not None:
             st.motor_fail_code = mf
-            st.motor_fail_reason = MOTOR_FAIL_CAUSE.get(mf, f"code {mf} (see table)")
+            st.motor_fail_reason = motor_fail_text(mf)
 
     def parse_osd_lowfreq(self, p: bytes) -> None:
         """OSD low-freq push (same cmd_set 0x03, different id/structure).

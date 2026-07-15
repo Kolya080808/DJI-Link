@@ -121,11 +121,15 @@ class RawGadget:
         return etype, ctrl, data
 
     # --- EP0 ---
-    def ep0_write(self, data: bytes = b"", flags: int = 0):
+    # NOTE: every ioctl below passes a mutable bytearray with mutate_flag=True.
+    # An immutable bytes arg makes fcntl.ioctl return the buffer instead of the
+    # syscall's return value, and it is additionally capped at 1024 bytes
+    # ("ioctl string arg too long"), which would break large transfers.
+    def ep0_write(self, data: bytes = b"", flags: int = 0) -> int:
         buf = bytearray(_SZ_EP_IO + len(data))
         struct.pack_into("<HHI", buf, 0, 0, flags, len(data))
         buf[_SZ_EP_IO:] = data
-        fcntl.ioctl(self.fd, USB_RAW_IOCTL_EP0_WRITE, bytes(buf))
+        return fcntl.ioctl(self.fd, USB_RAW_IOCTL_EP0_WRITE, buf, True)
 
     def ep0_read(self, length: int, flags: int = 0) -> bytes:
         buf = bytearray(_SZ_EP_IO + length)
@@ -144,15 +148,30 @@ class RawGadget:
         fcntl.ioctl(self.fd, USB_RAW_IOCTL_VBUS_DRAW, struct.pack("<I", ma // 2))
 
     def ep_enable(self, ep_desc9: bytes) -> int:
-        """ep_desc9 — a 9-byte usb_endpoint_descriptor. Returns the endpoint handle."""
-        assert len(ep_desc9) == _SZ_EP_DESC
-        return fcntl.ioctl(self.fd, USB_RAW_IOCTL_EP_ENABLE, ep_desc9)
+        """ep_desc9 — a 9-byte usb_endpoint_descriptor. Returns the endpoint handle.
 
-    def ep_write(self, handle: int, data: bytes, flags: int = 0):
+        The kernel returns the handle as the ioctl return value, so the buffer must be
+        mutable with mutate_flag set: given an immutable bytes arg, fcntl.ioctl hands
+        back the buffer contents instead of the return value.
+        """
+        assert len(ep_desc9) == _SZ_EP_DESC
+        buf = bytearray(ep_desc9)
+        handle = fcntl.ioctl(self.fd, USB_RAW_IOCTL_EP_ENABLE, buf, True)
+        if not isinstance(handle, int):
+            raise RuntimeError(f"EP_ENABLE returned {type(handle).__name__}, expected an int handle")
+        return handle
+
+    def ep_disable(self, handle: int):
+        """Drop an endpoint. Required after a bus reset: the UDC disables the endpoints
+        itself, so the handles go stale and must be re-enabled on the next
+        SET_CONFIGURATION."""
+        fcntl.ioctl(self.fd, USB_RAW_IOCTL_EP_DISABLE, bytearray(struct.pack("<I", handle)), True)
+
+    def ep_write(self, handle: int, data: bytes, flags: int = 0) -> int:
         buf = bytearray(_SZ_EP_IO + len(data))
         struct.pack_into("<HHI", buf, 0, handle, flags, len(data))
         buf[_SZ_EP_IO:] = data
-        fcntl.ioctl(self.fd, USB_RAW_IOCTL_EP_WRITE, bytes(buf))
+        return fcntl.ioctl(self.fd, USB_RAW_IOCTL_EP_WRITE, buf, True)
 
     def ep_read(self, handle: int, length: int, flags: int = 0) -> bytes:
         buf = bytearray(_SZ_EP_IO + length)

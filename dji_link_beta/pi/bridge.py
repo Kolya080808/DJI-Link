@@ -15,10 +15,33 @@ Default port is 9910.
 
 from __future__ import annotations
 import argparse
+import os
 import socket
 import threading
 
 from aoa_device import AoaDevice
+
+UDC_SYSFS = "/sys/class/udc"
+
+
+def detect_udc() -> str:
+    """Return the single available UDC name.
+
+    The name is board-specific (Pi Zero 1: 20980000.usb, Pi Zero 2 W: 3f980000.usb),
+    so autodetect instead of hardcoding a default.
+    """
+    try:
+        udcs = sorted(os.listdir(UDC_SYSFS))
+    except OSError:
+        udcs = []
+    if not udcs:
+        raise SystemExit(
+            f"no UDC found in {UDC_SYSFS} — run setup_gadget.sh and reboot "
+            "(the dwc2 overlay must be active in peripheral mode)"
+        )
+    if len(udcs) > 1:
+        print(f"[bridge] several UDCs {udcs}, using {udcs[0]} (override with --udc)")
+    return udcs[0]
 
 
 def serve(dev: AoaDevice, host: str, port: int):
@@ -68,17 +91,21 @@ def serve(dev: AoaDevice, host: str, port: int):
 
 def main():
     ap = argparse.ArgumentParser(description="Pi AOA<->TCP bridge")
-    ap.add_argument("--udc", default="20980000.usb",
-                    help="UDC name (see /sys/class/udc/)")
-    ap.add_argument("--udc-driver", default="20980000.usb",
-                    help="UDC driver name (usually the same as --udc)")
+    ap.add_argument("--udc", default=None,
+                    help="UDC name (see /sys/class/udc/); autodetected if omitted")
+    ap.add_argument("--udc-driver", default=None,
+                    help="UDC driver name (defaults to the same as --udc)")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=9910)
     ap.add_argument("--model", default="com.dji.logiclink",
                     help="expected model from the remote controller (for logs)")
     args = ap.parse_args()
 
-    dev = AoaDevice(args.udc_driver, args.udc)
+    udc = args.udc or detect_udc()
+    udc_driver = args.udc_driver or udc
+    print(f"[bridge] using UDC {udc}")
+
+    dev = AoaDevice(udc_driver, udc)
 
     # AOA loop in a separate thread (re-enumeration phase1->phase2)
     threading.Thread(target=dev.run_forever, daemon=True).start()

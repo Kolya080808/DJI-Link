@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# One-shot bring-up of a clean Raspberry Pi (Zero 2 W) as the AOA jump-host.
+#
+# Does everything a fresh install needs:
+#   1. build tools + kernel headers
+#   2. dwc2 in peripheral mode (config.txt + module autoload)
+#   3. builds and installs the raw_gadget module (the Pi kernel ships it disabled)
+#   4. optionally clones the project and installs a systemd service for the bridge
+#
+# Usage:
+#   sudo bash setup_pi.sh                      # set up this machine, use ~/pi if present
+#   sudo bash setup_pi.sh <git-url>            # also clone/update the project first
+#   sudo bash setup_pi.sh <git-url> --service  # and run bridge.py at boot
+#
+# A reboot is required the first time (dwc2 is a device-tree change).
+set -euo pipefail
+
+REPO_URL="${1:-}"
+WANT_SERVICE=0
+for a in "$@"; do [ "$a" = "--service" ] && WANT_SERVICE=1; done
+[ "${REPO_URL:-}" = "--service" ] && REPO_URL=""
+
+# Run as root, but keep track of the real user so files do not end up root-owned.
+RUN_USER="${SUDO_USER:-pi}"
+RUN_HOME=$(getent passwd "$RUN_USER" | cut -d: -f6)
+[ -n "$RUN_HOME" ] || RUN_HOME=/home/pi
+
+KREL=$(uname -r)
+KVER=${KREL%%+*}
+BRANCH="rpi-${KVER%.*}.y"
+BOOT_CFG=/boot/firmware/config.txt
+[ -f "$BOOT_CFG" ] || BOOT_CFG=/boot/config.txt
+
+echo "=== DJI-Link Pi setup ==="
+echo "    kernel : $KREL"
+echo "    user   : $RUN_USER ($RUN_HOME)"
+echo "    config : $BOOT_CFG"
+echo
+
+# ---------------------------------------------------------------- 1. packages
+echo "[1/5] installing packages"
+apt-get update -qq
+apt-get install -y build-essential curl git python3 >/dev/null
+if [ ! -d "/lib/modules/${KREL}/build" ]; then
+    apt-get install -y "linux-headers-${KREL}" 2>/dev/null \
+        || apt-get install -y linux-headers-rpi-v8 2>/dev/null \
+        || apt-get install -y raspberrypi-kernel-headers 2>/dev/null || true
+fi
+if [ ! -d "/lib/modules/${KREL}/build" ]; then
+    echo "!! no kernel headers for ${KREL}; cannot build raw_gadget."
+    echo "   try: sudo apt install linux-headers-\$(uname -r)"
+    exit 1
+fi
+
+# ---------------------------------------------------------------- 2. dwc2
+echo "[2/5] configuring dwc2 (peripheral mode)"
+NEED_REBOOT=0
+# Match only our own uncommented line: a loose "dtoverlay=dwc2" grep would hit the
+# stock "[cm5] dtoverlay=dwc2,dr_mode=host" line and skip this. The "[all]" header
+# makes it apply on every model no matter which conditional section is last.
+if ! grep -qE '^[[:space:]]*dtoverlay=dwc2,dr_mode=peripheral' "$BOOT_CFG"; then
+    printf '\n[all]\ndtoverlay=dwc2,dr_mode=peripheral\n' >> "$BOOT_CFG"
+    echo "     added dtoverlay under [all]"
+    NEED_REBOOT=1
+else
+    echo "     already configured"
+fi
+echo dwc2 > /etc/modules-load.d/dwc2.conf
+
+# ---------------------------------------------------------------- 3. raw_gadget
+echo "[3/5] building raw_gadget (kernel ships CONFIG_USB_RAW_GADGET disabled)"
+if modinfo raw_gadget >/dev/null 2>&1; then
+    echo "     already installed"
+else
+    BUILD=$(mktemp -d)
+    trap 'rm -rf "$BUILD"' EXIT
+    cd "$BUILD"
+    curl -fsSLO "https://raw.githubusercontent.com/raspberrypi/linux/${BRANCH}/drivers/usb/gadget/legacy/raw_gadget.c" || {
+        echo "!! could not fetch raw_gadget.c for branch ${BRANCH}"
+        echo "   check https://github.com/raspberrypi/linux/branches"
+        exit 1
+    }
+    echo "obj-m += raw_gadget.o" > Makefile
+    if [ ! -f "/lib/modules/${KREL}/build/include/uapi/linux/usb/raw_gadget.h" ]; then
+        mkdir -p include/uapi/linux/usb
+        curl -fsSLo include/uapi/linux/usb/raw_gadget.h \
+            "https://raw.githubusercontent.com/raspberrypi/linux/${BRANCH}/include/uapi/linux/usb/raw_gadget.h"
+        echo 'ccflags-y := -I$(src)/include' >> Makefile
+    fi
+    make -C "/lib/modules/${KREL}/build" M="$PWD" modules >/dev/null
+    mkdir -p "/lib/modules/${KREL}/extra"
+    cp raw_gadget.ko "/lib/modules/${KREL}/extra/"
+    depmod -a
+    cd /
+fi
+echo raw_gadget > /etc/modules-load.d/raw-gadget.conf
+modprobe dwc2 2>/dev/null || true
+modprobe raw_gadget 2>/dev/null || true
+# Let the bridge run without root once the device node exists.
+cat > /etc/udev/rules.d/99-raw-gadget.rules <<'EOF'
+KERNEL=="raw-gadget", MODE="0666"
+EOF
+udevadm control --reload 2>/dev/null || true
+chmod 666 /dev/raw-gadget 2>/dev/null || true
+
+# ---------------------------------------------------------------- 4. project
+echo "[4/5] project files"
+if [ -n "$REPO_URL" ]; then
+    DEST="$RUN_HOME/dji-link"
+    if [ -d "$DEST/.git" ]; then
+        sudo -u "$RUN_USER" git -C "$DEST" pull --ff-only || echo "     (pull failed, keeping local)"
+    else
+        sudo -u "$RUN_USER" git clone --depth 1 "$REPO_URL" "$DEST"
+    fi
+    PI_DIR="$DEST/dji_link_beta/pi"
+    [ -d "$PI_DIR" ] || PI_DIR="$DEST/pi"
+    echo "     scripts: $PI_DIR"
+elif [ -d "$RUN_HOME/pi" ]; then
+    PI_DIR="$RUN_HOME/pi"
+    echo "     using existing $PI_DIR"
+else
+    PI_DIR=""
+    echo "     no scripts found — copy pi/ to $RUN_HOME/pi or pass a git URL"
+fi
+
+# ---------------------------------------------------------------- 5. service
+echo "[5/5] boot service"
+if [ "$WANT_SERVICE" = "1" ] && [ -n "$PI_DIR" ]; then
+    cat > /etc/systemd/system/dji-bridge.service <<EOF
+[Unit]
+Description=DJI AOA bridge (Pi jump-host)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 ${PI_DIR}/bridge.py
+WorkingDirectory=${PI_DIR}
+Restart=always
+RestartSec=2
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable dji-bridge.service
+    echo "     dji-bridge.service enabled (starts at boot)"
+    echo "     logs: journalctl -u dji-bridge -f"
+else
+    echo "     skipped (pass --service to run the bridge at boot)"
+fi
+
+echo
+echo "=== done ==="
+if [ "$NEED_REBOOT" = "1" ] || [ ! -e /dev/raw-gadget ] || ! ls /sys/class/udc/ 2>/dev/null | grep -q .; then
+    echo ">>> REBOOT NEEDED:  sudo reboot"
+    echo ">>> after reboot check:  ls /sys/class/udc/   (expect 3f980000.usb on a Zero 2 W)"
+else
+    echo ">>> UDC: $(ls /sys/class/udc/)"
+    echo ">>> start the bridge:  sudo python3 ${PI_DIR:-~/pi}/bridge.py"
+fi
+echo ">>> NOTE: raw_gadget must be rebuilt after a kernel upgrade — re-run this script."
