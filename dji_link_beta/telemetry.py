@@ -105,9 +105,28 @@ class Telemetry:
 
     def feed_packet(self, pkt) -> None:
         p = pkt.payload
-        # OSD general from the FC
-        if pkt.sender == 0x03 and pkt.cmd_set == 0x03 and len(p) >= 0x34:
+        # OSD general from the FC. Identify by cmd_id 0x43 (not "any FC packet ≥52 B",
+        # which caught unrelated 0x03 messages and produced garbage). The push originates
+        # from the FC side, which appears as sender 0x03 or 0x09 depending on the build.
+        if pkt.cmd_set == 0x03 and pkt.cmd_id == 0x43 and len(p) >= 0x34:
             self._parse_osd(p)
+        elif pkt.cmd_set == 0x0D and pkt.cmd_id == 0x02 and len(p) >= 0x14:
+            self._parse_battery(p)
+
+    def _parse_battery(self, p: bytes) -> None:
+        # Smart-battery dynamic (0x0D/0x02), calibrated against a real WM160 capture:
+        #   voltage  u32 @0x01 (mV)   current s32 @0x05 (mA)
+        #   full_cap u32 @0x09 (mAh)  remaining u32 @0x0D (mAh)   percent u8 @0x14
+        # (percent 0x50=80 matched remaining/full = 1723/2154 = 80%).
+        st = self.state
+        pct = u8(p, 0x14)
+        if pct is not None and 0 <= pct <= 100:
+            st.battery_pct = pct
+        else:
+            full = u32(p, 0x09)
+            rem = u32(p, 0x0D)
+            if full and rem is not None and full > 0:
+                st.battery_pct = min(100, round(rem / full * 100))
 
     def _parse_osd(self, p: bytes) -> None:
         st = self.state

@@ -51,18 +51,22 @@ class Harness:
         self.recent = {}
         self.lock = threading.Lock()
         self.running = True
+        self.video_units = 0
         if mode == "pi":
-            import composite, liveview
+            import composite
             self.demux = composite.CompositeDemux(
                 on_duml=self._feed_duml,
-                on_video=lambda pl: None)
+                on_video=self._count_video)
         else:
             self.demux = None
+
+    def _count_video(self, payload):
+        self.video_units += 1
 
     def _feed_duml(self, payload):
         for p in self.duml.feed(payload):
             with self.lock:
-                if p.sender != 0x0A:
+                if p.sender != 0x02:
                     self.recent[(p.cmd_set, p.cmd_id)] = time.time()
             self.tele.feed_packet(p)
 
@@ -84,7 +88,7 @@ class Harness:
 
     def poll_getversion(self, n=20):
         for i in range(n):
-            self.t.send(DumlPacket(sender=0x0A, receiver=0x1F, cmd_set=0, cmd_id=1,
+            self.t.send(DumlPacket(sender=0x02, receiver=0x1F, cmd_set=0, cmd_id=1,
                                    seq=1 + i, cmd_type=0x40).encode())
             time.sleep(0.1)
             with self.lock:
@@ -233,6 +237,22 @@ def run_tests(h: Harness):
     test("Gimbal: up", lambda: [d.gimbal_speed(30) or time.sleep(0.1) for _ in range(15)] and d.gimbal_speed(0),
          watch="camera tilted UP?")
 
+    # --- limits: max altitude/distance WITHOUT the param hash (0x03/0x2D) ---
+    test("Set max altitude 120 m", lambda: d.set_max_altitude(120), expect=(0x03, 0x2D),
+         on_fail=lambda h: "FC didn't ACK SetLimits — WM160 may want the hashed param instead")
+    test("Set max distance 500 m", lambda: d.set_max_distance(500), expect=(0x03, 0x2D))
+
+    # --- video (AOA only): confirm HEVC payloads actually arrive ---
+    if h.mode == "pi":
+        print("\n▶ TEST: Video stream (HEVC)")
+        before = h.video_units
+        d.start_liveview()          # includes the I-frame request
+        time.sleep(3)
+        got = h.video_units - before
+        ok = got > 0
+        print(f"   {'✅' if ok else '❌'} video payloads received: {got}")
+        results.append(("Video stream", "ok" if ok else "FAIL: no video units — check liveview start"))
+
     # --- flight (with --live) ---
     print("\n" + "!" * 55 + "\nFLIGHT TESTS (props removed!)\n" + "!" * 55)
     if h.live and ask("Continue with flight tests? PROPS REMOVED?"):
@@ -270,17 +290,26 @@ def main() -> int:
     ap.add_argument("--live", action="store_true")
     args = ap.parse_args()
 
-    if args.pi:
-        from transport import NetTransport, CompositeTransport
-        host, _, p = args.pi.partition(":")
-        t = CompositeTransport(NetTransport(host, int(p) if p else 9910)); mode = "pi"
-    elif args.serial:
+    if args.serial:
         from transport import SerialTransport
         t = SerialTransport(args.serial); mode = "serial"
-    else:
+    elif args.sim:
         from transport import LogTransport
         t = LogTransport(verbose=True); mode = "sim"
         print("[sim] no hardware — testing the logic of tests/diagnostics")
+    else:
+        from transport import NetTransport, CompositeTransport
+        if args.pi:
+            host, _, p = args.pi.partition(":")
+            port = int(p) if p else 9910
+        else:
+            import netfind
+            print("[pi] discovering the Pi...")
+            host, port = netfind.discover().get("host"), netfind.BRIDGE_PORT
+            if not host:
+                print("[pi] no Pi found. Pass --pi <ip>, or --sim to test the logic offline.")
+                return 2
+        t = CompositeTransport(NetTransport(host, port)); mode = "pi"
 
     h = Harness(t, mode, args.live)
     h.start_rx()

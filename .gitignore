@@ -23,3 +23,12 @@ decompiled/
 
 # NOTE: decompiled/ is intentionally tracked (kept for analysis).
 # The APK there is ~700 MB — track it with Git LFS ("*.apk"), see decompiled/README.md.
+
+# analysis captures/dumps (not part of the project)
+lift.txt
+telemetry_dump.txt
+raw.txt
+media_list_dump.bin
+video.bin
+*_dump.txt
+*_dump.bin

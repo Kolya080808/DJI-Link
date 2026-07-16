@@ -129,6 +129,57 @@ class DumlPacket:
                 f"data={self.payload.hex()}")
 
 
+# --- DUML "SIMPLE" encryption (cmd_type 0x43) for FLYC config/param frames --------------
+# Reversed from libGroudStation.so: native_rcDataDeal -> simple_stream_filter @0x38e0.
+# Self-inverse keystream XOR. Static key `simple_key` @0x4228 (21 bytes) + NUL @index 21.
+# See reverse_docs/DUML_ENCRYPTION.md for full evidence.
+_SIMPLE_KEY = bytes.fromhex("784f2433282d3240236c642a766941517e69784645") + b"\x00"  # 22 B
+
+
+def simple_filter(buf: bytes, seq: int) -> bytes:
+    """Self-inverse DUML SIMPLE cipher (encrypt == decrypt).
+
+    `buf` = the frame region cmd_set+cmd_id+payload (frame[9:len-2]);
+    `seq` = the frame's sequence number (also the on-wire seq at offset 6-7).
+    """
+    out = bytearray(len(buf))
+    keyidx = 1
+    slo, shi = seq & 0xFF, (seq >> 8) & 0xFF
+    for i, b in enumerate(buf):
+        if keyidx >= 22:
+            keyidx = 0
+        out[i] = (_SIMPLE_KEY[keyidx] ^ b ^ (shi if (i & 1) else slo)) & 0xFF
+        keyidx = ((i + 1) & 0xF) ^ (keyidx + 1)
+    return bytes(out)
+
+
+def encrypt_frame(frame: bytes) -> bytes:
+    """Turn a plaintext DUML frame (cmd_type 0x40, valid CRC8+CRC16) into the SIMPLE-
+    encrypted 0x43 frame the FC accepts. Encrypts cmd_set+cmd_id+payload, sets the encrypt
+    bits, and recomputes CRC16 only (CRC8 covers bytes 0..2 which do not change)."""
+    f = bytearray(frame)
+    n = len(f)
+    seq = f[6] | (f[7] << 8)
+    f[9:n - 2] = simple_filter(bytes(f[9:n - 2]), seq)
+    f[8] |= 0x03                       # EncryptType SIMPLE -> cmd_type 0x40 becomes 0x43
+    crc = crc16(bytes(f[:n - 2]))
+    f[n - 2], f[n - 1] = crc & 0xFF, (crc >> 8) & 0xFF
+    return bytes(f)
+
+
+def decrypt_frame(frame: bytes) -> bytes:
+    """Inverse of encrypt_frame for SIMPLE-encrypted (0x43/0xC3) frames: decrypt the region
+    with the frame's seq, clear the encrypt bits, recompute CRC16."""
+    f = bytearray(frame)
+    n = len(f)
+    seq = f[6] | (f[7] << 8)
+    f[9:n - 2] = simple_filter(bytes(f[9:n - 2]), seq)
+    f[8] &= ~0x07 & 0xFF               # clear EncryptType bits
+    crc = crc16(bytes(f[:n - 2]))
+    f[n - 2], f[n - 1] = crc & 0xFF, (crc >> 8) & 0xFF
+    return bytes(f)
+
+
 class DumlStream:
     """Accumulator of bytes from the bulk channel -> whole DUML frames.
 
@@ -164,6 +215,18 @@ class DumlStream:
                 break  # wait for the rest of the frame
             frame = bytes(self._buf[:total])
             del self._buf[:total]
+            # Diagnostic: show any incoming param frame RAW, before decrypt/decode, so we
+            # can tell "FC never replies" from "FC replies but our decrypt fails".
+            if len(frame) > 10 and frame[10] in (0xF0, 0xF7, 0xF8, 0xF9, 0xFA):
+                import sys
+                print(f"[param-raw] type=0x{frame[8]:02x} id=0x{frame[10]:02x} {frame.hex()}",
+                      file=sys.stderr, flush=True)
+            # SIMPLE-encrypted config replies (cmd_type encrypt bits set) — decrypt first.
+            if frame[8] & 0x07:
+                try:
+                    frame = decrypt_frame(frame)
+                except Exception:
+                    pass
             try:
                 out.append(DumlPacket.decode(frame))
             except DumlError:

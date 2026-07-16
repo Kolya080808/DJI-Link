@@ -88,6 +88,16 @@ FLYC_STATE = {
 }
 
 
+# The full 743-code DiagnosticCode->text table (recovered locally from the app's HMS
+# config, not the server) lives in diag_codes_full. Use it when present; fall back to the
+# tiny built-in DIAG_TEXT so this module still stands alone.
+try:
+    from diag_codes_full import diagcode_text as _full_code_text
+except ImportError:
+    def _full_code_text(code):
+        return DIAG_TEXT.get(code)
+
+
 def motor_fail_text(value: int) -> str:
     """Human-readable description of the motor start failure cause from byte +0x33.
 
@@ -96,18 +106,23 @@ def motor_fail_text(value: int) -> str:
     """
     name = MOTOR_FAIL_NAME.get(value)
     code = MOTOR_NOT_START.get(value)
-    text = DIAG_TEXT.get(code) if code else None
+    text = _full_code_text(code) if code else None
 
     # The name and the DiagnosticCode come from two different namespaces and can
     # disagree (e.g. 147 is BACKUP_COMMUNICATE_FAIL, yet maps to code 30239 whose text
     # is about GPS). The name describes this very value, so it wins; the code is only
     # ever reported as a number alongside it, never as a competing explanation.
+    # The enum NAME and the DiagnosticCode are two independent layers, and for some
+    # values the value->code mapping is uncertain (147's name is BACKUP_COMMUNICATE_FAIL
+    # but it maps to 30239, whose text is about GPS). So never fuse them into one
+    # sentence — show the name as the primary label and the code+text as a separate,
+    # clearly-attributed aside, so a wrong mapping can't masquerade as the explanation.
+    if name and text:
+        return f"{name}  (DiagnosticCode {code}: {text})"
     if name:
         return f"{name} [code {code}]" if code else name
     if text:
         return f"{text} [code {code}]"
     if code:
-        # Mapped to a DiagnosticCode, but its text lives on DJI's HMS server and is not
-        # in the APK — the number is still the actionable part.
-        return f"DiagnosticCode {code} (value {value}; text only on DJI's HMS server)"
+        return f"DiagnosticCode {code} (raw value {value})"
     return f"unknown cause, raw value {value}"

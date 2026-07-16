@@ -1,68 +1,59 @@
-# DJI Mavic Mini 1 (WM160) — PC control. BETA
+# dji_link_beta — the DJI Link application
 
-Project goal: **from the PC, do everything the phone (DJI Fly) and the remote controller do**,
-and pilot the drone from the keyboard like Minecraft spectator mode (WASD/Space/Shift),
-with room to scale — hooking up a neural network (person tracking, obstacle avoidance)
-as another command source.
+The PC-side app and the code that runs on the Raspberry Pi bridge. For setup, hardware,
+and usage see the [top-level README](../README.md); this file documents the modules for
+anyone working on the code.
 
-Target — **DJI Mavic Mini 1 = model `WM160`** (one of the strings in `accessory_filter.xml`).
-
-## Architecture (layers are replaceable)
-```
-command source:  keyboard  │  neural net  │  mission script
-                       └─────────┼──────────┘
-Drone API:            drone.py   set_sticks / takeoff / land / photo / telemetry
-protocol:             duml.py    DUML codec (CRC8/CRC16, encode/decode, stream)
-transport:            transport.py   AOA-USB │ MITM proxy │ loopback log
-input handling:       control.py  WASD/Space/Shift -> virtual sticks
-AOA handshake:        aoa.py      pretend to be DJI/com.dji.logiclink
-```
-
-## Files
-| file | layer |
-|------|------|
-| `duml.py` | DUML codec (checked against the real DJI header `55 0d 04 33`) |
-| `transport.py` | channel abstraction: `LogTransport`, `AoaTransport` |
-| `aoa.py` | Android Open Accessory handshake on the host side |
-| `control.py` | keyboard → sticks, game loop (pygame) |
-| `drone.py` | high-level `Drone` API (remote controller + app functions) |
-| `dji_accessory.py` | CLI: `--selftest` / `--scan` / `--keyboard` / full run |
-
-## What you can check RIGHT NOW (without a drone)
+## Run
 ```bash
-python3 dji_accessory.py --selftest
+python pc_client.py          # connect and fly (auto-discovers the Pi)
+python pc_client.py --sim    # no hardware, exercise the UI
+python full_test.py          # scripted checks + motor-won't-start diagnostics
 ```
-Checks the whole stack offline: CRC tables, that the GetVersion frame is byte-for-byte equal
-to the real DJI one (`55 0d 04 33 ...`), codec roundtrip, streaming parse, and the chain
-**WASD → sticks → DUML → transport**.
 
-```bash
-pip install pygame
-python3 dji_accessory.py --keyboard        # control window, frames go to the loopback log
+## Layers
+
 ```
-A window opens: press WASD/Space/Shift/Q,E — at the bottom you can see the axes and the DUML frame being built.
-Hotkeys: T takeoff, L land, H RTH, P photo, R/F record, X emergency stop.
+input:        control.py     keyboard/mouse -> stick axes
+app:          pc_client.py   window: video + telemetry HUD + control + settings + console
+drone API:    drone.py       Drone: takeoff/land/rth, sticks, gimbal, camera, limits, home
+telemetry:    telemetry.py   OSD/state push -> OsdState;  diag_codes*.py  fault-code text
+protocol:     duml.py        DUML codec (CRC8 seed 0x77, CRC16 seed 0x3692)
+mux:          composite.py   AOA composite stream <-> DUML / video units
+video:        (in pc_client) HEVC payloads -> ffmpeg -> RGB frames in the window
+transport:    transport.py   NetTransport (to the Pi), CompositeTransport, SerialTransport, LogTransport
+discovery:    netfind.py     find the Pi on the LAN or join its access point
+```
 
-## What is already confirmed by APK reversing
-- `res/xml/accessory_filter.xml`: `DJI / com.dji.logiclink`, `WM160`, `com.dji.link`.
-- Transport is **AOA** (phone=USB device, DJI hardware=USB host). Strings in
-  `lib/arm64-v8a/libsdk_jni.so`: `AoaServicePort`, `UsbDatalinkMgr`,
-  `JNI_LoadUsbAccessory`, `[AOA]onUsbConnected fd = `.
-- On top of the channel — **DUML** (`0x55`, header-CRC8 seed `0x77`, frame-CRC16 seed
-  `0x3692`), verification string: `package crc verify fail, cmdset %d, cmdid 0x%X`.
+## Modules
 
-## HONEST take on the beta's boundaries (what stands between "demo works" and "drone flies")
-Done and verifiable: layered architecture, DUML codec (real frame format),
-AOA handshake, keyboard→sticks, `Drone` API with methods for all functions.
+| file | purpose |
+|------|---------|
+| `pc_client.py` | the application — everything below wired into one window |
+| `drone.py` | high-level command API (all reversed DUML commands) |
+| `duml.py` | DUML frame encode/decode, verified against real frames |
+| `composite.py` | AOA composite mux demux/wrap |
+| `telemetry.py` | decode the FC state push into readable fields |
+| `diag_codes.py` / `diag_codes_full.py` | fault-code names and 743 diagnostic-code texts |
+| `control.py` | map held keys to stick axes |
+| `transport.py` | swappable transports |
+| `netfind.py` | PC-side Pi discovery |
+| `flyc_param_infos.json` | 687 flight-controller parameters (limits, gains) |
+| `pi/` | code that runs on the Pi (see `pi/README.md`) |
+| `reverse_docs/` | the reverse-engineering write-ups |
 
-Still NOT done (these are the next steps, requiring traffic capture/further reversing):
-1. **Exact DUML commands for WM160.** `cmd_set/cmd_id/payload` for sticks, takeoff,
-   camera etc. are currently structural STUBS. They need to be captured from real traffic
-   (MITM phone↔remote controller) or reversed further out of `libsdk_jni.so`. The frame structure is correct —
-   only the codes/field layout change, one command at a time.
-2. **How the PC physically reaches the drone.** Mavic Mini 1: phone↔remote controller over USB (AOA),
-   remote controller↔drone over "enhanced Wi-Fi" (radio). To replace the remote controller TOO, you need a way to reach
-   the drone: options — (a) MITM on the USB between phone and remote controller and
-   inject commands (the remote controller stays a radio bridge); (b) PC directly over Wi-Fi to the drone;
-   (c) SDR/your own radio part. This determines what is even feasible with this APK alone.
-3. Video/telemetry (H.264 stream, parsing of state payloads) — a separate layer.
+The other scripts (`probe_serial.py`, `read_sticks.py`, `monitor_serial.py`, `checks.py`,
+`gimbal_demo.py`, `video_liveview.py`, etc.) are standalone diagnostics from bring-up over
+the serial/USB paths; the AOA path through the Pi supersedes them for normal use.
+
+## Video note
+
+WM160 liveview is **H.265/HEVC** (not H.264): the composite video units are plain Annex-B
+with no extra header. The stream has no periodic keyframe of its own, so the client sends
+an I-frame request (`0x02/0xB3`) on connect and re-injects cached VPS/SPS/PPS.
+
+## Reverse-engineering docs
+
+`reverse_docs/` — `MASTER_REPORT.md` (overview), `FLIGHT_GATING.md` (what's needed to fly:
+login, calibration, modes, home point, limits, virtual stick), `ERROR_CODES.md`,
+`TELEMETRY_TABLE.txt`, and the command tables.

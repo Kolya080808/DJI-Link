@@ -23,7 +23,9 @@ from duml import DumlPacket, DumlStream
 from transport import Transport
 from control import Sticks, FlightProfile, sticks_to_payload
 
-DEV_APP = 0x0a     # us (PC, playing the role of app/RC)
+DEV_APP = 0x02     # us = the MOBILE APP address (the drone pushes to 0x02 on the wire).
+# 0x0a is the PC/DJI-Assistant address; sending as 0x0a makes the FC think a debug
+# assistant is attached and it locks the motors (MotorStartFailedCause=2 AssistantProtected).
 DEV_RC = 0x02      # remote controller
 DEV_FC = 0x03      # flight controller
 DEV_GIMBAL = 0x04
@@ -52,6 +54,9 @@ class Drone:
         self.t = transport
         self.profile = profile or FlightProfile()
         self.state = DroneState()
+        # Encrypt FC config/param frames (needed on the app/radio path). The direct-USB
+        # (DJI Assistant 2) path uses plaintext — set False for serial.
+        self.encrypt_config = True
         self._seq = 0
         self._stream = DumlStream()
         self._rx_thread: threading.Thread | None = None
@@ -72,7 +77,13 @@ class Drone:
             cmd_type=0x40 if ack else 0x00,
             payload=payload,
         )
-        self.t.send(pkt.encode())
+        frame = pkt.encode()
+        # FLYC config/param commands (0x03/0xF0, 0xF7-0xFA) must be SIMPLE-encrypted or the
+        # FC silently drops them; flight/OSD 0x03 commands stay plaintext.
+        if self.encrypt_config and cmd_set == 0x03 and cmd_id in (0xF0, 0xF7, 0xF8, 0xF9, 0xFA):
+            from duml import encrypt_frame
+            frame = encrypt_frame(frame)
+        self.t.send(frame)
 
     # ---- background telemetry reception ----
     def start_rx(self) -> None:
@@ -128,22 +139,109 @@ class Drone:
     def preempt_control(self) -> None:
         self._cmd(0x19, 0x41, b"\x01")     # preempt right-of-control
 
-    # Takeoff/landing/RTH — CONFIRMED by reversing: a single FC function control command
-    # cmd_set=0x03, cmd_id=0x2A, receiver=FC, payload = 1-byte sub-function.
+    # Takeoff/land/RTH/motors/home/calibration are ALL the one FC function-control command
+    # cmd_set=0x03, cmd_id=0x2A, receiver=FC, payload = 1-byte FLYC_COMMAND. Enum values
+    # fully resolved from DataFlycFunctionControl$FLYC_COMMAND (reverse_docs/FLIGHT_GATING.md).
     def _fc_function(self, sub: int) -> None:
         self._cmd(0x03, 0x2A, bytes([sub]), receiver=DEV_FC)
 
-    def takeoff(self) -> None:        self._fc_function(0x01)   # auto-takeoff (starts the motors)
+    def takeoff(self) -> None:        self._fc_function(0x01)   # AUTO_FLY: starts motors + lifts off
     def cancel_takeoff(self) -> None: self._fc_function(0x0D)
-    def land(self) -> None:           self._fc_function(0x02)   # auto-landing
+    def land(self) -> None:           self._fc_function(0x02)   # AUTO_LANDING
     def cancel_land(self) -> None:    self._fc_function(0x0E)
-    def confirm_land(self) -> None:   self._fc_function(0x1E)
-    def return_to_home(self) -> None: self._fc_function(0x06)
+    def force_land(self) -> None:     self._fc_function(0x1E)   # ForceLanding (was mislabelled confirm_land)
+    def return_to_home(self) -> None: self._fc_function(0x06)   # GOHOME
     def cancel_rth(self) -> None:     self._fc_function(0x0C)
+    def start_motors(self) -> None:   self._fc_function(0x07)   # START_MOTOR (arm, no lift)
+    def stop_motors(self) -> None:    self._fc_function(0x08)   # STOP_MOTOR (disarm)
+    def start_calibration(self) -> None: self._fc_function(0x09)  # compass/IMU FC cali routine
+    def set_home_to_aircraft(self) -> None: self._fc_function(0x03)  # HOMEPOINT_NOW
 
     def motor_force_disable(self, disable: bool = True) -> None:
-        # cmd_set 0x03 id 0xFE, 2 bytes (flag, mode). Locks the motors on the ground.
-        self._cmd(0x03, 0xFE, bytes([1 if disable else 0, 0]), receiver=DEV_FC)
+        # cmd_set 0x03 id 0xFE, 1-byte flag (verified from DataFlycSetMotorForceDisable).
+        self._cmd(0x03, 0xFE, bytes([1 if disable else 0]), receiver=DEV_FC)
+
+    # --- flight limits: max altitude / distance WITHOUT the param hash (0x03/0x2D) ---
+    # DataFlycSetLimits, payload [mode u8][value u16 LE metres]. mode High=1/Far=2/Low=3.
+    def set_max_altitude(self, metres: int) -> None:
+        m = max(15, min(500, int(metres)))            # FC clamps to 15..500
+        self._cmd(0x03, 0x2D, bytes([1]) + struct.pack("<H", m), receiver=DEV_FC)
+
+    def set_max_distance(self, metres: int) -> None:
+        m = max(15, min(5000, int(metres)))           # FC clamps to 15..5000
+        self._cmd(0x03, 0x2D, bytes([2]) + struct.pack("<H", m), receiver=DEV_FC)
+
+    def get_limits(self, mode: int = 1) -> None:
+        self._cmd(0x03, 0x2E, bytes([mode]), receiver=DEV_FC)
+
+    def set_param(self, name: str, value_bytes: bytes) -> None:
+        """Write an FC param by name via 0x03/0xF9: [hash u32 LE][value bytes].
+        Hash from param_hash (reversed from libGroudStation). Value encoding depends on the
+        param type; the caller packs it. Algorithm verified; name->wire mapping still wants
+        one live-frame confirmation."""
+        from param_hash import param_hash
+        import struct as _s
+        self._cmd(0x03, 0xF9, _s.pack("<I", param_hash(name)) + value_bytes, receiver=DEV_FC)
+
+    def set_horizontal_speed(self, mps: float) -> None:
+        # Horizontal velocity limit is an FC param (float m/s). Name/type best-effort.
+        import struct as _s
+        self.set_param("g_config.control.horiz_vel_atti_range_0", _s.pack("<f", float(mps)))
+
+    def unlock_no_gps(self, unlock: bool = True) -> None:
+        # Unlock dark/no-GPS takeoff. Verified from the app: it clears the flag by writing
+        # the FC param `fc_dark_need_gps_0 = 0` (DarkNoGpsLockEnable is the KeyValue key
+        # name, not the FC param; and 0 = unlocked, 1 = locked). Takes off in ATTI (drifts).
+        self.set_param("fc_dark_need_gps_0", bytes([0 if unlock else 1]))
+
+    # --- camera working mode: liveview (flight) vs playback (media) ---
+    # The camera can't do both; media list/download only answer in playback mode.
+    def enter_playback(self) -> None:
+        self._cmd(0x02, 0x10, bytes([2]), receiver=DEV_CAMERA)   # working_mode = PLAYBACK
+        self._cmd(0x02, 0x0C, bytes([0]), receiver=DEV_CAMERA)   # switch_playbackmode (alias)
+
+    def exit_playback(self) -> None:
+        self._cmd(0x02, 0x10, bytes([1]), receiver=DEV_CAMERA)   # back to RECORD/liveview
+
+    def get_param_info(self, index: int) -> None:
+        # DataFlycGetParamInfo 0x03/0xF0: request [index u16 LE]; response carries the
+        # param NAME (so we can learn the real names straight from the FC and hash them).
+        import struct as _s
+        self._cmd(0x03, 0xF0, _s.pack("<H", index), receiver=DEV_FC)
+
+    def read_param(self, name: str) -> None:
+        # DataFlycReadParamByHash 0x03/0xF8: request [hash u32 LE]; response = the value.
+        from param_hash import param_hash
+        import struct as _s
+        self._cmd(0x03, 0xF8, _s.pack("<I", param_hash(name)), receiver=DEV_FC)
+
+    def set_flight_mode(self, name: str) -> None:
+        # normal/cinema/sport are NOT a single DUML command on WM160 — the app changes a
+        # set of control-gain params (hash-written) and the RC mode gear. So mode switching
+        # also depends on the param hash, same blocker as speed.
+        raise NotImplementedError(
+            "flight mode = control-gain params (hash write); not a single command on Mini 1")
+
+    # --- home point (arbitrary lat/lon) 0x03/0x31, coords in RADIANS ---
+    def set_home_point(self, lat_deg: float, lon_deg: float, home_type: int = 0) -> None:
+        import math
+        lat = math.radians(lat_deg)
+        lon = math.radians(lon_deg)
+        self._cmd(0x03, 0x31,
+                  bytes([home_type]) + struct.pack("<dd", lat, lon) + bytes([0]),
+                  receiver=DEV_FC)
+
+    # --- gimbal auto-calibration 0x04/0x08 ---
+    def gimbal_calibrate(self) -> None:
+        self._cmd(0x04, 0x08, b"", receiver=DEV_GIMBAL)
+
+    # --- alternate stick encoding: FLYC float joystick 0x03/0x8E (candidate 3) ---
+    # 17 bytes [flag u8][roll,pitch,yaw,throttle f32 LE], physical units (MSDK-like).
+    def set_sticks_float(self, roll: float, pitch: float, yaw: float, throttle: float,
+                         flag: int = 0) -> None:
+        self._cmd(0x03, 0x8E,
+                  bytes([flag]) + struct.pack("<ffff", roll, pitch, yaw, throttle),
+                  receiver=DEV_FC)
 
     # ==========================================================
     # APP FUNCTIONS (camera/gimbal/media)
@@ -207,6 +305,8 @@ class Drone:
         self._cmd(0x08, 0x42, struct.pack("<H", 30) + b"\x00\x00", receiver=DEV_DM368)
         # 4) bandwidth priority (0x08/0x69): [stream_idx, percent, 0]
         self._cmd(0x08, 0x69, bytes([0, 100, 0]), receiver=DEV_DM368)
+        # 5) ask for a keyframe, or we join mid-GOP with nothing to decode against
+        self.request_i_frame()
 
     def set_zoom(self, factor: float) -> None:
         # 0x02/0x34 digital zoom: [09,00,00, zoom_u16 LE], zoom = factor*100
@@ -215,10 +315,22 @@ class Drone:
                   bytes([0x09, 0x00, 0x00, z & 0xFF, (z >> 8) & 0xFF]), receiver=DEV_CAMERA)
 
     # Camera settings (cmd_ids are exact; enum values are standard DJI, verify on HW)
-    def set_iso(self, code: int) -> None:
-        self._cmd(CMDSET_CAMERA, 0x2A, bytes([code & 0xFF]), receiver=DEV_CAMERA)
-    def set_ev(self, code: int) -> None:
-        self._cmd(CMDSET_CAMERA, 0x2E, bytes([code & 0xFF]), receiver=DEV_CAMERA)
+    # Exposure mode (0x02/0x1E): PROGRAM=1, SHUTTER=2, APERTURE=3, MANUAL=4.
+    def set_exposure_mode(self, mode: int) -> None:
+        self._cmd(CMDSET_CAMERA, 0x1E, bytes([mode & 0xFF]), receiver=DEV_CAMERA)
+
+    _ISO_INDEX = {0: 0, 100: 3, 200: 4, 400: 5, 800: 6, 1600: 7, 3200: 8}  # 0=AUTO
+
+    def set_iso(self, iso: int) -> None:
+        # ISO takes the enum INDEX, and only applies in MANUAL exposure mode.
+        self.set_exposure_mode(4)
+        idx = self._ISO_INDEX.get(iso, iso)
+        self._cmd(CMDSET_CAMERA, 0x2A, bytes([idx & 0x7F]), receiver=DEV_CAMERA)
+
+    def set_ev(self, ev_thirds: int) -> None:
+        # Exposure compensation: 0EV=0x10, each full stop = 3 (1/3-EV) steps. Non-manual only.
+        val = 0x10 + int(ev_thirds) * 3
+        self._cmd(CMDSET_CAMERA, 0x2E, bytes([max(0, min(0xFF, val))]), receiver=DEV_CAMERA)
     def set_white_balance(self, mode: int, ct_index: int = 0) -> None:
         self._cmd(CMDSET_CAMERA, 0x2C, bytes([mode & 0xFF, ct_index & 0xFF, 0, 0, 0]),
                   receiver=DEV_CAMERA)
@@ -230,8 +342,8 @@ class Drone:
     def set_video_codec(self, h265: bool = False) -> None:
         self._cmd(CMDSET_CAMERA, 0xAB, bytes([1 if h265 else 0, 0]), receiver=DEV_CAMERA)
     def gimbal_recenter(self) -> None:
-        # action reset gimbal (0x04/... work_mode_and_return_center); sent like an FC-function-style command
-        self._cmd(0x04, 0x4C, b"\x01", receiver=DEV_GIMBAL)
+        # DataGimbalNewResetAndSetMode 0x04/0x4C: [workMode 0xFE=keep, resetCmd 0x01=recenter].
+        self._cmd(0x04, 0x4C, bytes([0xFE, 0x01]), receiver=DEV_GIMBAL)
 
     # UNIVERSAL: send any DUML command (the whole surface from reverse_docs).
     def send_raw(self, cmd_set: int, cmd_id: int, payload: bytes = b"",
