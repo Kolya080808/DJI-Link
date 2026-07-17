@@ -44,7 +44,7 @@ class FlightProfile:
     cmd_id: int = 0x0A
     center: int = 1024
     axis_range: int = 660
-    order: tuple = ("roll", "pitch", "yaw", "throttle")   # ch0..ch3
+    order: tuple = ("roll", "pitch", "throttle", "yaw")   # ch0..ch3 — VERIFIED from RC dump
     flags_word: int = 0x00000200
 
 

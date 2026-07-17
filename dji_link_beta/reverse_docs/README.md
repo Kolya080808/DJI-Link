@@ -12,10 +12,16 @@ and `APP_MAP_INDEX.md`; the rest are per-topic references.
 - **`DUML_ENCRYPTION.md`** — the "SIMPLE" encryption (cmd_type 0x43) for FC config frames: self-inverse byte-keystream XOR, static key, no handshake — implemented in `duml.py`.
 - **`PARAM_HASH.md`** — the FC param name→hash (`h=(b+(h<<8))%(2^32-5)` over GBK) — implemented in `param_hash.py`.
 - **`PARAM_WIRE.md`** — exact read/write param frames (`0x03/0xF8`/`0xF9`) and why they need the right transport.
+- **`PARAM_WRITE_TRUTH.md`** — ★ how params are named/hashed/written/gated: `attribute` bitfield gates writes, no global unlock, no commit, send plaintext.
+- **`PARAM_TABLE_WM160.md`** — ★ the **132 verified live params** on WM160 (captured by `0xF8` sweep) with hash/type/access/current/min/max/default.
+- **`KEYVALUE_DUML_TRANSPORT.md`** — how MSDK KeyValue keys map onto DUML frames.
+- **`TELEMETRY_TRUTH.md`** — verified OSD offsets/decoding as implemented in `telemetry.py`.
 - **`TELEMETRY_TABLE.txt`**, **`cmdmap.txt`**, **`cmds.json`**, **`full_table.txt`**, **`CMD_TABLE.txt`** — raw command/telemetry tables.
 
 ## Flight & gating
 - **`FLIGHT_GATING.md`** — what a PC ground-station must do to fly (login, calibration, modes, home, limits, virtual stick).
+- **`VIRTUAL_STICK_NATIVE.md`** — ★ byte-perfect `0x01/0x0A` VirtualJoyStickHelper payload from `libsdk_jni.so`, channel order, preconditions.
+- **`MSDK_FLIGHT_UNLOCK.md`**, **`MSDK_FULL_REFERENCE.md`**, **`MSDK_MEDIA_SEQUENCE.md`** — DJI MSDK (4.13) reference: virtual-stick/flight-control API, KeyManager, media sequence, mapped to our DUML.
 - **`TAKEOFF_UNLOCK.md`** — every motor-start / takeoff gate and how each clears.
 - **`DARK_NOGPS_TRUTH.md`** — verified: dark/no-GPS takeoff IS unlockable — write FC param `fc_dark_need_gps_0 = 0` (takes off in ATTI, drifts).
 - **`INTELLIGENT_AND_PARAMS.md`** — QuickShots/IOC/panorama + the param name→hash path.

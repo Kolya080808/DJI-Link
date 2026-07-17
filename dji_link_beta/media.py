@@ -182,14 +182,36 @@ class MediaClient:
         0x02/0x10 set_camera_working_mode=PLAYBACK, with 0x02/0x0C as an alias."""
         self.d.enter_playback()
 
-    def request_list(self, index=0, count=50, playback_first=True):
+    def _list_variants(self, index, count):
+        """Candidate on-wire get_file_list_req layouts to probe. The drone answers with a
+        1-byte status (0xe0 = bad request) until the layout matches the firmware struct, so
+        we cycle these and watch the reply length grow past 1 byte. Ordered shortest-first
+        (the firmware struct is shorter than the CSDK task envelope we started with)."""
+        return [
+            b"",                                              # 0: empty — "list everything"
+            w_i32(index) + w_i32(count),                      # 1: index, count
+            w_i32(index) + w_i32(count) + w_i32(0) + w_i32(0),# 2: + slot, type(MEDIA)
+            w_i32(index) + w_i32(count) + w_i32(FT_MEDIA)
+                + w_i32(0) + w_i32(0),                        # 3: count-first-then-type variant
+            file_list_request(index, count),                 # 4: full CSDK envelope (original)
+        ]
+
+    def request_list(self, index=0, count=50, playback_first=True, variant=None):
         if playback_first:
             self.enter_playback(0)
-        self.d.send_raw(CMDSET_GENERAL, CID_FILE_LIST,
-                        file_list_request(index, count), receiver=self.receiver)
+        variants = self._list_variants(index, count)
+        if variant is None:
+            variant = getattr(self, "_variant_i", 0)
+            self._variant_i = (variant + 1) % len(variants)
+        self._last_variant = variant % len(variants)
+        payload = variants[self._last_variant]
+        self.last_note = f"list variant {self._last_variant} ({len(payload)}B) sent"
+        self.d.send_raw(CMDSET_GENERAL, CID_FILE_LIST, payload, receiver=self.receiver)
 
     def on_list_response(self, payload: bytes):
-        path = f"{self.dump_dir}/media_list_dump.bin"
+        # Per-variant filename so pressing "list" 5 times keeps all 5 replies (no overwrite).
+        v = getattr(self, "_last_variant", 0)
+        path = f"{self.dump_dir}/media_v{v}_dump.bin"
         try:
             with open(path, "wb") as f:
                 f.write(payload)

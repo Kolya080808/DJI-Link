@@ -123,15 +123,32 @@ class Drone:
     # Request/release control (required BEFORE the sticks).
     # SendJoystickControlAuthPack: cmd_set=0x49, cmd_id=0x80, payload=1-byte flag.
     def request_control(self) -> None:
-        self._cmd(0x49, 0x80, b"\x01")     # 1 = request control (wait for ACK)
+        # VIRTUAL_STICK_NATIVE.md: the native auth pack targets receiver 0x00 (retry 0x03
+        # if unrouted). Send both so control authority is actually granted (the #1 reason
+        # the FC ignores sticks). 1 = obtain.
+        self._cmd(0x49, 0x80, b"\x01", receiver=0x00)
+        self._cmd(0x49, 0x80, b"\x01", receiver=DEV_FC)
 
     def release_control(self) -> None:
-        self._cmd(0x49, 0x80, b"\x00")     # 0 = release control
+        self._cmd(0x49, 0x80, b"\x00", receiver=0x00)
+        self._cmd(0x49, 0x80, b"\x00", receiver=DEV_FC)
 
     # Ground station mode — PROBABLY required BEFORE the sticks so the FC listens.
     # uav_fc_set_ground_station_on_off_req: cmd_set 0x03, cmd_id 0x80, 1 byte.
     def set_ground_station_mode(self, on: bool = True) -> None:
         self._cmd(0x03, 0x80, bytes([1 if on else 0]), receiver=DEV_FC)
+
+    def enable_virtual_stick(self, on: bool = True) -> None:
+        """MSDK setVirtualStickModeEnabled analogue: request control + ground-station on
+        (MSDK_FLIGHT_UNLOCK.md). Must run BEFORE streaming sticks; then arm/takeoff, then
+        stream at ~25 Hz. Sticks are IGNORED without this precondition."""
+        if on:
+            # (api_entry_cfg gate confirmed ABSENT on WM160 firmware — 1-byte NAK — removed.)
+            self.request_control()
+            self.set_ground_station_mode(True)
+        else:
+            self.set_ground_station_mode(False)
+            self.release_control()
 
     # Hand control from the RC to the PC (if the FC ignores the sticks after 49/80).
     def rc_to_pc_control(self) -> None:
@@ -197,8 +214,11 @@ class Drone:
     # --- camera working mode: liveview (flight) vs playback (media) ---
     # The camera can't do both; media list/download only answer in playback mode.
     def enter_playback(self) -> None:
-        self._cmd(0x02, 0x10, bytes([2]), receiver=DEV_CAMERA)   # working_mode = PLAYBACK
-        self._cmd(0x02, 0x0C, bytes([0]), receiver=DEV_CAMERA)   # switch_playbackmode (alias)
+        # File ops (0x00/0x20 list, 0x1F data, 0x28 delete) are serviced ONLY in
+        # MEDIA_DOWNLOAD mode (=3), which is DISTINCT from PLAYBACK (=2) in
+        # CameraWorkMode.smali. Setting 2 makes the camera NAK the whole file family
+        # with 0xe0 ("not available in this state"). Send 3 and nothing after it.
+        self._cmd(0x02, 0x10, bytes([3]), receiver=DEV_CAMERA)   # working_mode = MEDIA_DOWNLOAD
 
     def exit_playback(self) -> None:
         self._cmd(0x02, 0x10, bytes([1]), receiver=DEV_CAMERA)   # back to RECORD/liveview
@@ -234,6 +254,19 @@ class Drone:
     # --- gimbal auto-calibration 0x04/0x08 ---
     def gimbal_calibrate(self) -> None:
         self._cmd(0x04, 0x08, b"", receiver=DEV_GIMBAL)
+
+    # --- fallback stick frame: mobile-RC 0x01/0x02 (VIRTUAL_STICK_NATIVE.md §5) ---
+    # Used when the FC reports IsSupportVirtualJoyStick=false (legacy WM160). Tight 11-bit
+    # packing at offsets 0/11/22/33 (NOT the 0x0A layout). cfg map: chA=thr chB=roll chC=yaw chD=pitch.
+    def set_sticks_mobilerc(self, roll: float, pitch: float, yaw: float,
+                            throttle: float, mode: int = 0) -> None:
+        def ch(v):
+            r = 1024 + int(round(max(-1.0, min(1.0, v)) * 660))
+            return max(364, min(1684, r)) & 0x7FF
+        packed = ch(throttle) | (ch(roll) << 11) | (ch(yaw) << 22) | (ch(pitch) << 33)
+        flags = 0x0200 | ((mode & 3) << 10)
+        payload = bytes([0x00]) + packed.to_bytes(8, "little") + b"\x00\x00" + struct.pack("<H", flags)
+        self._cmd(0x01, 0x02, payload, receiver=DEV_FC, ack=False)
 
     # --- alternate stick encoding: FLYC float joystick 0x03/0x8E (candidate 3) ---
     # 17 bytes [flag u8][roll,pitch,yaw,throttle f32 LE], physical units (MSDK-like).

@@ -19,6 +19,10 @@ def s16(b, off):
     return struct.unpack_from("<h", b, off)[0] if off + 2 <= len(b) else None
 
 
+def u16(b, off):
+    return struct.unpack_from("<H", b, off)[0] if off + 2 <= len(b) else None
+
+
 def u8(b, off):
     return b[off] if off < len(b) else None
 
@@ -27,12 +31,23 @@ def u32(b, off):
     return struct.unpack_from("<I", b, off)[0] if off + 4 <= len(b) else None
 
 
-# flyc_state (byte +0x1e & 0x7F) — standard DJI values
+def s32(b, off):
+    return struct.unpack_from("<i", b, off)[0] if off + 4 <= len(b) else None
+
+
+# flyc_state (byte @0x1e & 0x7F). Verified against the WM160 app enum
+# DataOsdGetPushCommon$FLYC_STATE (index == code); see TELEMETRY_TRUTH.md §1.
 FLYC_STATE = {
-    0: "MANUAL", 1: "ATTI", 3: "ATTI_HOVER", 4: "HOVER", 5: "GPS_BLAKE",
-    6: "GPS_ATTI", 7: "GPS_CRUISE", 8: "GPS_HOME_LOCK", 9: "GPS_HOT_POINT",
-    10: "ASSISTED_TAKEOFF", 11: "AUTO_TAKEOFF", 12: "AUTO_LANDING",
-    15: "GO_HOME", 17: "JOYSTICK", 33: "GPS_ATTI_WRISTBAND", 40: "CLICK_GO",
+    0: "Manual", 1: "Atti", 2: "Atti_CL", 3: "Atti_Hover", 4: "Hover",
+    5: "GPS_Blake", 6: "GPS_Atti", 7: "GPS_CL", 8: "GPS_HomeLock", 9: "GPS_HotPoint",
+    10: "AssistedTakeoff", 11: "AutoTakeoff", 12: "AutoLanding", 13: "AttiLanding",
+    14: "NaviGo", 15: "GoHome", 16: "ClickGo", 17: "Joystick", 18: "Cinematic",
+    19: "Atti_Limited", 20: "NaviSubMode_Draw", 21: "NaviMissionFollow",
+    22: "NaviSubMode_Tracking", 23: "NaviSubMode_Pointing", 24: "PANO", 25: "Farming",
+    26: "FPV", 27: "SPORT", 28: "NOVICE", 29: "FORCE_LANDING", 30: "TERRAIN_TRACKING",
+    31: "PALM_CONTROL", 32: "QUICK_SHOT", 33: "TRIPOD_GPS", 34: "TRACK_HEADLOCK",
+    35: "ENGINE_START", 36: "DETOUR", 37: "TIME_LAPSE", 38: "POI_WITH_VISION",
+    39: "OMNI_MOVING", 40: "OTHER",
 }
 
 # Motor start failure cause (payload +0x33) — standard DJI enum (low codes)
@@ -47,10 +62,15 @@ class OsdState:
     satellites: int | None = None
     gps_level: int | None = None          # 0..5
     battery_pct: int | None = None
-    altitude_m: float | None = None
-    vx: float | None = None
-    vy: float | None = None
-    vz: float | None = None
+    battery_mv: int | None = None         # pack voltage, mV (0x0D/0x02 @0x01)
+    battery_ma: int | None = None         # pack current, mA, signed (0x0D/0x02 @0x05)
+    battery_temp_c: float | None = None   # pack temperature, degC (0x0D/0x02 @0x11)
+    remaining_flight_time_s: int | None = None  # FC estimate, seconds (separate FC push)
+    altitude_m: float | None = None       # relative/baro height, OSD 0x43 @0x10 s16 x0.1
+    vps_height_m: float | None = None     # ultrasonic/VPS height, OSD 0x43 @0x29 s16 x0.1
+    vx: float | None = None               # OSD 0x43 @0x12 s16 x0.1
+    vy: float | None = None               # OSD 0x43 @0x14 s16 x0.1
+    vz: float | None = None               # vertical velocity / CLIMB RATE, @0x16 s16 x0.1
     pitch: float | None = None
     roll: float | None = None
     yaw: float | None = None
@@ -82,7 +102,8 @@ class OsdState:
             f"mode={m}",
             f"satellites={self.satellites}", f"gps={self.gps_level}",
             f"battery={self.battery_pct}%",
-            f"altitude={self.altitude_m}m",
+            f"altitude={self.altitude_m}m", f"climb={self.vz}m/s",
+            f"remain_time={self.remaining_flight_time_s}s",
             f"flying={self.is_flying}", f"motors={self.motors_on}",
             f"home={self.home_set}",
         ]
@@ -114,11 +135,19 @@ class Telemetry:
             self._parse_battery(p)
 
     def _parse_battery(self, p: bytes) -> None:
-        # Smart-battery dynamic (0x0D/0x02), calibrated against a real WM160 capture:
-        #   voltage  u32 @0x01 (mV)   current s32 @0x05 (mA)
-        #   full_cap u32 @0x09 (mAh)  remaining u32 @0x0D (mAh)   percent u8 @0x14
-        # (percent 0x50=80 matched remaining/full = 1723/2154 = 80%).
+        # Smart-battery dynamic (0x0D/0x02) — DataSmartBatteryGetPushDynamicData,
+        # verified byte-perfect against a real WM160 capture (see TELEMETRY_TRUTH.md §3):
+        #   index u8 @0x00   voltage u32 @0x01 (mV)   current s32 @0x05 (mA, signed:
+        #   negative = discharge)   full_cap u32 @0x09 (mAh)   remaining u32 @0x0D (mAh)
+        #   temperature s16 @0x11 (x0.1 degC)   percent u8 @0x14
+        # NOTE: remaining FLIGHT TIME is NOT here — it is a separate FC push
+        #   (u16 seconds); call parse_remaining_flight_time() for that.
         st = self.state
+        st.battery_mv = u32(p, 0x01)
+        st.battery_ma = s32(p, 0x05)
+        temp = s16(p, 0x11)
+        if temp is not None:
+            st.battery_temp_c = temp * 0.1
         pct = u8(p, 0x14)
         if pct is not None and 0 <= pct <= 100:
             st.battery_pct = pct
@@ -128,14 +157,27 @@ class Telemetry:
             if full and rem is not None and full > 0:
                 st.battery_pct = min(100, round(rem / full * 100))
 
+    def parse_remaining_flight_time(self, p: bytes) -> None:
+        """FC battery-capacity / gohome-landing assessment push (cmd_set 0x03, keyed FC
+        push — distinct from the 0x0D smart-battery frames). The estimated remaining
+        flight time is a u16 in SECONDS at payload offset 0x00. See TELEMETRY_TRUTH.md §4."""
+        t = u16(p, 0x00)
+        if t is not None:
+            self.state.remaining_flight_time_s = t
+
     def _parse_osd(self, p: bytes) -> None:
+        # DataOsdGetPushCommon (cmd_set 0x03 / cmd_id 0x43). Offsets verified against the
+        # app's own byte parser + native lib; see TELEMETRY_TRUTH.md §1.
+        # IMPORTANT: ALTITUDE = @0x10, CLIMB RATE (vz) = @0x16 — different fields, 6 B
+        # apart. Do NOT feed vz into the altitude HUD slot (that is the "altitude looks
+        # like climb rate" symptom, and it is a DISPLAY-side wiring bug, not an offset bug).
         st = self.state
         alt = s16(p, 0x10)
-        if alt is not None: st.altitude_m = alt * 0.1
+        if alt is not None: st.altitude_m = alt * 0.1        # relative/baro height, metres
         vx, vy, vz = s16(p, 0x12), s16(p, 0x14), s16(p, 0x16)
         if vx is not None: st.vx = vx * 0.1
         if vy is not None: st.vy = vy * 0.1
-        if vz is not None: st.vz = vz * 0.1
+        if vz is not None: st.vz = vz * 0.1                  # vertical velocity = CLIMB RATE
         pi, ro, ya = s16(p, 0x18), s16(p, 0x1a), s16(p, 0x1c)
         if pi is not None: st.pitch = pi * 0.1
         if ro is not None: st.roll = ro * 0.1
@@ -148,14 +190,18 @@ class Telemetry:
         if w is not None:
             st.is_flying = (w & 0x0E) != 0
             st.motors_on = bool((w >> 3) & 1)
-        sats = u8(p, 0x24)
+            st.gps_level = (w >> 18) & 0xF   # getGpsLevel: (u32@0x20 >> 0x12) & 0xF
+        sats = u16(p, 0x24)                  # getGpsNum reads a Short, not a byte
         if sats is not None: st.satellites = sats
-        gl = u32(p, 0x20)
-        if gl is not None: st.gps_level = (gl >> 18) & 0xF
-        mf = u8(p, 0x33)
+        vps = s16(p, 0x29)                   # getSwaveHeight (VPS/ultrasonic), metres
+        if vps is not None: st.vps_height_m = vps * 0.1
+        # Motor start-fail cause = u8 @0x26 & 0x7F (getMotorFailedCause). The old 0x33
+        # was wrong.
+        mf = u8(p, 0x26)
         if mf is not None:
-            st.motor_fail_code = mf
-            st.motor_fail_reason = motor_fail_text(mf)
+            code = mf & 0x7F
+            st.motor_fail_code = code
+            st.motor_fail_reason = motor_fail_text(code)
 
     def parse_osd_lowfreq(self, p: bytes) -> None:
         """OSD low-freq push (same cmd_set 0x03, different id/structure).

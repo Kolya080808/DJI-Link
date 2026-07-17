@@ -1,0 +1,1374 @@
+NAME 0x153d84bc global.status
+id=0xf8 00
+NAME 0xdd08bb88 fix_send_index[ 0]_0
+NAME 0xde08bb88 fix_send_index[ 1]_0
+id=0xf8 00
+NAME 0xdf08bb88 fix_send_index[ 2]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe008bb88 fix_send_index[ 3]_0
+NAME 0xe108bb88 fix_send_index[ 4]_0
+id=0xf8 00
+NAME 0xe208bb88 fix_send_index[ 5]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe308bb88 fix_send_index[ 6]_0
+id=0xf8 00
+NAME 0xe408bb88 fix_send_index[ 7]_0
+NAME 0xe508bb88 fix_send_index[ 8]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe608bb88 fix_send_index[ 9]_0
+id=0xf8 00
+NAME 0xdd08bbdd fix_send_index[10]_0
+NAME 0xde08bbdd fix_send_index[11]_0
+id=0xf8 00
+NAME 0xdf08bbdd fix_send_index[12]_0
+id=0xf8 00
+NAME 0xe008bbdd fix_send_index[13]_0
+id=0xf8 00
+NAME 0xe108bbdd fix_send_index[14]_0
+id=0xf8 00
+NAME 0xe208bbdd fix_send_index[15]_0
+id=0xf8 00
+NAME 0xe308bbdd fix_send_index[16]_0
+id=0xf8 00
+NAME 0xe408bbdd fix_send_index[17]_0
+id=0xf8 00
+NAME 0xe508bbdd fix_send_index[18]_0
+id=0xf8 00
+NAME 0xe608bbdd fix_send_index[19]_0
+id=0xf8 00
+NAME 0xdd08bbe2 fix_send_index[20]_0
+id=0xf8 00
+NAME 0xde08bbe2 fix_send_index[21]_0
+id=0xf8 00
+NAME 0xdf08bbe2 fix_send_index[22]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe008bbe2 fix_send_index[23]_0
+NAME 0xe108bbe2 fix_send_index[24]_0
+id=0xf8 00
+NAME 0xe208bbe2 fix_send_index[25]_0
+NAME 0xe308bbe2 fix_send_index[26]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe408bbe2 fix_send_index[27]_0
+id=0xf8 00
+NAME 0xe508bbe2 fix_send_index[28]_0
+id=0xf8 00
+NAME 0xe608bbe2 fix_send_index[29]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xdd08bbe7 fix_send_index[30]_0
+id=0xf8 00
+NAME 0xde08bbe7 fix_send_index[31]_0
+id=0xf8 00
+NAME 0xdf08bbe7 fix_send_index[32]_0
+NAME 0xe008bbe7 fix_send_index[33]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe108bbe7 fix_send_index[34]_0
+id=0xf8 00
+NAME 0xe208bbe7 fix_send_index[35]_0
+NAME 0xe308bbe7 fix_send_index[36]_0
+id=0xf8 00
+NAME 0xe408bbe7 fix_send_index[37]_0
+id=0xf8 00
+NAME 0xe508bbe7 fix_send_index[38]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe608bbe7 fix_send_index[39]_0
+NAME 0xdd08bbec fix_send_index[40]_0
+id=0xf8 00
+NAME 0xde08bbec fix_send_index[41]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xdf08bbec fix_send_index[42]_0
+NAME 0xe008bbec fix_send_index[43]_0
+id=0xf8 00
+NAME 0xe108bbec fix_send_index[44]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe208bbec fix_send_index[45]_0
+NAME 0xe308bbec fix_send_index[46]_0
+id=0xf8 00
+NAME 0xe408bbec fix_send_index[47]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x45f0eea6 fix_send[0].send_frequency_0
+id=0xf8 00
+NAME 0x087312bc fix_send[0].send_start_index_0
+NAME 0xe4ee4283 fix_send[0].send_size_0
+id=0xf8 00
+NAME 0x4861eea6 fix_send[1].send_frequency_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x08731ef1 fix_send[1].send_start_index_0
+NAME 0xe4eebf83 fix_send[1].send_size_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x4ad2eea6 fix_send[2].send_frequency_0
+NAME 0x08732b26 fix_send[2].send_start_index_0
+id=0xf8 00
+NAME 0xe4ef3c83 fix_send[2].send_size_0
+id=0xf8 00
+NAME 0x4d43eea6 fix_send[3].send_frequency_0
+id=0xf8 00
+NAME 0x0873375b fix_send[3].send_start_index_0
+id=0xf8 00
+NAME 0xe4efb983 fix_send[3].send_size_0
+id=0xf8 00
+NAME 0xa34b7f1f standard_range_min_0
+id=0xf8 00
+NAME 0x9b557f1f standard_range_max_0
+NAME 0x0cda8e11 config_parameter.assistant_timeout_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x2a02a5df config_parameter.motor_stop_lock_0
+id=0xf8 00
+NAME 0xa99b69e5 g_config.device.is_locked_0
+NAME 0x92003629 g_config.system_command.mapper[COMMAND_AILERON]_0
+id=0xf8 00
+id=0xf8 00e5699ba900
+NAME 0x4a43be60 g_config.system_command.mapper[COMMAND_ELEVATOR]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x1c195b96 g_config.system_command.mapper[COMMAND_THROTTLE]_0
+NAME 0xa478fe6d g_config.system_command.mapper[COMMAND_RUDDER]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x20d8934b g_config.system_command.mapper[COMMAND_MODE]_0
+id=0xf8 00
+NAME 0x9e38c661 g_config.system_command.mapper[COMMAND_IOC]_0
+NAME 0xe80fbdb5 g_config.system_command.mapper[COMMAND_GO_HOME]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x1f80d3b8 g_config.system_command.mapper[COMMAND_AUTO_TAKE_OFF]_0
+NAME 0x83f271d3 g_config.system_command.mapper[COMMAND_KNOB_X1]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x84f271d3 g_config.system_command.mapper[COMMAND_KNOB_X2]_0
+NAME 0x85f271d3 g_config.system_command.mapper[COMMAND_KNOB_X3]_0
+id=0xf8 00
+NAME 0x86f271d3 g_config.system_command.mapper[COMMAND_KNOB_X4]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x87f271d3 g_config.system_command.mapper[COMMAND_KNOB_X5]_0
+NAME 0x88f271d3 g_config.system_command.mapper[COMMAND_KNOB_X6]_0
+id=0xf8 00
+NAME 0x7a85de27 g_config.system_command.mapper[COMMAND_PANTILT_PITCH]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xd499a583 g_config.system_command.mapper[COMMAND_PANTILT_ROLL]_0
+NAME 0x82e5be2e g_config.system_command.mapper[COMMAND_PANTILT_YAW]_0
+id=0xf8 00
+NAME 0x7c2e22e2 g_config.system_command.mapper[COMMAND_H3_2D_TILT]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x1fb83a7d g_config.system_command.mapper[COMMAND_D1]_0
+id=0xf8 00
+NAME 0x20b83a7d g_config.system_command.mapper[COMMAND_D2]_0
+NAME 0x21b83a7d g_config.system_command.mapper[COMMAND_D3]_0
+id=0xf8 00
+NAME 0x22b83a7d g_config.system_command.mapper[COMMAND_D4]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x2dba613c g_config.system_command.mapper[COMMAND_GEAR]_0
+NAME 0xf8c3b05a g_config.system_command.reverse_input_0
+id=0xf8 00
+NAME 0x63eb115b g_config.aircraft.aircraft_type_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9bb356f8 g_config.aircraft.custom_mix[0][0]_0
+id=0xf8 00
+NAME 0x9cb356f8 g_config.aircraft.custom_mix[0][1]_0
+id=0xf8 00
+NAME 0x9db356f8 g_config.aircraft.custom_mix[0][2]_0
+id=0xf8 00
+NAME 0x9eb356f8 g_config.aircraft.custom_mix[0][3]_0
+NAME 0x9bb856f8 g_config.aircraft.custom_mix[1][0]_0
+id=0xf8 00
+NAME 0x9cb856f8 g_config.aircraft.custom_mix[1][1]_0
+id=0xf8 00
+NAME 0x9db856f8 g_config.aircraft.custom_mix[1][2]_0
+id=0xf8 00
+NAME 0x9eb856f8 g_config.aircraft.custom_mix[1][3]_0
+id=0xf8 00
+NAME 0x9bbd56f8 g_config.aircraft.custom_mix[2][0]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9cbd56f8 g_config.aircraft.custom_mix[2][1]_0
+NAME 0x9dbd56f8 g_config.aircraft.custom_mix[2][2]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9ebd56f8 g_config.aircraft.custom_mix[2][3]_0
+NAME 0x9bc256f8 g_config.aircraft.custom_mix[3][0]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9cc256f8 g_config.aircraft.custom_mix[3][1]_0
+NAME 0x9dc256f8 g_config.aircraft.custom_mix[3][2]_0
+id=0xf8 00
+NAME 0x9ec256f8 g_config.aircraft.custom_mix[3][3]_0
+id=0xf8 00
+NAME 0x9bc756f8 g_config.aircraft.custom_mix[4][0]_0
+id=0xf8 00
+NAME 0x9cc756f8 g_config.aircraft.custom_mix[4][1]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9dc756f8 g_config.aircraft.custom_mix[4][2]_0
+id=0xf8 00
+NAME 0x9ec756f8 g_config.aircraft.custom_mix[4][3]_0
+NAME 0x9bcc56f8 g_config.aircraft.custom_mix[5][0]_0
+NAME 0x9ccc56f8 g_config.aircraft.custom_mix[5][1]_0
+id=0xf8 00
+NAME 0x9dcc56f8 g_config.aircraft.custom_mix[5][2]_0
+id=0xf8 00
+NAME 0x9ecc56f8 g_config.aircraft.custom_mix[5][3]_0
+id=0xf8 00
+NAME 0x9bd156f8 g_config.aircraft.custom_mix[6][0]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9cd156f8 g_config.aircraft.custom_mix[6][1]_0
+id=0xf8 00
+NAME 0x9dd156f8 g_config.aircraft.custom_mix[6][2]_0
+id=0xf8 00
+NAME 0x9ed156f8 g_config.aircraft.custom_mix[6][3]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9bd656f8 g_config.aircraft.custom_mix[7][0]_0
+NAME 0x9cd656f8 g_config.aircraft.custom_mix[7][1]_0
+id=0xf8 00
+NAME 0x9dd656f8 g_config.aircraft.custom_mix[7][2]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9ed656f8 g_config.aircraft.custom_mix[7][3]_0
+id=0xf8 00
+NAME 0x3d18e504 g_config.aircraft.custom_num_of_motor_0
+NAME 0x9f472a88 g_config.imu_gps.imu_offset_x_0
+id=0xf8 00
+NAME 0x9f482a88 g_config.imu_gps.imu_offset_y_0
+id=0xf8 00
+NAME 0x9f492a88 g_config.imu_gps.imu_offset_z_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x6d4631ff g_config.imu_gps.gps_offset_x_0
+id=0xf8 00
+NAME 0x6d4731ff g_config.imu_gps.gps_offset_y_0
+NAME 0x6d4831ff g_config.imu_gps.gps_offset_z_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x094922ed g_config.imu_gps.mvo_offset_x_0
+NAME 0x094a22ed g_config.imu_gps.mvo_offset_y_0
+id=0xf8 00
+NAME 0x094b22ed g_config.imu_gps.mvo_offset_z_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x3718ae88 g_config.imu_gps.imu_dir_0
+id=0xf8 00
+NAME 0x5a082d3d g_config.imu_dir[0][0]_0
+NAME 0x5b082d3d g_config.imu_dir[0][1]_0
+id=0xf8 00
+NAME 0x5c082d3d g_config.imu_dir[0][2]_0
+id=0xf8 00
+NAME 0x5a0d2d3d g_config.imu_dir[1][0]_0
+id=0xf8 00
+NAME 0x5b0d2d3d g_config.imu_dir[1][1]_0
+id=0xf8 00
+NAME 0x5c0d2d3d g_config.imu_dir[1][2]_0
+id=0xf8 00
+NAME 0x5a122d3d g_config.imu_dir[2][0]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x5b122d3d g_config.imu_dir[2][1]_0
+NAME 0x5c122d3d g_config.imu_dir[2][2]_0
+NAME 0xa7e5f3c9 g_config.receiver.type_0
+id=0xf8 00
+NAME 0x25b4d7f7 g_config.receiver.calibration_type_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xa6eb2915 g_config.receiver.travel_min[ 0]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xa7eb2915 g_config.receiver.travel_min[ 1]_0
+id=0xf8 00
+NAME 0xa8eb2915 g_config.receiver.travel_min[ 2]_0
+NAME 0xa9eb2915 g_config.receiver.travel_min[ 3]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xaaeb2915 g_config.receiver.travel_min[ 4]_0
+NAME 0xabeb2915 g_config.receiver.travel_min[ 5]_0
+id=0xf8 00
+NAME 0xaceb2915 g_config.receiver.travel_min[ 6]_0
+id=0xf8 00
+NAME 0xadeb2915 g_config.receiver.travel_min[ 7]_0
+id=0xf8 00
+NAME 0xaeeb2915 g_config.receiver.travel_min[ 8]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xafeb2915 g_config.receiver.travel_min[ 9]_0
+id=0xf8 00
+NAME 0xa6eb296a g_config.receiver.travel_min[10]_0
+NAME 0xa7eb296a g_config.receiver.travel_min[11]_0
+id=0xf8 00
+NAME 0xa8eb296a g_config.receiver.travel_min[12]_0
+id=0xf8 00
+NAME 0xa9eb296a g_config.receiver.travel_min[13]_0
+id=0xf8 00
+NAME 0xaaeb296a g_config.receiver.travel_min[14]_0
+id=0xf8 00
+NAME 0xabeb296a g_config.receiver.travel_min[15]_0
+id=0xf8 00
+NAME 0x7f1d2915 g_config.receiver.travel_max[ 0]_0
+id=0xf8 00
+NAME 0x801d2915 g_config.receiver.travel_max[ 1]_0
+id=0xf8 00
+NAME 0x811d2915 g_config.receiver.travel_max[ 2]_0
+id=0xf8 00
+NAME 0x821d2915 g_config.receiver.travel_max[ 3]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x831d2915 g_config.receiver.travel_max[ 4]_0
+id=0xf8 00
+NAME 0x841d2915 g_config.receiver.travel_max[ 5]_0
+id=0xf8 00
+NAME 0x851d2915 g_config.receiver.travel_max[ 6]_0
+NAME 0x861d2915 g_config.receiver.travel_max[ 7]_0
+id=0xf8 00
+NAME 0x871d2915 g_config.receiver.travel_max[ 8]_0
+id=0xf8 00
+NAME 0x881d2915 g_config.receiver.travel_max[ 9]_0
+id=0xf8 00
+NAME 0x7f1d296a g_config.receiver.travel_max[10]_0
+id=0xf8 00
+NAME 0x801d296a g_config.receiver.travel_max[11]_0
+id=0xf8 00
+NAME 0x811d296a g_config.receiver.travel_max[12]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x821d296a g_config.receiver.travel_max[13]_0
+NAME 0x831d296a g_config.receiver.travel_max[14]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x841d296a g_config.receiver.travel_max[15]_0
+id=0xf8 00
+NAME 0x21599b36 g_config.device.dbus_adapter_0
+NAME 0x695a0859 g_config.control.basic_pitch_0
+id=0xf8 00
+NAME 0xcd725af3 g_config.control.basic_roll_0
+id=0xf8 0059085a696400
+NAME 0xca7264ad g_config.control.basic_tail_0
+id=0xf8 00f35a72cd6400
+NAME 0xf49e779d g_config.control.basic_level_i_0
+id=0xf8 00ad6472ca6400
+NAME 0x64ea536a g_config.control.basic_tail_i_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xc7801bfc g_config.control.tilt_atti_gain_0
+id=0xf8 00
+NAME 0xe61698ca g_config.control.tilt_gyro_gain_0
+NAME 0xc993ee5d g_config.control.tilt_gyro_acc_gain_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe22d1de2 g_config.control.tail_gyro_gain_0
+id=0xf8 00
+NAME 0x36c21143 g_config.control.atti_vertical_0
+NAME 0xc33ea011 g_config.control.horiz_pos_gain_0
+id=0xf8 004311c2366400
+id=0xf8 00
+NAME 0xa03f3517 g_config.control.horiz_vel_gain_0
+id=0xf8 00
+NAME 0x9afff8f8 g_config.control.horiz_damping_gain_0
+NAME 0x13f1189b g_config.control.horiz_i_0
+id=0xf8 00
+NAME 0xd2edee01 g_config.control.vertical_p_0
+id=0xf8 00
+NAME 0xd2f3ee01 g_config.control.vertical_v_0
+id=0xf8 00
+NAME 0xd2e6ee01 g_config.control.vertical_i_0
+id=0xf8 00
+NAME 0x16330043 g_config.control.multi_control_mode_enable_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xde3b160b g_config.control.control_mode[0]_0
+NAME 0xdf3b160b g_config.control.control_mode[1]_0
+id=0xf8 000b163bde0c
+NAME 0xe03b160b g_config.control.control_mode[2]_0
+id=0xf8 000b163bdf08
+NAME 0x89d49b2a g_config.advanced_function.fail_safe_protection_enabled_0
+id=0xf8 000b163be007
+NAME 0xe5155514 g_config.advanced_function.one_key_go_home_enabled_0
+NAME 0xee98369f g_config.advanced_function.voltage_protection_enabled_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x80f73ae7 g_config.advanced_function.intelligence_orientation_enabled_0
+id=0xf8 00
+NAME 0xcb5f61b5 g_config.advanced_function.pantilt_enabled_0
+id=0xf8 00
+NAME 0xae52d19a g_config.advanced_function.height_limit_enabled_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xbf372921 g_config.advanced_function.avoid_ground_enabled_0
+id=0xf8 00
+NAME 0x7ece6d19 g_config.advanced_function.radius_limit_enabled_0
+NAME 0xaaf942e2 g_config.advanced_function.intelligence_gear_enabled_0
+id=0xf8 00196dce7e01
+NAME 0xf387f4b7 g_config.advanced_function.gear_protect_enabled_0
+id=0xf8 00
+NAME 0xcb653d71 g_config.fail_safe.protect_action_0
+id=0xf8 00
+NAME 0x97fbc173 g_config.go_home.go_home_method_0
+id=0xf8 00713d65cb02
+id=0xf8 00
+NAME 0x38cc63dc g_config.go_home.fixed_go_home_altitude_0
+NAME 0x6e280d61 g_config.go_home.go_home_heading_option_0
+id=0xf8 00dc63cc389500
+NAME 0xb502df25 g_config.pantilt.output_frequency_0
+id=0xf8 00610d286e01
+id=0xf8 00
+NAME 0x8f90baac g_config.pantilt.pitch_travel.travel_min_0
+NAME 0x879abaac g_config.pantilt.pitch_travel.travel_max_0
+id=0xf8 00
+NAME 0xb22c333b g_config.pantilt.pitch_travel.travel_center_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xef56a152 g_config.pantilt.roll_travel.travel_min_0
+id=0xf8 00
+NAME 0xe760a152 g_config.pantilt.roll_travel.travel_max_0
+NAME 0x5a0b10be g_config.pantilt.roll_travel.travel_center_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xbba240f9 g_config.pantilt.yaw_travel.travel_min_0
+id=0xf8 00
+NAME 0xb3ac40f9 g_config.pantilt.yaw_travel.travel_max_0
+NAME 0x00088ade g_config.pantilt.yaw_travel.travel_center_0
+id=0xf8 00
+NAME 0x4d81490f g_config.pantilt.roll_gain_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x769b24a8 g_config.pantilt.pitch_gain_0
+id=0xf8 00
+NAME 0xd212479b g_config.pantilt.yaw_gain_0
+id=0xf8 00
+NAME 0xd8a04994 g_config.pantilt.reverse_output_0
+NAME 0x788a8a9d g_config.pantilt.roll_speed_0
+id=0xf8 00
+NAME 0x9266246a g_config.pantilt.pitch_speed_0
+id=0xf8 00
+NAME 0x09891936 g_config.pantilt.yaw_speed_0
+id=0xf8 00
+NAME 0xa2a389c2 g_config.intelligence_orientation.app_ioc_type_0
+NAME 0x163fda61 g_config.intelligence_orientation.control_mode[0]_0
+NAME 0x173fda61 g_config.intelligence_orientation.control_mode[1]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x183fda61 g_config.intelligence_orientation.control_mode[2]_0
+NAME 0x425c0a94 g_config.flying_limit.max_radius_0
+NAME 0x0371238a g_config.flying_limit.max_height_0
+id=0xf8 00
+NAME 0x0438298a g_config.flying_limit.min_height_0
+id=0xf8 00
+NAME 0x0000e114 g_config.flying_limit.auto_landing_enabled_0
+NAME 0xd352ed32 imu_acc_raw_filter_enable_0
+id=0xf8 00
+id=0xf8 00940a5c42d007
+NAME 0x3bf365ce mode_sport_cfg_tilt_atti_range_0
+id=0xf8 008a237103f401
+id=0xf8 008a2938041400
+NAME 0xe5fe726f cfg_ACTUATOR_1_work_stroke_min_0
+id=0xf8 00
+NAME 0xde08726f cfg_ACTUATOR_1_work_stroke_max_0
+id=0xf8 00
+id=0xf8 00ce65f33b0000f041
+NAME 0xac320b0d mode_sport_cfg_vert_vel_up_0
+id=0xf8 00
+NAME 0x4327de0d mode_sport_cfg_vert_acc_up_0
+id=0xf8 00
+NAME 0x25120b6e g_config.knob.control_channel[KNOB_BASIC_PITCH]_0
+id=0xf8 000d0b32ac00008040
+id=0xf8 00
+NAME 0xaf4431b1 g_config.knob.control_channel[KNOB_BASIC_ROLL]_0
+id=0xf8 00
+NAME 0xaf4deba2 g_config.knob.control_channel[KNOB_BASIC_TAIL]_0
+id=0xf8 00
+NAME 0x401f69e9 g_config.knob.control_channel[KNOB_ATTI_VERTICAL]_0
+id=0xf8 00
+NAME 0x3b304ccd g_config.knob.control_channel[KNOB_ATTI_PITCH]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xc25a4ff2 g_config.knob.control_channel[KNOB_ATTI_ROLL]_0
+NAME 0x370e35f7 g_config.knob.enabled_bits_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x3bdb2bf8 g_config.compass.scale_x_0
+NAME 0x3bdc2bf8 g_config.compass.scale_y_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x3bdd2bf8 g_config.compass.scale_z_0
+id=0xf8 00
+NAME 0xcd72c21a g_config.compass.bias_x_0
+NAME 0xcd73c21a g_config.compass.bias_y_0
+id=0xf8 00
+NAME 0xcd74c21a g_config.compass.bias_z_0
+id=0xf8 00
+NAME 0xfb29d937 g_config.voltage.level_1_protect_0
+id=0xf8 00
+NAME 0xfb42d937 g_config.voltage.level_2_protect_0
+id=0xf8 0037d929fbd80e
+NAME 0x3ecd7d52 g_config.voltage.line_loss_0
+id=0xf8 0037d942fb100e
+NAME 0x8c006935 g_config.voltage.calibrate_scale_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x41a4e115 g_config.voltage.level_1_protect_type_0
+NAME 0xbea4e115 g_config.voltage.level_2_protect_type_0
+id=0xf8 0015e1a44100
+NAME 0x58b4c372 g_config.voltage.battery_cell_0
+id=0xf8 0015e1a4be02
+NAME 0x5aae5bcd g_config.voltage2.level_1_voltage_0
+id=0xf8 0072c3b45802
+NAME 0xc214cd92 g_config.voltage2.level_1_function_0
+id=0xf8 00cd5bae5a14
+NAME 0x5ac75bcd g_config.voltage2.level_2_voltage_0
+id=0xf8 0092cd14c200
+NAME 0xdb14cd92 g_config.voltage2.level_2_function_0
+id=0xf8 00cd5bc75a05
+NAME 0xe2c0cd6f g_config.voltage2.user_set_smart_bat_0
+id=0xf8 0092cd14db02
+NAME 0xbc18a2a4 g_config.voltage2.level1_smart_battert_gohome_0
+id=0xf8 006fcdc0e202
+id=0xf8 00
+NAME 0x79e5fb9b g_config.voltage2.level2_smart_battert_land_0
+NAME 0xd2184d1f g_config.voltage2.judge_smart_battery_communite_0
+id=0xf8 009bfbe57905
+NAME 0x800de80e g_config.output_servo.reverse_bits_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x3615bc7b g_config.output_servo.center_offset[0]_0
+id=0xf8 00
+NAME 0x3715bc7b g_config.output_servo.center_offset[1]_0
+NAME 0x3815bc7b g_config.output_servo.center_offset[2]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x3915bc7b g_config.output_servo.center_offset[3]_0
+id=0xf8 00
+NAME 0x3a15bc7b g_config.output_servo.center_offset[4]_0
+NAME 0x3b15bc7b g_config.output_servo.center_offset[5]_0
+id=0xf8 00
+NAME 0x3c15bc7b g_config.output_servo.center_offset[6]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x3d15bc7b g_config.output_servo.center_offset[7]_0
+NAME 0x9b913bbd g_config.output_servo.min_limit[0]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9c913bbd g_config.output_servo.min_limit[1]_0
+NAME 0x9d913bbd g_config.output_servo.min_limit[2]_0
+id=0xf8 00
+NAME 0x9e913bbd g_config.output_servo.min_limit[3]_0
+id=0xf8 00
+NAME 0x9f913bbd g_config.output_servo.min_limit[4]_0
+id=0xf8 00
+NAME 0xa0913bbd g_config.output_servo.min_limit[5]_0
+id=0xf8 00
+NAME 0xa1913bbd g_config.output_servo.min_limit[6]_0
+id=0xf8 00
+NAME 0xa2913bbd g_config.output_servo.min_limit[7]_0
+id=0xf8 00
+NAME 0x959137da g_config.output_servo.max_limit[0]_0
+id=0xf8 00
+NAME 0x969137da g_config.output_servo.max_limit[1]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x979137da g_config.output_servo.max_limit[2]_0
+id=0xf8 00
+NAME 0x989137da g_config.output_servo.max_limit[3]_0
+id=0xf8 00
+NAME 0x999137da g_config.output_servo.max_limit[4]_0
+id=0xf8 00
+NAME 0x9a9137da g_config.output_servo.max_limit[5]_0
+id=0xf8 00
+NAME 0x9b9137da g_config.output_servo.max_limit[6]_0
+NAME 0x9c9137da g_config.output_servo.max_limit[7]_0
+id=0xf8 00
+NAME 0x2f449a05 g_config.output_servo.pwm_min_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x274e9a05 g_config.output_servo.pwm_max_0
+NAME 0xe91b9571 g_config.engine.lower_bound_0
+id=0xf8 00
+NAME 0x016c99db g_config.engine.upper_bound_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x53141284 g_config.engine.idle_level_0
+NAME 0x3b532ef6 g_config.engine.idle_time_0
+id=0xf8 00841214530a
+NAME 0x4c5635f5 g_config.engine.stand_by_level_0
+id=0xf8 00f62e533bcdcc8c3f
+NAME 0x88a90e16 g_config.engine.prop_auto_preload_0
+id=0xf8 00
+NAME 0xb36410a7 g_config.engine.motor_fc_0
+id=0xf8 00160ea98801
+NAME 0x482bd8e2 g_config.craft_model.volt_max_0
+id=0xf8 00
+NAME 0xbdd98742 g_config.craft_model.kv_0
+id=0xf8 00
+NAME 0xa4d08742 g_config.craft_model.Rm_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x76832c19 g_config.craft_model.I_max_0
+NAME 0x7e792c19 g_config.craft_model.I_min_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x88092911 g_config.craft_model.Inertia_motor_0
+NAME 0x95cf8742 g_config.craft_model.Cl_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x95d48742 g_config.craft_model.Cq_0
+id=0xf8 00
+NAME 0x28890508 g_config.craft_model.Inertia_prop_0
+NAME 0x14a1485e g_config.craft_model.motor_tilt_angle_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe372dfc7 g_config.control.vel_smooth_time_0
+NAME 0xde0fff00 g_config.control.horiz_vel_atti_range_0
+id=0xf8 00
+NAME 0x9da51eee g_config.control.atti_range_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x4fd745a0 g_config.control.atti_tilt_w_rate_0
+id=0xf8 00
+NAME 0x4fb63745 g_config.control.atti_torsion_w_rate_0
+NAME 0x75b33314 g_config.control.manual_tilt_w_rate_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xc47382e6 g_config.control.manual_torsion_w_rate_0
+NAME 0x3d45f2c8 g_config.control.vert_up_vel_0
+id=0xf8 00
+NAME 0x70dbcaa7 g_config.control.vert_down_vel_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe9d8b514 g_config.control.thr_exp_mid_point_0
+NAME 0xf5fcaa49 g_config.control.yaw_exp_mid_point_0
+id=0xf8 00
+NAME 0xbdc6ae31 g_config.control.dyn_safe_thrust_0
+id=0xf8 0049aafcf59a99993e
+NAME 0xc956d11c g_config.control.dyn_tilt_min_0
+id=0xf8 00
+NAME 0x41478a8a g_config.imu_para_cfg.baro_cfg.pos_baro_gain_0
+id=0xf8 00
+NAME 0x4430a51f g_config.imu_para_cfg.baro_cfg.vel_baro_gain_0
+NAME 0x39eea6ba g_config.imu_para_cfg.baro_cfg.acc_baro_gain_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x08c8dc53 g_config.imu_para_cfg.baro_cfg.acc_bias_baro_p_gain_0
+id=0xf8 00
+NAME 0xe5c8dc4e g_config.imu_para_cfg.baro_cfg.acc_bias_baro_i_gain_0
+id=0xf8 00
+NAME 0x30acd64b g_config.imu_para_cfg.imu_para_filter.w_fc_0
+id=0xf8 00
+NAME 0x30ac684b g_config.imu_para_cfg.imu_para_filter.a_fc_0
+id=0xf8 00
+NAME 0x7f0bab81 g_config.imu_para_cfg.imu_para_filter.w_a_fc1_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x7f0cab81 g_config.imu_para_cfg.imu_para_filter.w_a_fc2_0
+NAME 0xd89d7078 g_config.imu_para_cfg.imu_para_filter.vel_fc_0
+id=0xf8 00
+NAME 0x6f934378 g_config.imu_para_cfg.imu_para_filter.acc_fc_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x8b525fe9 g_config.imu_para_cfg.imu_adv_func.fuse_with_usonic_0
+NAME 0xf0318606 g_config.imu_para_cfg.imu_adv_func.fuse_with_vo_z_0
+id=0xf8 00
+NAME 0x4ef39e97 g_config.imu_para_cfg.imu_adv_func.vo_source_type_0
+id=0xf8 00
+NAME 0x74b5b183 g_config.imu_para_cfg.imu_adv_func.vo_vel_with_large_tilt_deny_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x7a8e3c44 g_config.imu_para_cfg.imu_adv_func.vo_vel_strong_outlier_deny_0
+NAME 0xf62ed066 g_config.imu_para_cfg.imu_adv_func.vo_vel_with_3m_deny_0
+id=0xf8 00
+NAME 0xb64b78e5 g_config.imu_para_cfg.imu_adv_func.vo_vel_pg_flag_couple_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x5b317388 g_config.imu_para_cfg.imu_adv_func.vo_delay_tick_0
+id=0xf8 00
+NAME 0xde9b1b7b g_config.novice_cfg.novice_func_enabled_0
+NAME 0xd9ab9f79 g_config.novice_cfg.max_height_0
+id=0xf8 007b1b9bde00
+NAME 0x18968688 g_config.novice_cfg.max_radius_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x81b81491 g_config.novice_cfg.atti_range_0
+NAME 0x1c038b7b g_config.novice_cfg.atti_tilt_w_rate_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x29b314a3 g_config.novice_cfg.atti_torsion_w_rate_0
+id=0xf8 00
+NAME 0x503b953c g_config.novice_cfg.vert_up_vel_0
+NAME 0x13502975 g_config.novice_cfg.vert_down_vel_0
+id=0xf8 00
+NAME 0xb9a37abd g_config.led_cfg.new_led_enable_0
+id=0xf8 00
+NAME 0xc5429582 g_config.gps_cfg.gps_enable_0
+id=0xf8 00
+NAME 0x3a16a62c g_config.gps_cfg.gps_fix_num_0
+id=0xf8 00829542c501
+NAME 0xcc15b1b5 g_config.gps_cfg.hdop_fix_0
+id=0xf8 00
+NAME 0x0cb6ed4a g_config.gps_cfg.hdop_good_0
+NAME 0x97723ffc g_config.gear_cfg.gear_speed_0
+id=0xf8 00
+NAME 0xa67353e8 g_config.gear_cfg.gear_state_0
+NAME 0x3679c82d g_config.gear_cfg.pack_flag_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xd6b8ed23 g_config.gear_cfg.pack_height_up_0
+id=0xf8 00
+NAME 0x05653bc8 g_config.gear_cfg.pack_height_down_0
+id=0xf8 00
+NAME 0x60393030 g_config.esc_cfg.communicate_check_0
+NAME 0xe79ce1ec g_config.serial_api_cfg.advance_function_enable_0
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+NAME 0xf644897d g_config.serial_api_cfg.input_pitch_limit_0
+id=0xf8 00
+NAME 0xabd7594c g_config.serial_api_cfg.input_roll_limit_0
+id=0xf8 00
+NAME 0xd09ebbe4 g_config.serial_api_cfg.input_yaw_rate_limit_0
+id=0xf8 00
+NAME 0x4a9c9a1a g_config.serial_api_cfg.input_vertical_velocity_limit_0
+id=0xf8 00
+NAME 0x80b4731b g_config.api_entry_cfg.channel_0
+id=0xf8 00
+NAME 0x8511d8d1 g_config.api_entry_cfg.comp_sign_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x02261c5a g_config.api_entry_cfg.value_sign_0
+id=0xf8 00
+NAME 0x7da9bac9 g_config.api_entry_cfg.enable_mode_0
+NAME 0x3e483a76 g_config.api_entry_cfg.abs_value_0
+id=0xf8 00
+NAME 0x8682a34d g_config.api_entry_cfg.enable_api_0
+id=0xf8 00
+NAME 0xfe3c446d g_config.api_entry_cfg.api_authority_group[0]_0
+id=0xf8 00
+NAME 0xff3c446d g_config.api_entry_cfg.api_authority_group[1]_0
+id=0xf8 00
+NAME 0x003c4472 g_config.api_entry_cfg.api_authority_group[2]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x013c4472 g_config.api_entry_cfg.api_authority_group[3]_0
+id=0xf8 00
+NAME 0xaca9d874 g_config.fdi.min_compass_mod_value_0
+NAME 0xac48aa86 g_config.fdi.max_compass_mod_value_0
+id=0xf8 00
+NAME 0x974a7e91 g_config.fdi.min_compass_mod_stdvar_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x361c9091 g_config.fdi.max_compass_mod_stdvar_0
+NAME 0x0eea9bff g_config.fdi.max_compass_mod_over_count_0
+id=0xf8 00
+NAME 0x38dee89b g_config.fdi.max_acc_compass_angle_over_count_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9d559c75 g_config.fdi.max_acc_mod_deviate_for_detect_0
+NAME 0xacc07101 g_config.fdi.max_acc_mod_deviate_for_calibration_0
+id=0xf8 00
+NAME 0xd1996aec g_config.fdi.max_acc_compass_angle_deviate_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xb41780a7 g_config.fdi.min_acc_compass_angle_time_0
+id=0xf8 00
+NAME 0x42d3e4e7 g_config.fdi.max_acc_mod_stdvar_for_angle_detection_0
+id=0xf8 00
+NAME 0xd21e6aeb g_config.fdi.gps_intergrate_predict_time_0
+NAME 0x8e6aefb4 g_config.fdi.gps_max_pos_predict_error_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xf9409015 g_config.fdi.gps_max_horizontal_vel_mod_0
+NAME 0x6b4f8819 g_config.fdi.gps_min_horizontal_vel_stdvar_0
+id=0xf8 00
+NAME 0x42971bef g_config.fdi.gps_max_horizontal_vel_diff_0
+id=0xf8 00
+NAME 0x0f6bf56e g_config.fdi.gps_max_horizontal_vel_over_count_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x2b638f84 g_config.fdi.gps_max_horizontal_pos_mod_0
+NAME 0xd64a3714 g_config.fdi.gps_min_horizontal_pos_stdvar_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x659686e9 g_config.fdi.gps_max_horizontal_pos_diff_0
+NAME 0x2651605f g_config.fdi.gps_max_horizontal_pos_over_count_0
+id=0xf8 00
+NAME 0x1350cfaf g_config.fdi.max_gyro_mod_value_0
+id=0xf8 00
+NAME 0xadd7b6f3 g_config.fdi.min_gyro_mod_stdvar_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x3e41b694 g_config.fdi.max_gyro_mod_stdvar_0
+id=0xf8 00
+NAME 0xad03f0c5 g_config.fdi.max_gyro_mod_diff_0
+id=0xf8 00
+NAME 0x37a45a0e g_config.fdi.max_gyro_mod_over_count_0
+NAME 0x11eebcff g_config.fdi.min_acc_mod_value_0
+id=0xf8 00
+NAME 0x11db4d69 g_config.fdi.max_acc_mod_value_0
+id=0xf8 00
+NAME 0xdc2f068a g_config.fdi.min_acc_mod_stdvar_0
+id=0xf8 00
+NAME 0xc8bf708a g_config.fdi.max_acc_mod_stdvar_0
+NAME 0x9f027b43 g_config.fdi.max_acc_mod_diff_0
+id=0xf8 00
+NAME 0xec18fbe6 g_config.fdi.max_acc_mod_over_count_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x87091f9a g_config.fdi.min_baro_value_0
+id=0xf8 00
+NAME 0x8326019a g_config.fdi.max_baro_value_0
+id=0xf8 00
+NAME 0xf691a3d3 g_config.fdi.min_baro_stdvar_0
+id=0xf8 00
+NAME 0xdc73c5f6 g_config.fdi.max_baro_diff_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x619dfbf9 g_config.fdi.max_baro_over_count_0
+NAME 0xaf7a5241 g_config.fdi.history_tick_k_0
+id=0xf8 00
+NAME 0xa6d56a37 g_config.fdi.pwm_delay_tick_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe329bec2 g_config.fdi.pwm_record_flag_0
+NAME 0x069ac154 g_config.fdi.max_horizontal_vel_fusion_error_0
+id=0xf8 00
+NAME 0x6b73a63f g_config.fdi.max_gyro_stdvar_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xba59983c g_config.fdi.max_acc_stdvar_0
+NAME 0x9d05d1d7 g_config.fdi.max_compass_stdvar_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x25789feb g_raw.input.channel[ 0]_0
+NAME 0x26789feb g_raw.input.channel[ 1]_0
+id=0xf8 00
+NAME 0x27789feb g_raw.input.channel[ 2]_0
+id=0xf8 00
+NAME 0x28789feb g_raw.input.channel[ 3]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x29789feb g_raw.input.channel[ 4]_0
+NAME 0x2a789feb g_raw.input.channel[ 5]_0
+id=0xf8 00
+NAME 0x2b789feb g_raw.input.channel[ 6]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x2c789feb g_raw.input.channel[ 7]_0
+id=0xf8 00
+NAME 0x2d789feb g_raw.input.channel[ 8]_0
+NAME 0x2e789feb g_raw.input.channel[ 9]_0
+id=0xf8 00
+NAME 0x2578a040 g_raw.input.channel[10]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x2678a040 g_raw.input.channel[11]_0
+NAME 0x2778a040 g_raw.input.channel[12]_0
+id=0xf8 00
+NAME 0x2878a040 g_raw.input.channel[13]_0
+id=0xf8 00
+NAME 0x2978a040 g_raw.input.channel[14]_0
+id=0xf8 00
+NAME 0x2a78a040 g_raw.input.channel[15]_0
+id=0xf8 00
+NAME 0x8f8bcb1c g_real.input.channel[COMMAND_AILERON]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xd5d8b151 g_real.input.channel[COMMAND_ELEVATOR]_0
+NAME 0xa7ae4e87 g_real.input.channel[COMMAND_THROTTLE]_0
+id=0xf8 00
+NAME 0x3b768a04 g_real.input.channel[COMMAND_RUDDER]_0
+id=0xf8 00
+NAME 0x3cc32a48 g_real.input.channel[COMMAND_MODE]_0
+NAME 0x3754b0fa g_real.input.channel[COMMAND_IOC]_0
+id=0xf8 00
+NAME 0xe59b52a8 g_real.input.channel[COMMAND_GO_HOME]_0
+NAME 0x083f965a g_real.input.channel[COMMAND_AUTO_TAKE_OFF]_0
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+NAME 0x817e06c6 g_real.input.channel[COMMAND_KNOB_X1]_0
+id=0xf8 00
+NAME 0x827e06c6 g_real.input.channel[COMMAND_KNOB_X2]_0
+NAME 0x837e06c6 g_real.input.channel[COMMAND_KNOB_X3]_0
+NAME 0x847e06c6 g_real.input.channel[COMMAND_KNOB_X4]_0
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+NAME 0x857e06c6 g_real.input.channel[COMMAND_KNOB_X5]_0
+id=0xf8 00
+NAME 0x867e06c6 g_real.input.channel[COMMAND_KNOB_X6]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x6344a0c9 g_real.input.channel[COMMAND_PANTILT_PITCH]_0
+NAME 0x8e826447 g_real.input.channel[COMMAND_PANTILT_ROLL]_0
+id=0xf8 00
+NAME 0x769fa6ed g_real.input.channel[COMMAND_PANTILT_YAW]_0
+id=0xf8 00
+NAME 0x6f21dccb g_real.input.channel[COMMAND_H3_2D_TILT]_0
+id=0xf8 00
+NAME 0xa4515665 g_real.input.channel[COMMAND_D1]_0
+NAME 0xa5515665 g_real.input.channel[COMMAND_D2]_0
+id=0xf8 00
+NAME 0xa6515665 g_real.input.channel[COMMAND_D3]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xa7515665 g_real.input.channel[COMMAND_D4]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x49a4f839 g_real.input.channel[COMMAND_GEAR]_0
+NAME 0x8998d47a g_real.imu.ax_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x8999d47a g_real.imu.ay_0
+id=0xf8 00
+NAME 0x899ad47a g_real.imu.az_0
+NAME 0x9f98d47a g_real.imu.wx_0
+id=0xf8 00
+NAME 0x9f99d47a g_real.imu.wy_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9f9ad47a g_real.imu.wz_0
+NAME 0x9598d47a g_real.imu.mx_0
+NAME 0x9599d47a g_real.imu.my_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x959ad47a g_real.imu.mz_0
+id=0xf8 00
+NAME 0x9950d47a g_real.imu.q0_0
+id=0xf8 00
+NAME 0x9951d47a g_real.imu.q1_0
+id=0xf8 00
+NAME 0x9952d47a g_real.imu.q2_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9953d47a g_real.imu.q3_0
+NAME 0x1c071f19 AttiData_200Hz.press_0
+NAME 0x201d2a3b g_raw.battery_info.design_capacity_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x9159c556 g_raw.battery_info.full_charge_capacity_0
+id=0xf8 00
+NAME 0x5f07e38d g_raw.battery_info.remaining_capacity_0
+id=0xf8 00
+NAME 0x80c2365c g_raw.battery_info.pack_voltage_0
+id=0xf8 00
+NAME 0x8821f3f2 g_raw.battery_info.current_0
+id=0xf8 00
+NAME 0xfc8711ea g_raw.battery_info.life_percentage_0
+id=0xf8 00
+NAME 0x8b0b3187 g_raw.battery_info.capacity_percentage_0
+id=0xf8 00
+NAME 0x9e336395 g_raw.battery_info.temperature_0
+id=0xf8 00
+NAME 0x2e51de52 g_raw.battery_info.cycle_count_0
+NAME 0x9bf8c95a g_raw.battery_info.serial_number_0
+id=0xf8 00
+NAME 0x57468777 g_raw.battery_info.cell_voltage[0]_0
+id=0xf8 00
+NAME 0x58468777 g_raw.battery_info.cell_voltage[1]_0
+id=0xf8 00
+NAME 0x59468777 g_raw.battery_info.cell_voltage[2]_0
+id=0xf8 00
+NAME 0x5a468777 g_raw.battery_info.cell_voltage[3]_0
+NAME 0x5b468777 g_raw.battery_info.cell_voltage[4]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0x5c468777 g_raw.battery_info.cell_voltage[5]_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xcb316c3b g_raw.battery_info.average_current_0
+id=0xf8 00
+NAME 0xadb43ca3 g_raw.battery_info.right_0
+id=0xf8 00
+NAME 0x80c92b8c g_raw.battery_info.error_count_0
+id=0xf8 00
+NAME 0x0a8fc2af g_raw.battery_info.n_discharge_times_0
+id=0xf8 00
+NAME 0x875d3035 g_real.status.main_battery_voltage_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xe593b02e g_real.config_status.voltage_temp_for_calibrate_0
+id=0xf8 00
+NAME 0x3db22c00 g_real.config_status.voltage_calibrate_state_0
+NAME 0xcbbf0f97 IMU_Data.gyro_tempX_0
+id=0xf8 00
+NAME 0xcbc00f97 IMU_Data.gyro_tempY_0
+id=0xf8 00
+id=0xf8 00
+NAME 0xcbc10f97 IMU_Data.gyro_tempZ_0
+NAME 0x14468f84 imu_temp.dst_value_0
+NAME 0x6bf1a5d0 imu_temp.ctl_out_value_0
+NAME 0x73f19d57 imu_temp.real_ctl_out_value_0
+NAME 0xdd415d9a imu_temp.real_ctl_out_per_0
+NAME 0x6702128d g_real.status.control_command_mode_0
+NAME 0x8721693b g_real.status.control_real_mode_0
+NAME 0xe163241e g_real.status.last_control_real_mode_0
+NAME 0x1e029e37 g_real.status.rc_state_0
+NAME 0x1364e450 g_real.status.motor_status_0
+NAME 0xf3eace45 g_real.config_status.need_check_stick_channel_mapping_0
+NAME 0xec170d5f g_real.config_status.need_send_imu_start_flag_0
+NAME 0xac1efd58 g_real.config_status.stick_calibrate_state_0
+NAME 0x3b7da88e g_real.config_status.config_debug_0
+NAME 0xbb4cf13c imu_type_0
+NAME 0xb54da335 g_real.knob.scales[KNOB_BASIC_PITCH]_0
+NAME 0x0ad46d4c g_real.knob.scales[KNOB_BASIC_ROLL]_0
+NAME 0x0ade273d g_real.knob.scales[KNOB_BASIC_TAIL]_0
+NAME 0xd7e93b10 g_real.knob.scales[KNOB_ATTI_VERTICAL]_0
+NAME 0x96c08863 g_real.knob.scales[KNOB_ATTI_PITCH]_0
+NAME 0xe0b5e02d g_real.knob.scales[KNOB_ATTI_ROLL]_0
+NAME 0xc46223b9 imu_app_temp_cali.start_flag_0
+NAME 0x43d19856 imu_app_temp_cali.state_0
+NAME 0xcc8ec761 imu_app_temp_cali.cali_cnt_0
+NAME 0x765d4a50 imu_app_temp_cali.temp_ready_0
+NAME 0x723fcb67 imu_app_temp_cali.step_0
+NAME 0x074049d5 imu_app_temp_cali.dst_cali_temp_0
+NAME 0x7139b60b imu_app_temp_cali.bias_flag.temp_min_0
+NAME 0x6943b60b imu_app_temp_cali.bias_flag.temp_max_0
+NAME 0xfd2b0778 imu_app_temp_cali.bias_flag.temp_cali_status_0
+NAME 0xe5a00bc3 imu_app_temp_cali.bias_flag.base_cali_status_0
+NAME 0x2477f435 imu_app_temp_cali.bias_flag.cfg_temp_cali_fw_version_0
+NAME 0x6b7b8a5a imu_app_temp_cali.bias_flag.cur_temp_cali_fw_version_0
+NAME 0x1c69737b imu_temp.cfg_temp_k_0
+NAME 0xb765ced5 imu_temp.cur_dst_temp_0
+NAME 0x44adfb9a imu_check_status.check_flag_0
+NAME 0xbaf79df9 imu_check_status.status_0
+NAME 0xd1339a5c g_real.config_status.motor_test_output_bit_0
+NAME 0xa0fc750c g_real.config_status.motor_test_output_timer_0
+NAME 0x93cdfcff g_real.config_status.motor_test_request_bit_0
+NAME 0x039e4213 g_real.config_status.motor_test_request_timer_0
+NAME 0xc9a5ad5e g_real.config_status.factory_output_test_request_0
+NAME 0x2ca6d420 g_real.config_status.fill_from_simulator_0
+NAME 0xa7d83fdb g_real.config_status.simulator_gps_svn_0
+NAME 0x705d2ccb local_simulator_0
+NAME 0x8c4dafd2 run_mode_0
+NAME 0xc30b18f9 default_gps_svn_0
+NAME 0xded84280 initial_lati_0
+NAME 0x58039b5e initial_longti_0
+NAME 0xea21815e default_mvo_flag_0
+NAME 0x0c29f4a5 default_gps_hdop_0
+NAME 0x32f915d9 wind_speed[0]_0
+NAME 0x33f915d9 wind_speed[1]_0
+NAME 0x34f915d9 wind_speed[2]_0
+NAME 0xda45471c test_deformation_0
+NAME 0x875c192e g_led_flash_on_usb_0
+NAME 0xc06cad4d g_battery_test_inject.flag_allow_test_inject_0
+NAME 0xa5fba04b g_battery_test_inject.test_capacity_percentage_0
+NAME 0x96f194eb g_battery_test_inject.test_right_0
+NAME 0xef97e740 g_battery_test_inject.current_status_0
+NAME 0xdea5de58 g_battery_test_inject.main_vol_0
+NAME 0xeedcfaf5 g_battery_test_inject.temperature_0
+NAME 0xed9ae4bc g_battery_test_inject.cell_vol_0
+NAME 0xd149173b g_real.wm610_app_command.function_command_state_0
+NAME 0x23494583 g_real.wm610_app_command.function_command_0
+NAME 0x4cf19f15 ioc_type__0
+NAME 0x93770711 range.control.control_mode[0]
+NAME 0x93770811 range.control.control_mode[1]
+NAME 0x93770911 range.control.control_mode[2]
+NAME 0x10989b1d range.go_home.standby
+NAME 0x0b5414a8 range.go_home.start
+NAME 0x68b3d1a8 range.ioc.mode[0]
+NAME 0x68b3d2a8 range.ioc.mode[1]
+NAME 0x68b3d3a8 range.ioc.mode[2]
+NAME 0xbf0ac55e range.gear.show
+NAME 0xb40bba4c range.gear.hide
+NAME 0x1a14cba7 g_status.farm.app_stop_motor_start_0
+NAME 0x9d032c32 prop_cover_limit_enable_0
+NAME 0x2b53609f g_config.control.tilt_exp_mid_point_0
+NAME 0x4cd4784b g_config.miss_rtk.use_rtk_data_0
+NAME 0x5d45e217 g_config.gear_cfg.auto_control_enable_0
+NAME 0x9eeedfaa g_config.control.brake_sensitivity_0
+NAME 0x43224470 g_config.control.rc_tilt_sensitivity_0
+NAME 0x9e5185f3 g_config.fdi_open.ctrl_vibrate_fdi_open_0
+NAME 0x97be0658 g_config.mvo_cfg.mvo_func_en_0
+NAME 0xedce59a2 g_config.misc_cfg.forearm_lamp_ctrl_0
+NAME 0x60fd01df g_config.avoid_obstacle_limit_cfg.avoid_obstacle_enable_0
+NAME 0x9236d151 g_config.followme_cfg.enable_change_homepoint_0
+NAME 0x5469c373 g_config.fdi_open.fit_open_0
+NAME 0x5be2d2a3 g_config.fdi_switch.open_0
+NAME 0x086fd3cb g_config.fdi_switch.way_0
+NAME 0xc4de9751 g_config.fdi_switch.ns.default_index_0
+NAME 0x380e4446 g_config.fdi_switch.ns.with_fdi_0
+NAME 0x96f0c9c6 g_config.fdi_switch.ns.by_fdi_0
+NAME 0xe4dd78bc g_config.fdi_switch.ns.random_test_0
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+NAME 0x36dcca66 g_config.fdi_switch.gps.default_index_0
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+NAME 0xfb5843e6 g_config.fdi_switch.gps.with_fdi_0
+id=0xf8 00b92362c400
+id=0xf8 005698d14300
+id=0xf8 0061c78ecc00
+id=0xf8 00504a5d7601
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+NAME 0xca118d0f g_config.fdi_switch.gps.by_fdi_0
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+NAME 0x88adeabc g_config.fdi_switch.gps.random_test_0
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+NAME 0x8747cf18 g_config.fdi_switch.compass.default_index_0
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+NAME 0xb09b8c82 g_config.fdi_switch.compass.with_fdi_0
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00
+NAME 0x3efd4255 g_config.fdi_switch.compass.by_fdi_0
+id=0xf8 00
+id=0xf8 00
+id=0xf8 00322c039d00
+id=0xf8 009f60532bcdcccc3e
+id=0xf8 004b78d44c00
+id=0xf8 0017e2455d00
+id=0xf8 00aadfee9e5000
+id=0xf8 00704422436400
+id=0xf8 00f385519e00
+id=0xf8 005806be9701
+NAME 0x23383b29 g_config.fdi_switch.compass.random_test_0
+id=0xf8 00a259ceedff
+id=0xf8 00df01fd6000
+id=0xf8 00
+id=0xf8 0073c3695400
+id=0xf8 00a3d2e25b00
+id=0xf8 00
+id=0xf8 005197dec400
+id=0xf8 0046440e3801
+NAME 0x5c24b4dc g_config.fdi_switch.gyro.default_index_0
+id=0xf8 00c6c9f09601
+id=0xf8 00bc78dde400
+id=0xf8 0066cadc3600
+id=0xf8 00e64358fb01
+id=0xf8 000f8d11ca01
+NAME 0xe15fb8af g_config.fdi_switch.gyro.with_fdi_0
+id=0xf8 00bceaad8800
+id=0xf8 0018cf478700
+id=0xf8 00828c9bb001
+id=0xf8 005542fd3e01
+NAME 0x7b067318 g_config.fdi_switch.gyro.by_fdi_0
+id=0xf8 00293b382300
+id=0xf8 00dcb4245c00
+NAME 0x512c1005 g_config.fdi_switch.gyro.random_test_0
+id=0xf8 00afb85fe101
+NAME 0x2816e656 g_config.fdi_switch.acc.default_index_0
+id=0xf8 001873067b01
+id=0xf8 0005102c5100
+NAME 0x6b554f88 g_config.fdi_switch.acc.with_fdi_0
+NAME 0x32cafd0f g_config.fdi_switch.acc.by_fdi_0
+id=0xf8 0056e6162800
+NAME 0x27dddbf8 g_config.fdi_switch.acc.random_test_0
+id=0xf8 00884f556b01
+NAME 0xec8cb49b g_config.fdi_switch.baro.default_index_0
+NAME 0xdee300af g_config.fdi_switch.baro.with_fdi_0
+id=0xf8 000ffdca3201
+NAME 0x2306709d g_config.fdi_switch.baro.by_fdi_0
+id=0xf8 00f8dbdd2700
+NAME 0x511fa06d g_config.fdi_switch.baro.random_test_0
+id=0xf8 009bb48cec00
+NAME 0xb9fbd23d g_config.fdi_sensor[0].gyr_bias_0
+NAME 0xb9fbd2ba g_config.fdi_sensor[1].gyr_bias_0
+id=0xf8 00af00e3de01
+id=0xf8 009d70062301
+NAME 0xb9fbd337 g_config.fdi_sensor[2].gyr_bias_0
+id=0xf8 006da01f5100
+id=0xf8 003dd2fbb91f79323c
+id=0xf8 00bad2fbb900000000
+id=0xf8 0037d3fbb900000000
+NAME 0xb9fd2774 g_config.fdi_sensor[0].gyr_stat_0
+NAME 0xb9fd27f1 g_config.fdi_sensor[1].gyr_stat_0
+id=0xf8 007427fdb907
+NAME 0xb9fd286e g_config.fdi_sensor[2].gyr_stat_0
+id=0xf8 00f127fdb901
+NAME 0x6efb3a17 g_config.fdi_sensor[0].acc_bias_0
+id=0xf8 006e28fdb901
+id=0xf8 00173afb6e00405d3a
+NAME 0x6efb3a94 g_config.fdi_sensor[1].acc_bias_0
+NAME 0x6efb3b11 g_config.fdi_sensor[2].acc_bias_0
+id=0xf8 00943afb6e00000000
+NAME 0x6efc8f4e g_config.fdi_sensor[0].acc_stat_0
+id=0xf8 00113bfb6e00000000
+id=0xf8 004e8ffc6e07
+NAME 0x6efc8fcb g_config.fdi_sensor[1].acc_stat_0
+NAME 0x6efc9048 g_config.fdi_sensor[2].acc_stat_0
+id=0xf8 00cb8ffc6e01
+NAME 0x86fba726 g_config.fdi_sensor[0].mag_over_0
+id=0xf8 004890fc6e01
+id=0xf8 0026a7fb864cb88e43
+NAME 0x86fba7a3 g_config.fdi_sensor[1].mag_over_0
+NAME 0x86fba820 g_config.fdi_sensor[2].mag_over_0
+id=0xf8 00a3a7fb8600000000
+NAME 0x82fdbb1c g_config.fdi_sensor[0].mag_stat_0
+id=0xf8 0020a8fb8600000000
+id=0xf8 001cbbfd8205
+NAME 0x82fdbb99 g_config.fdi_sensor[1].mag_stat_0
+NAME 0x82fdbc16 g_config.fdi_sensor[2].mag_stat_0
+id=0xf8 0099bbfd8201
+id=0xf8 0016bcfd8201
+NAME 0xf00b1958 g_cfg_debug.imu_cali_state[0][1]_0
+NAME 0xf0101958 g_cfg_debug.imu_cali_state[1][1]_0
+id=0xf8 0058190bf000
+id=0xf8 00581910f000
+NAME 0xf0151958 g_cfg_debug.imu_cali_state[2][1]_0
+NAME 0x11544d3d g_status.acc_gyro[0].state_0
+id=0xf8 00581915f000
+NAME 0x1154663d g_status.acc_gyro[1].state_0
+id=0xf8 003d4d541100
+id=0xf8 003d66541100
+NAME 0x11547f3d g_status.acc_gyro[2].state_0
+NAME 0xb29254ea g_status.acc_gyro[0].cali_cnt_0
+id=0xf8 003d7f541100
+id=0xf8 00ea5492b200
+NAME 0xb2925567 g_status.acc_gyro[1].cali_cnt_0
+id=0xf8 00675592b200
+NAME 0xb29255e4 g_status.acc_gyro[2].cali_cnt_0
+NAME 0x03e5c864 g_status.acc_gyro[0].temp_ready_0
+id=0xf8 00e45592b200
+NAME 0x0462c864 g_status.acc_gyro[1].temp_ready_0
+id=0xf8 0064c8e50301
+NAME 0x04dfc864 g_status.acc_gyro[2].temp_ready_0
+id=0xf8 0064c8620400
+NAME 0x2873530b g_status.ns_busy_dev_0
+id=0xf8 0064c8df0400
+NAME 0xbfef51d2 g_config.aircraft.multi_rotor_type_0
+id=0xf8 000b5373285505
+NAME 0x5f6a490c g_config.gear_cfg.gear_func_en_0
+id=0xf8 00d251efbf01
+NAME 0xb2e6a5e9 g_config.avoid_obstacle_limit_cfg.user_avoid_enable_0
+id=0xf8 000c496a5f00
+NAME 0x9c044cca g_config.go_home.avoid_enable_0
+id=0xf8 00e9a5e6b200
+NAME 0x3677abc5 g_config.sport_cfg.thr_exp_mid_point_0
+id=0xf8 00ca4c049c00
+id=0xf8 00
+NAME 0x429ba0fa g_config.sport_cfg.yaw_exp_mid_point_0
+NAME 0xca4a0e1b g_config.sport_cfg.tilt_exp_mid_point_0
+id=0xf8 00
+NAME 0x929097ef g_status.topology_verify.user_interface.imu_status_0
+id=0xf8 00
+NAME 0xf56339ef g_status.topology_verify.user_interface.mag_status_0
+id=0xf8 00ef97909201
+id=0xf8 00ef3963f501
+NAME 0x6ad4c516 g_config.arm_action_type_0
+id=0xf8 00
+NAME 0x1fca25eb g_config.flying_limit.user_avoid_ground_enable_0
+NAME 0x3454b6b5 g_config.airport_limit_cfg.cfg_sim_disable_limit_0
+NAME 0x66e5d569 g_config.topology_verify.single_mult_controller_0
+id=0xf8 00eb25ca1f01
+NAME 0x14633705 g_status.user_info.statistical_info.total_motor_start_time_0
+NAME 0x17842e67 g_status.user_info.statistical_info_last.total_motor_start_time_0
+id=0xf8 00b5b6543401
+id=0xf8 0069d5e56600
+id=0xf8 0005376314664d6247
+id=0xf8 00672e841700000000
+NAME 0x489a8c54 g_status.all_gyr_acc.msc_current_side_0
+NAME 0x7b7100aa g_status.all_gyr_acc.msc_sampled_side_0
+id=0xf8 00548c9a4800
+NAME 0x6f9e60e8 g_config.gyr_acc_cfg.msc_require_side_0
+id=0xf8 00aa00717b00
+id=0xf8 00e8609e6f3e
+NAME 0xdfa79daa g_status.all_gyr_acc.cali_state_0
+id=0xf8 00aa9da7df00
+NAME 0x39c5ca21 g_status.all_gyr_acc.cali_cnt_0
+id=0xf8 0021cac53900
+NAME 0xf6ec96be g_status.all_gyr_acc.need_cali_type_0
+NAME 0x89caf4f6 g_cfg_debug.overshot_enable_0
+id=0xf8 00be96ecf600
+id=0xf8 00f6f4ca8900
+NAME 0x7a173d91 RC_STOP_MOTOR_TYPE_0
+NAME 0x58e51319 g_config.gear_cfg.hide_gear_en_0
+id=0xf8 00913d177a06
+id=0xf8 001913e55800
+NAME 0x10a50a2b g_config.gear_cfg.on_ground_hide_gear_en_0
+id=0xf8 00
+NAME 0x02e8a1d5 g_config.mr_ctrl.prop_cover_en_0
+NAME 0xefdf16ad g_config.misc_cfg.gimbal_priority_en_0
+id=0xf8 00d5a1e80200
+id=0xf8 00ad16dfef00
+NAME 0xd2f1d2b3 g_config_airport_limit_cfg_cfg_1860_limit_switch
+NAME 0xecac3009 g_config.misc_cfg.quick_circle_auto_en_0
+id=0xf8 00
+NAME 0x1ebed955 g_config.control.vert_vel_down_adding_0
+id=0xf8 00
+NAME 0x32f1d5b4 g_config.flying_limit.roof_limit_enable_0
+id=0xf8 0055d9be1e00
+id=0xf8 00b4d5f13200
+NAME 0x53a1ba94 g_cfg_debug.follow_gimbal_yaw_when_watch_0
+NAME 0x4cd4784b g_config.miss_rtk.use_rtk_data_0
+id=0xf8 0094baa15301
+NAME 0x59101d22 imu_proprller
+id=0xf8 004b78d44c00
+id=0xf8 00
+NAME 0x1b4a3ee7 g_config_factory_test_cfg_enale
+NAME 0xf3edc169 mass_center_calibrated_0
+id=0xf8 00
+id=0xf8 0069c1edf300
+NAME 0x95544807 g_config.mode_normal_cfg.tilt_atti_range_0
+id=0xf8 00074854950000a041

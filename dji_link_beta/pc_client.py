@@ -14,7 +14,7 @@ Transport:
 Flight (motors) — only with --live AND after ARM (Enter). Gimbal/camera — always.
 
 Control (hold): W/S pitch · A/D roll · Space/Shift throttle up/down · Q/E yaw
-Hotkeys: Enter ARM/DISARM · T takeoff · L landing · H RTH(emergency) · C control on/off
+Hotkeys: Enter ARM/DISARM · T takeoff · C control (ONLY after takeoff) · L landing · H RTH(emergency)
         V ground-station · [ ] or Up/Down gimbal (HOLD) · N recenter · P photo · R record
         Z/X zoom +/- · Tab console · Esc exit
 Console (Tab): takeoff/land/rth/gimbal <deg>/photo/rec start|stop/zoom <x>/iso <n>/
@@ -140,10 +140,13 @@ class Client:
         self.packet_samples = {}    # (sender,set,id) -> (len, hex) for offline calibration
         self.capture_f = None       # append raw OSD/battery packets over time (--capture)
         self.raw_dump_f = None      # append every non-video composite unit (--dump-raw)
+        self._ptable_f = None       # param-table dump (0x03/0xF0 responses) -> params_table.txt
         self.capture_t0 = time.time()
         self.control = False        # whether control has been taken
         self.gs = False             # ground-station mode
         self.armed = False          # whether stick stream/takeoff is allowed
+        self.stick_flag = 0         # 0x03/0x8E mode-combo byte (J cycles it to find the right one)
+        self.stick_mobilerc = False # M toggles 0x01/0x0A (primary) vs 0x01/0x02 (mobile-RC fallback)
         self.axes = {"throttle": 0.0, "yaw": 0.0, "pitch": 0.0, "roll": 0.0}
         self.lock = threading.Lock()
         self.running = True
@@ -272,10 +275,25 @@ class Client:
             if p.cmd_set == 0x03 and p.cmd_id in (0xF0, 0xF7, 0xF8, 0xF9) and p.sender != 0x02:
                 # Log any FC param reply raw so we can see the format (name-parse below).
                 log(f"[param] id=0x{p.cmd_id:02x} len={len(p.payload)} {p.payload.hex()}")
+                if p.cmd_id in (0xF8, 0xF9) and self._ptable_f is not None:
+                    try:
+                        self._ptable_f.write(f"id=0x{p.cmd_id:02x} {p.payload.hex()}\n")
+                        self._ptable_f.flush()
+                    except Exception:
+                        pass
                 if p.cmd_id in (0xF0, 0xF7) and len(p.payload) > 20:
                     name = p.payload[19:].split(b"\x00", 1)[0].decode("ascii", "replace")
                     if name.strip():
                         log(f"[param]   name={name}")
+                    # Dump the full param-info struct to a file so we can rebuild the drone's
+                    # REAL param table offline (index/hash/type/min/max/value + name).
+                    try:
+                        if self._ptable_f is None:
+                            self._ptable_f = open("params_table.txt", "a")
+                        self._ptable_f.write(f"id=0x{p.cmd_id:02x} {p.payload.hex()} name={name}\n")
+                        self._ptable_f.flush()
+                    except Exception:
+                        pass
             self.tele.feed_packet(p)
 
     def start_rx(self):
@@ -347,17 +365,39 @@ class Client:
                 with self.lock:
                     a = dict(self.axes)
                 try:
-                    self.d.set_sticks(a["roll"], a["pitch"], a["yaw"], a["throttle"])
+                    # Primary = VirtualJoyStickHelper 0x01/0x0A (byte-verified). M toggles the
+                    # mobile-RC fallback 0x01/0x02 for the legacy WM160 (IsSupportVirtualJoyStick=false).
+                    if self.stick_mobilerc:
+                        self.d.set_sticks_mobilerc(a["roll"], a["pitch"], a["yaw"], a["throttle"])
+                    else:
+                        self.d.set_sticks(a["roll"], a["pitch"], a["yaw"], a["throttle"])
                 except Exception:
                     pass
+            # 20 Hz (0.05s) — exactly matches the working MSDK sample (dbaldwin
+            # VirtualSticksViewController: Timer 0.05, velocity/angularVelocity/ground). Our
+            # DUML equivalent = VirtualJoyStickHelper 0x01/0x0A + auth 0x49/0x80 + GS 0x03/0x80.
             time.sleep(0.05)
 
-    # whether it's safe to send a flight command
+    # whether it's safe to send a takeoff / motor-start command
     def _flight_ok(self) -> bool:
         if not self.live:
             self.last_msg = "flight commands are blocked (run with --live)"
             return False
+        if not self.armed:
+            self.last_msg = "not ARMED — press Enter to arm before takeoff"
+            return False
         return True
+
+    # the aircraft must be airborne before virtual stick is taken (MSDK: enable
+    # virtual stick only after motor start / while flying — VIRTUAL_STICK_NATIVE.md).
+    # The is_flying/motors flags stay 0 on Mini in ATTI/no-GPS (TELEMETRY_TRUTH.md),
+    # so ALTITUDE is the reliable signal: baro height rises off the ground.
+    AIRBORNE_ALT_M = 0.5
+    def _airborne(self) -> bool:
+        st = self.tele.state
+        if st.altitude_m is not None and st.altitude_m > self.AIRBORNE_ALT_M:
+            return True
+        return bool(st.is_flying) or bool(st.motors_on)
 
     def msg(self, s):
         self.last_msg = s
@@ -396,14 +436,33 @@ def run_console_cmd(cli: Client, line: str):
     try:
         if c in ("params", "param") and not (args and not args[0].lstrip("-").isdigit()):
             # Enumerate FC param names from the drone: params [start] [count]
+            # WM160 does NOT answer get-param-info-by-index (0xF0). Instead iterate the json
+            # param NAMES and READ each by hash (0xF8): valid params reply with a multi-byte
+            # struct, missing ones reply 1 byte. Replies are dumped (with hash) to params_table.txt;
+            # map hash->name offline via param_hash. args: params [start] [count]
             start = int(args[0]) if args else 0
-            count = int(args[1]) if len(args) > 1 else 50
-            import threading as _t, time as _tm
+            count = int(args[1]) if len(args) > 1 else 100000
+            import threading as _t, time as _tm, json as _j
+            try:
+                _raw = _j.load(open("flyc_param_infos.json"))
+                _names = list(_raw.keys()) if isinstance(_raw, dict) else \
+                    [x.get("name") for x in _raw if isinstance(x, dict) and x.get("name")]
+            except Exception as e:
+                _names = []
+                cli.msg(f"could not load flyc_param_infos.json: {e}")
+            _sel = _names[start:start + count]
+            if cli._ptable_f is None:
+                try: cli._ptable_f = open("params_table.txt", "a")
+                except Exception: pass
             def _dump():
-                for i in range(start, start + count):
-                    d.get_param_info(i); _tm.sleep(0.05)
+                from param_hash import param_hash as _ph
+                for nm in _sel:
+                    if cli._ptable_f:
+                        cli._ptable_f.write(f"NAME 0x{_ph(nm):08x} {nm}\n"); cli._ptable_f.flush()
+                    d.read_param(nm); _tm.sleep(0.06)
+                cli.msg(f"param read sweep done ({len(_sel)} names) -> params_table.txt")
             _t.Thread(target=_dump, daemon=True).start()
-            cli.msg(f"requesting param names {start}..{start+count} (see [param] lines)")
+            cli.msg(f"reading {len(_sel)} params by hash (start={start}); valid ones reply multi-byte")
         elif c in ("readparam", "rp", "param") and args:
             aliases = {"height": "g_config.flying_limit.max_height_0",
                        "radius": "g_config.flying_limit.max_radius_0",
@@ -415,8 +474,13 @@ def run_console_cmd(cli: Client, line: str):
         elif c in ("takeoff", "to") and cli._flight_ok(): d.takeoff(); cli.msg("takeoff")
         elif c == "land": d.land(); cli.msg("land")
         elif c in ("rth", "gohome"): d.return_to_home(); cli.msg("RTH")
-        elif c == "control": cli.control = args and args[0] == "on"; \
-            (d.request_control() if cli.control else d.release_control()); cli.msg(f"control={cli.control}")
+        elif c == "control":
+            want = bool(args and args[0] == "on")
+            if want and not cli._airborne():
+                cli.msg("control on blocked: take off first (virtual stick only after motors start)")
+            else:
+                cli.control = want
+                (d.request_control() if cli.control else d.release_control()); cli.msg(f"control={cli.control}")
         elif c in ("gs", "groundstation"): cli.gs = args and args[0] == "on"; \
             d.set_ground_station_mode(cli.gs); cli.msg(f"ground_station={cli.gs}")
         elif c == "gimbal":
@@ -446,6 +510,10 @@ def run_console_cmd(cli: Client, line: str):
 
 MOUSE_YAW_SENS = 0.010          # yaw axis per pixel of horizontal mouse motion
 MOUSE_GIMBAL_SENS = 0.15        # gimbal degrees per pixel of vertical mouse motion
+# FC virtual-stick (0x03/0x8E) physical scaling — conservative for first tests.
+STICK_ROLLPITCH_MS = 3.0        # roll/pitch full-deflection m/s (MSDK velocity mode)
+STICK_YAW_DPS = 45.0            # yaw full-deflection deg/s
+STICK_VERT_MS = 1.5            # throttle full-deflection m/s (vertical velocity)
 
 
 class _W:
@@ -742,6 +810,13 @@ def run_ui(cli: Client):
                     big = pygame.font.SysFont("consolas", fsize + 1, bold=True)
                 elif ev.key == pygame.K_k:
                     cli.d.request_i_frame(); cli.msg("keyframe requested")
+                elif ev.key == pygame.K_j:
+                    # cycle the 0x03/0x8E mode-combo flag to find the one the FC honours
+                    cli.stick_flag = (cli.stick_flag + 1) & 0xFF
+                    cli.msg(f"stick flag = 0x{cli.stick_flag:02x} (J to change)")
+                elif ev.key == pygame.K_m:
+                    cli.stick_mobilerc = not cli.stick_mobilerc
+                    cli.msg(f"stick frame = {'0x01/0x02 mobile-RC' if cli.stick_mobilerc else '0x01/0x0A'}")
                 elif ev.key == pygame.K_g:
                     cli.dump_packets()      # capture packet samples for calibration
                 elif ev.key == pygame.K_u:
@@ -760,9 +835,13 @@ def run_ui(cli: Client):
                 elif ev.key == pygame.K_l: cli.d.land(); cli.msg("land")
                 elif ev.key == pygame.K_h: cli.d.return_to_home(); cli.msg("RTH (emergency)")
                 elif ev.key == pygame.K_c:
-                    cli.control = not cli.control
-                    (cli.d.request_control() if cli.control else cli.d.release_control())
-                    cli.msg(f"control={cli.control}")
+                    if not cli.control and not cli._airborne():
+                        cli.msg("C blocked: take off FIRST — virtual stick must be enabled AFTER motors start (Enter -> T -> C)")
+                    else:
+                        cli.control = not cli.control
+                        cli.d.enable_virtual_stick(cli.control)   # request control + ground-station
+                        cli.gs = cli.control
+                        cli.msg(f"virtual-stick={cli.control} (control+ground_station)")
                 elif ev.key == pygame.K_v:
                     cli.gs = not cli.gs; cli.d.set_ground_station_mode(cli.gs); cli.msg(f"ground_station={cli.gs}")
                 elif ev.key == pygame.K_n:
@@ -837,9 +916,9 @@ def run_ui(cli: Client):
         with cli.lock:
             a = cli.axes
         line(screen, 182, f"thr={a['throttle']:+.2f} yaw={a['yaw']:+.2f} pitch={a['pitch']:+.2f} roll={a['roll']:+.2f}")
-        line(screen, 214, "Mouse=yaw+gimbal  WASD=move  Space/Shift=throttle  Enter=ARM T=takeoff L=land H=RTH",
+        line(screen, 214, "ORDER: Enter=ARM -> T=takeoff -> C=control (C only AFTER takeoff)  |  L=land H=RTH",
              font, (150, 150, 160))
-        line(screen, 232, "C=control V=gs N=recenter P=photo R=record Z/X=zoom K=keyframe  Tab=console  Esc=settings",
+        line(screen, 232, "WASD=move Space/Shift=throttle Mouse=yaw+gimbal  V=gs N=recenter P=photo R=record Z/X=zoom  Tab=console Esc=settings",
              font, (150, 150, 160))
         if console:
             pygame.draw.rect(screen, (30, 30, 40), (0, 300, screen.get_width(), 60))
@@ -947,7 +1026,11 @@ def main() -> int:
         t = CompositeTransport(NetTransport(host, port)); mode = "pi"
 
     cli = Client(t, mode, live)
-    cli.d.encrypt_config = (mode == "pi")   # radio path encrypts config; direct USB is plaintext
+    # Config-param writes: SIMPLE encryption is CONDITIONAL on the link being encrypted
+    # (KEYVALUE_DUML_TRANSPORT.md). Our RC/AOA link is plaintext (plain 0x03/0x80 works),
+    # so the FC expects plaintext 0xF9 too — forcing encryption made it silently drop the
+    # unlock write. Keep plaintext; flip to True only if a future link negotiates encryption.
+    cli.d.encrypt_config = False
     cli.fullscreen = not args.windowed
     if args.dump_video:
         cli.dump_f = open(args.dump_video, "wb")

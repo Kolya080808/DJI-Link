@@ -158,16 +158,28 @@ class AoaDevice:
         self._running = True
         try:
             while self._running:
-                switched = self._run_phase()
-                if not switched:
-                    log("phase loop ended without START — stopping AOA thread")
+                try:
+                    switched = self._run_phase()
+                except Exception:
+                    traceback.print_exc()
+                    switched = False
+                if not self._running:
                     break
-                self._phase = 2   # after START we run as an accessory
-                # The gadget is now closed, i.e. detached from the bus. Give the host a
-                # moment to register the disconnect before we re-attach as the accessory,
-                # which is exactly the re-enumeration AOA expects after START.
-                log("re-enumerating as accessory in 0.5s")
-                time.sleep(0.5)
+                if switched:
+                    self._phase = 2   # after START we run as an accessory
+                    # The gadget is now closed, i.e. detached from the bus. Give the host a
+                    # moment to register the disconnect before we re-attach as the accessory,
+                    # which is exactly the re-enumeration AOA expects after START.
+                    log("re-enumerating as accessory in 0.5s")
+                    time.sleep(0.5)
+                else:
+                    # Phase ended without START — the RC was unplugged / the host went away.
+                    # _run_phase's finally already closed the gadget fd (releasing the UDC);
+                    # re-initialise from phase 1 so a re-plugged RC re-enumerates cleanly
+                    # instead of hitting "UDC busy" from a stale binding.
+                    log("RC disconnected / host gone — releasing device, re-init from phase 1 in 1s")
+                    self._phase = 1
+                    time.sleep(1.0)
         except Exception:
             # This runs in a background thread; without this the traceback is easy to miss.
             print("[aoa] FATAL in AOA thread:", flush=True)
@@ -239,7 +251,13 @@ class AoaDevice:
             log("  (no events at all => the host is not enumerating us: check that the cable is a "
                 "DATA cable, that it is in the Pi's middle 'USB' port, and that the host supplies VBUS)")
             while self._running:
-                etype, ctrl, data = g.event_fetch()
+                try:
+                    etype, ctrl, data = g.event_fetch()
+                except OSError as e:
+                    # Host physically gone (RC unplugged): stop this phase so run_forever
+                    # closes the fd and re-inits — otherwise the fd lingers holding the UDC.
+                    log(f"event_fetch failed ({e}) — RC/host gone, ending phase to release UDC")
+                    break
                 log(f"event: {_EVENT_NAMES.get(etype, etype)}")
                 if etype == USB_RAW_EVENT_CONNECT:
                     continue

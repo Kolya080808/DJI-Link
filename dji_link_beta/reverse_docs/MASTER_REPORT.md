@@ -73,15 +73,32 @@ capabilities (26b), 0x08/0x42 fps, 0x08/0x69 bandwidth. There is no separate "st
 Takeoff (starts the motors): `takeoff()` **0x03/2A/01**. Cancels: takeoff 0x0D, land 0x0E, RTH 0x0C.
 **RTH is reliable on the Mini 1** (climb→home→land) — we use it as an emergency button.
 
-### 3.2 Virtual stick — TWO variants (we will check on HW which one the FC accepts)
-Both: 4 channels, `value = round(axis·660 + 1024)`, clamp **[364..1684]**, center 1024.
-- **A. special_tlv** — `cmd_set 0x01 / cmd_id 0x0A`, TLV container (our `drone.set_sticks`).
-  4×11-bit in uint64 (bits 8/19/30/41 + bit62) + flags 0x0200 + TLV 0x55/0x04.
-- **B. mobilerc joystick** — `cmd_set 0x01 / cmd_id 0x02` (`uav_action_virtual_rc_joystick`),
-  13 bytes: [0]=0, [1..6]=4×11-bit, [B..C]=flags 0x0200|(mode<<10). Simpler, no TLV.
+### 3.2 Virtual stick — command is `0x01/0x0A`, channel order VERIFIED from the RC dump
+Channel encoding: 4 channels, `value = round(axis·660 + 1024)`, clamp **[364..1684]**, center 1024.
+Command = **special_tlv `cmd_set 0x01 / cmd_id 0x0A`**, receiver FC 0x03 (VirtualJoyStickHelper),
+4×11-bit in uint64 (bits 8/19/30/41 + bit62) + flags 0x0200 + TLV 0x55/0x04 (our `drone.set_sticks`).
 
-**MSDK confirms: Virtual Stick WORKS on the Mavic Mini** (supported since SDK 4.13). So the FC
-accepts these commands — our injection will almost certainly work. There is no Course/Home Lock on the Mini.
+**Channel ORDER = `roll, pitch, throttle, yaw` — VERIFIED** by capturing the RC's own channel
+report (`sender 0x06, cmd_set 0x06 / cmd_id 0x05`, 6× u16 LE, 364..1024..1684) while moving each
+physical stick: ch0=roll ch1=pitch ch2=throttle ch3=yaw ch4=1024(aux) ch5=4096(const). (Earlier
+`roll,pitch,yaw,throttle` had yaw/throttle swapped — fixed in `control.py`.)
+
+Preconditions (MSDK `setVirtualStickModeEnabled`, VERIFIED path): `request_control` 0x49/0x80 01
+to receiver 0x00 **and** 0x03 + `set_ground_station_mode` 0x03/0x80 01 (our `enable_virtual_stick`),
+then takeoff/arm, then stream at **20 Hz (0.05 s)** to match the sample exactly. MSDK semantics
+(dbaldwin VirtualSticksViewController.swift): velocity / angularVelocity / **ground** coordinate,
+physical m/s & deg/s. Mavic Mini has virtual stick since MSDK 4.13; no Course/Home Lock.
+
+**HW status (2026-07-17): takeoff/land VERIFIED working; sticks NOT yet honored.** The `0x01/0x0A`
+payload is now **byte-perfect** (pinned from `libsdk_jni.so` VirtualJoyStickHelper, VIRTUAL_STICK_NATIVE.md),
+channel order verified from the RC dump, all preconditions sent, 20 Hz — the FC still does not move.
+**RC-authority is NOT the blocker:** the working dbaldwin sample runs with the phone plugged INTO the
+remote controller (phone→RC→drone), i.e. its virtual sticks are honored *while the RC is connected*, so
+a connected RC competing for authority cannot be the reason ours are ignored. The remaining suspects are
+an FC-side state/mode the MSDK sets internally that we haven't replicated (candidate: `g_config.control.*`
+control-mode config, or an arm/joystick-mode state that shows up as `FLYC_STATE=JOYSTICK(17)`). **Next
+decisive diagnostic: raw-dump the OSD `FLYC_STATE` while streaming sticks — if it never becomes JOYSTICK,
+the command is being rejected upstream of motion; if it does, the values/mapping are wrong.**
 
 ### 3.3 Gimbal (camera) — VERIFIED, it moves
 - speed `0x04/0x0C`: int16 LE yaw·10,roll·10,pitch·10 + `0x81 00` (°/s, send ~10 Hz)
@@ -131,29 +148,53 @@ Plus: wind, RemainingFlightTime, GPS-spoofing detect, gimbal angles, ADS-B, alti
 ---
 
 ## 6. DIAGNOSTICS "why the motors won't start" — `diag_codes.py`
-OSD byte +0x33 → reason (96 codes): 0=OK, 1=compass, 3=device locked, 5=IMU calibration,
-7=IMU warmup, 8=compass calibration, 10=no GPS in novice, 13=low voltage… (text 30xxx —
-server-side HMS). `test_all.py`/`checks.py` read this via the drone's direct USB and suggest what to fix.
+Motor-start-fail cause = OSD (`0x03/0x43`) byte **+0x26 & 0x7F** (VERIFIED — earlier +0x33 was wrong):
+0=OK, 1=compass, 3=device locked, 5=IMU calibration, 7=IMU warmup, 8=compass calibration,
+10=no GPS in novice, 13=low voltage, 147=DARK_NEED_GPS… (text 30xxx — server-side HMS). Empty/0 =
+FC reports no block. The HUD shows this reason only when non-zero.
 
 ---
 
-## 7. FC PARAMETERS — `flyc_param_infos.json` (687 of them)
-Limits and settings, readable/writable via 0x03/F8(read)/F9(write). Key ones:
-- `flying_limit.max_height` def 120, **max 500**; `max_radius` def 30, **max 5000**; `radius_limit` off.
-- `serial_api_cfg.advance_function_enable` def=**0** — possibly the external-control gate (to be checked).
-- `go_home.fixed_go_home_altitude` — RTH altitude.
-- ⚠️ **Limitation:** parameters are addressed by the **name hash** (`"g_config.section.field_0"`), and the
-  hash algorithm itself is computed at runtime behind the packer — **not obtainable statically**. To write
-  parameters (remove limits/raise speed), we need ONE live (name→hash) via Frida/traffic
-  capture, then brute-force the variant. For now — only commands that need no hash (takeoff/land/sticks/gimbal).
+## 7. FC PARAMETERS — WORKS (read + write, plaintext) ✅ VERIFIED ON HARDWARE
+Read `0x03/0xF8` [hash u32 LE] → reply `[retcode][hash u32][value]`; write `0x03/0xF9` [hash u32][value].
+Sender 0x02 → receiver 0x03.
+- **Name→hash SOLVED** (`param_hash.py`): `h=0; for b in name.encode('gbk'): h=(b+(h<<8)) % (2**32-5)`
+  — matches dji-firmware-tools and the app's native `GroudStation.hashFromString`. No Frida needed.
+- **★ Encryption is CONDITIONAL, not mandatory** (from `libsdk_jni.so`): the SIMPLE cipher is applied
+  only when the *link* is encrypted. Our RC/AOA link is plaintext (plain `0x03/0x80` works), so param
+  writes must be **plaintext (cmd_type 0x40)**. Forcing encryption made the FC SILENTLY DROP every
+  read/write — that was the whole reason the param channel looked dead for the entire project.
+  Fix: `encrypt_config = False`.
+- **Confirmed on HW:** `rp fc_dark_need_gps_0` → `[param] 00 9491b87c 01` = [ok][hash 0x7cb89194][value 1];
+  pressing U writes 0 and it reads back 0 → **no-GPS/dark takeoff unlock WORKS**.
+- Now the WHOLE param subsystem is usable: `fc_dark_need_gps_0` (no-GPS unlock), `novice_func_enabled_0`,
+  `flying_limit.max_height_0` (def 120, max 500), `max_radius_0` (max 5000), speed/gain params, etc.
+- **★ Real WM160 set CAPTURED — 132 valid params** (of 686 JSON names swept by `0xF8`; WM160 does not
+  answer `0xF0` by-index). Full table with hashes/types/access/current/min/max in
+  **`PARAM_TABLE_WM160.md`**. Writability = `attribute & 0x01`; persistence = `& 0x02` (see
+  `PARAM_WRITE_TRUTH.md`). Verified writable speed knobs: `mode_normal_cfg.tilt_atti_range_0`=20°,
+  `mode_sport_cfg_tilt_atti_range_0`=30°, `mode_sport_cfg_vert_vel_up_0`=4 m/s. **User confirmed params
+  write on HW.**
 
 ---
 
 ## 8. FUNCTIONS on the Mini 1 — what WORKS, what does NOT
-✅ **Available:** takeoff/land/**RTH** (climb→home→land), **virtual stick** (confirmed by
-MSDK 4.13+), gimbal (all modes), camera (photo/video/zoom/settings), **QuickShots** (Dronie/Circle/
-Helix/Rocket), **simulator** (fly without props — testing), GPS position/speed/modes (Normal/Sport/
-Cine/Tripod), altitude/distance limits, LED/find-my-drone, voice.
+✅ **VERIFIED working on HW:** video liveview (HEVC), telemetry (battery/alt/speed/sats/mode +
+remaining-flight-time + VPS height), **takeoff / land / RTH**, gimbal (moves), camera settings,
+**FC parameter read/write (plaintext)** incl. the **no-GPS/dark takeoff UNLOCK** (`fc_dark_need_gps_0=0`).
+🟡 **In progress:** **virtual-stick control** — enable + takeoff work and the injected `0x01/0x0A`
+payload is now byte-perfect (native-pinned) + 20 Hz + auth to 0x00/0x03, but the FC still doesn't move;
+RC-authority ruled out (the working sample runs with the RC connected). Next: dump `FLYC_STATE` while
+streaming to see if it enters JOYSTICK(17). **Media list/download**
+`0xe0` gate ROOT CAUSE FOUND (native `libsdk_jni.so`): the list is state-gated, not payload-gated — the
+FC won't serve `0x00/0x20` until the camera's status push reports download-mode ACTIVE, and **WM160
+(legacy) does NOT enter it via `0x02/0x10`** — it needs the legacy `SpecialCommandManager::EnterPlayback`:
+an 11-byte bit-packed XOR-checksummed control pack sent **repeatedly on a timer** as **`cmd_set 0x01 /
+cmd_id 0x01`**. Sequence: subscribe `0x02/0xEB` → `0x02/0x10 mode=3` + loop `0x01/0x01` enter-playback →
+wait for `IsPlayingBack` status push → `0x00/0x20` (index/count=0xFFFFFFFF, storage=SDCARD). One live
+capture still wanted to pin the special-pack field packing + list-body widths.
+✅ **Expected available (per MSDK 4.13, not all HW-checked yet):** QuickShots, simulator (props off),
+GPS modes (Normal/Sport/Cine/Tripod), altitude/distance limits, LED/find-my-drone, voice.
 ❌ **Not available (SDK code exists, but the aircraft will reject it):** ActiveTrack/Follow-Me/tracking (no sensors),
 waypoint/WPMZ, obstacle avoidance (`supportNavigationMode=false` for UAV59), Course/Home Lock.
 🔧 **Homemade tracking** (neural net on the PC → sticks+gimbal) — **feasible** (follow-me on the Mini
@@ -175,8 +216,10 @@ we will get the exact WM160 matrix live on connection.
 drone kit. Pi↔PC — over Wi-Fi (no cable needed), the remote controller powers the Pi.
 **PC software (Python, ready):** `duml/composite/liveview/telemetry/drone/control/diag_codes` + utilities.
 **Honest open items:**
-1. **Virtual stick on HW** — which variant (0x01/0A vs 0x01/02) and whether `serial_api_cfg`/ground-station is needed (MSDK says it works — we'll check).
-2. **FC parameter hash** — a runtime dump (Frida) is needed to write limits/speed.
+1. **Virtual stick on HW** — payload/order/preconditions all pinned & byte-perfect, FC still not moving;
+   open question is the FC-side joystick/arm state (dump `FLYC_STATE` next). Fallback: 0x01/0x02 mobile-RC packing.
+2. ~~**FC parameter hash** — Frida dump~~ **SOLVED** — hash algorithm known, 132-param WM160 set captured
+   (`PARAM_TABLE_WM160.md`), read+write verified on HW in plaintext. No Frida needed.
 3. **Pi bring-up** — raw-gadget AOA is finicky, finalized on a live Pi.
 4. Exact WM160 capability matrix — live on connection.
 

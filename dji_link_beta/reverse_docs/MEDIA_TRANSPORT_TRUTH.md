@@ -229,3 +229,203 @@ WM160, and record the `0x5749` DUML units for: album-open (mode switch), grid-lo
   (`getInstance(0,0,LEFT_OR_MAIN)`), `uav/media/FileOperateHelper.smali` (slot=EXTERN1).
 - `full_table.txt`: `0x00/0x1F`, `0x00/0x20`, `0x00/0x28`, `0x02/0x0C`, `0x02/0x10`, `0x02/0x7A`, `0x02/0x7B`.
 - `DUML_ENCRYPTION.md`: cmd_set `0x00` (COMMON) is excluded from SIMPLE encryption ⇒ not the media blocker.
+
+---
+
+## Why 0xe0 (root cause) — RESOLVED against live hardware + `libsdk_jni.so` + `CameraWorkMode` enum
+
+> New empirical state (supersedes the "zero reply" premise above): over the RC/AOA DUML link the camera
+> now **answers**. `0x02/0x10 set_camera_working_mode` → `0x00` SUCCESS and liveview freezes (mode really
+> changed). But `0x00/0x20 get_file_list`, `0x00/0x1F get_file_data`, `0x02/0x0C switch_playbackmode`,
+> `0x02/0x09 set_liveview_source`, `0x02/0xB3 get_app_request_i_frame` all reply a **single byte `0xe0`**,
+> identical for every payload layout. A defined 1-byte reply (not silence) proves the frame is well-formed,
+> reaches camera device `0x01`, and is parsed — so transport, addressing, seq, cmd_type and payload are all
+> fine. `0xe0` is a **return-code**, not a parse error.
+
+### 1. What `0xe0` (224) means
+`0xe0` is the DJI **camera/general firmware return code for "command refused — not available in the current
+state / not supported right now"** (a generic NAK), *not* a per-payload error. Evidence:
+- Native `libsdk_jni.so` hardcodes exactly this code as its "unsupported/refused" sentinel:
+  `"QueryIsDeveloperSettingSupportByStaticCapability ret_code 0xE0"` — the SDK stamps `ret_code 0xE0` when a
+  feature is **not available per the device's static capability**. `0xE0` = the SDK/firmware's
+  "not-supported/refused" value.
+- Behavioural proof it is a state/precondition NAK and **not** payload parsing: the code is byte-identical
+  across every request-body we send (empty / `[index,count]` / full CSDK envelope), and it is returned by an
+  *entire family* of unrelated commands at once (file list, file data, playbackmode switch, liveview-source,
+  i-frame), while a sibling command in the same cmd_set (`0x02/0x10`) returns `0x00`. A parser would vary with
+  the bytes; a "wrong-state / cmd-not-serviceable-now" gate does not. (cmd_set `0x00` is on the non-encrypted
+  list per `DUML_ENCRYPTION.md`, re-confirmed — encryption/attr bits are **not** the cause; §3 of this doc.)
+
+### 2. The exact missing precondition — WRONG WORK MODE (`PLAYBACK` instead of `MEDIA_DOWNLOAD`)
+The camera exposes a **10-value work-mode enum**, recovered authoritatively from the CSDK value object
+`uav/sdk/keyvalue/value/camera/CameraWorkMode.smali` (`value:I` = the byte carried by `0x02/0x10`):
+
+```
+SHOOT_PHOTO=0  RECORD_VIDEO=1  PLAYBACK=2  MEDIA_DOWNLOAD=3  TURNING=4
+POWER_SAVE=5   DOWNLOAD=6      TRANSCODE=7 BROADCAST=8       UNKNOWN=9
+```
+
+`PLAYBACK (2)` and `MEDIA_DOWNLOAD (3)` are **distinct modes**. Freezing liveview only proves we entered
+*some* non-liveview mode (we sent `PLAYBACK`); it does **not** put the camera into the state that services
+file operations. The file/download command family (`0x00/0x1F`, `0x00/0x20`, `0x00/0x28`) is serviced **only
+in `MEDIA_DOWNLOAD (3)`**. In any other mode the camera refuses them with `0xe0`. Native + app evidence that
+the media path is gated on a *separate* download state, not on liveview/playback:
+- `dev_state[conn:%u, liveview_mode:%u, download_mode:%u | …]` — the camera tracks **`download_mode` as a
+  first-class state distinct from `liveview_mode`**. (native)
+- `IsMediaDownloadModeSupported`, `CameraAbstraction::UpdateMediaDownloadModeDefaultValue`,
+  `native_CheckDownloadInvalidReason` / `native_AddDownloadInvalidReasonCallback` — the SDK explicitly checks
+  a **media-download-mode / download-invalid-reason** gate before file ops. (native)
+- App picks this mode by name for media: `uav/pilot/fpv/camera/util/UAVCameraUtil.smali` method `l(...)`
+  branches on `CameraWorkMode.PLAYBACK` **and** `CameraWorkMode.MEDIA_DOWNLOAD` (and `TRANSCODE`) — media
+  browsing/downloading rides `MEDIA_DOWNLOAD`, not plain `PLAYBACK`. (DEX-0451)
+
+So we entered `PLAYBACK (2)`; the firmware wants `MEDIA_DOWNLOAD (3)`; hence `0xe0` on the whole file family.
+(The `0x02/0x0C`, `0x02/0x09`, `0x02/0xB3` `0xe0`s are a *separate* fact — those cmd_ids are simply not
+implemented on the 2019 WM160/FC7203 firmware, which is why the app uses the legacy `SpecialCommandManager` /
+`0x02/0x10` path for the Mini, per §3 above. They are not needed for listing.)
+
+### 3. Is it a different device / not-plaintext / cmd_type issue?  No.
+- Same camera device `0x01`, same AOA DUML link — a `0xe0` *reply* from `0x01` is the camera answering, not a
+  "not-me". `0x02/0x10` succeeding on the same address/link proves addressing + framing are correct (re Q4/Q3).
+- cmd_set `0x00` is non-encrypted (`UAVEncryManager` excludes COMMON); no attr/ack bit is missing — a missing
+  cmd_type would not yield a clean per-command `0xe0` from a mode-specific subset (re Q3).
+
+### 4. Concrete corrected steps to make `0x00/0x20` return real data
+```
+1. ENTER MEDIA-DOWNLOAD MODE (the fix):
+   0x02/0x10 set_camera_working_mode  →  receiver camera 0x01, mode value = 3 (MEDIA_DOWNLOAD)
+     (NOT 2/PLAYBACK — that is what we were doing.)  Expect 0x00 SUCCESS; liveview stays frozen.
+     Fallback if 3 is rejected on this firmware: try value 6 (DOWNLOAD).
+2. (recommended) confirm the camera actually reports download_mode active before listing — poll the camera
+   status/condition push; do not rely on the 0x00 ack alone (native waits on the state, not the ack).
+3. LIST:  0x00/0x20 get_file_list to camera 0x01 → now returns the real get_file_list_rsp (MediaFile records),
+   no longer 0xe0.  Page with index/count until isPageLastFile / listLeft==0.
+4. DATA / DELETE: 0x00/0x1F, 0x00/0x28 to 0x01 in the same MEDIA_DOWNLOAD mode.
+5. When done, restore liveview: 0x02/0x10 mode = 1 (RECORD_VIDEO) or 0 (SHOOT_PHOTO).
+```
+If value 3 (and 6) still return `0xe0` after confirming download_mode did not change, the remaining
+hypothesis is the **legacy Mini media path** (`SpecialCommandManager` / P3 `DataCameraSetQuickPlayBack`),
+but the work-mode fix above is the evidence-backed first move and matches every observed symptom.
+
+### Source index (this section)
+- `libsdk_jni.so` (scratchpad): `"… ret_code 0xE0"`, `dev_state[…liveview_mode…download_mode…]`,
+  `IsMediaDownloadModeSupported`, `UpdateMediaDownloadModeDefaultValue`, `native_CheckDownloadInvalidReason`,
+  `native_AddDownloadInvalidReasonCallback`, `CameraQuickModeModule::{ActionEnterPlayback,switchPlaybackModeDirectly}`.
+- `classes_0451d00c.dex` → `uav/sdk/keyvalue/value/camera/CameraWorkMode.smali` (enum values above, `value:I`),
+  `uav/pilot/fpv/camera/util/UAVCameraUtil.smali` `l(CameraWorkMode)` (PLAYBACK+MEDIA_DOWNLOAD+TRANSCODE branch),
+  `uav/sdk/keyvalue/key/UAVCameraKey.smali` (set-working-mode key).
+- `full_table.txt`: `0x02/0x10 uav_camera_set_camera_working_mode`, `0x00/0x20 get_file_list`.
+
+## Native disassembly — the real file-list sequence
+
+> Fully static-reversed from the **real** `libsdk_jni.so` ELF (git-LFS blob
+> `.git/lfs/objects/01/7d/017d65e3…`, 80 MB AArch64). The binary is stripped of `.dynsym` and its
+> section headers are corrupted (DJI anti-analysis), but a **complete `.symtab` survives** hidden at
+> file offset `0x2f8..0x1a9128` (72 514 `Elf64_Sym`, indexing the `.strtab` at `0x2414a0`). Recovered it
+> and mapped every symbol → VA (`VA == file offset` in the first R-E LOAD). All VAs below are from that
+> map; every claim is disassembled, not inferred from strings. This resolves §5 items 1–4 and **corrects
+> the earlier "just use work-mode 3" conclusion** — which the hardware already disproved (mode 3 accepted,
+> `0x00/0x20` still `0xe0`).
+
+### A. The uav_cmd header encoding (decoded, decisive)
+`uav_general_get_get_file_list_req` ctor **@ `0x27bb464`** (RTTI type
+`uav_cmd_base_req<1,0,32,uav_general_get_get_file_list_req,…>`) writes a 4-byte command head at struct
+offset 0 = `0x02200001` → **byte[0]=flags `0x01`(hasResp) · byte[1]=cmd_set · byte[2]=cmd_id ·
+byte[3]=cmd_type `0x02`**. It also stamps route/link magic **`0x5749`** at +0xC and default timeout
+**500 ms** (`0x1F4`) at +0x14. So on the wire this is exactly **cmd_set `0x00` / cmd_id `0x20`,
+cmd_type `0x02`** — our frame identity was already correct. The same encoding is used everywhere, which
+lets every other command below be read off its ctor.
+
+### B. Why `0x00/0x20` returns `0xe0` — the real gate (crux)
+The camera services the file family **only after it has actually entered playback/download state AND
+reported it back in a status push.** The native never fires the list on the mode-set ack:
+
+- `CameraQuickModeModule::ActionEnterPlaybackImpl` **@ `0x26aca90`** (string refs: `"IsPlayingBack"`,
+  `"ActionEnterPlayback return instantly, already in playback mode"`, `"CameraWorkMode"`,
+  `"ActionEnterPlayback have no SpeicalCommandManager or have no abstraction"`,
+  `" send kEnterPlaybackEvent call ExpectedInPlayback"`, `"EnterPlaybackEvent"`) does:
+  read `IsPlayingBack` → if already true, return; else fire `kEnterPlaybackEvent` and call
+  `CameraQuickModeModule::ExpectedInPlayback(bool,uint8_t)` **@ `0x26adc2c`**.
+- `ExpectedInPlayback` is a **state machine that waits on the camera status push**, not on the ack.
+  The push it waits for is `uav_camera_push_camera_status_info_push`, parsed by
+  `KeyIsPlayingBackPush` **@ `0x3469f98`** and `KeyCameraWorkModePush` **@ `0x34509f4`** — i.e. the
+  camera's periodic **camera-status-info push** carries both `IsPlayingBack` and the live `CameraWorkMode`.
+  `FileTaskManager` keeps the list task **pending/suspended** until that push says the camera is in
+  playback/download; only then is `CommonFileDownloadHandler::RequestFileList` **@ `0x216e3d0`** run and
+  `0x00/0x20` emitted (via `SendPack`, `0x4a15840`).
+- For the camera to emit that push at all the SDK subscribes with **`0x02/0xEB
+  set_camera_status_subscribe`** (`full_table.txt`).
+
+**Therefore `0xe0` = "you asked for the list before the camera confirmed it is in the serviceable
+download state."** Sending `0x02/0x10 mode=3` and immediately firing `0x00/0x20` (what we do) races the
+gate: the camera acks the mode change, freezes liveview, but has **not yet** entered/confirmed the
+download state, so every `0x00/0x20` in that window is refused with `0xe0` — in *every* mode, exactly as
+observed.
+
+### C. Why mode 3 alone is not enough on WM160 — the legacy special-command path
+Which mechanism actually drives the camera into playback is chosen by a KeyValue strategy:
+`CameraQuickModeModule::getSwitchPlaybackModeStrategy` **@ `0x26ab52c`** reads key **`SwitchPlaybackModeStrategy`**
+and returns one of `SwitchPlaybackModeStrategy` / `NonFlatModeSwitchPlaybackModeStrategy` /
+`SpecailCommandSwitchPlaybackModeStrategy` (inits @ `0x34dc750` / `0x34dca78` / `0x34dc8e4`).
+- Modern/"flat" strategy → `switchPlaybackModeDirectly(bool,uint8_t)` **@ `0x26ad994`**, which builds a
+  small `{0x0C, 3, 1}` mode message → the `0x02/0x10`(=16) work-mode set with value **3**. This is the
+  path we already exercise; the camera **acks** it but on a 2019 WM160/FC7203 it does not by itself flip
+  the download state the file family is gated on.
+- **Legacy strategy (WM160) → `SpecialCommandManager::EnterPlayback`** **@ `0x4658a38`**. It does NOT send
+  a KeyValue/camera command; it sets an action byte and device bits into the SpecialCommand device struct
+  (`|=3` at +0x50, dev packed at +0x5a, action `6` at +0x74) that is transmitted by
+  `SpecialCommandOneDeviceImpl::SendSpecialControllPack` **@ `0x465b4d8`** as
+  **`uav_special_special_ctrl_push` = cmd_set `0x01` / cmd_id `0x01`** (ctor
+  `uav_cmd_base_req<1,1,1,…special_ctrl_push>` **@ `0x465bbd8`**, head `0x02010101`). It is an **11-byte
+  bit-packed control pack** (9 data bytes at struct +0x50..+0x58, **XOR checksum** of those 9 at +0x59,
+  device/flags at +0x5a) **sent repeatedly on a timer** (`StartTimer` → periodic `SendSpecialControllPack`;
+  retry counter at +0x6c capped at 0x14), targeted at the RC/"glass" videocore receiver
+  (`UpdateReceiver` @ `0x4659f34`, `"[SpecialCommandManager] receiver change to ("`). The same 0x01/0x01
+  push also carries ShootPhoto/Start-StopRecord/I-frame for legacy cameras (bit-selected by byte +0x55).
+
+⇒ On WM160 the app enters real playback/download via the **legacy `0x01/0x01` special-ctrl push**, not the
+`0x02/0x10` work-mode set we rely on. That is the missing precondition — plus the wait on the status push.
+
+### D. The `0x00/0x20` request payload (field layout)
+Two builders exist; both re-serialize natively (never the Java `toBytes()`):
+- `CommonFileDownloadHandler::RequestFileList` **@ `0x216e3d0`** emits the bare
+  `uav_general_get_get_file_list_req` (the `0x00/0x20` we send).
+- The session/filter layout is authoritative in `ListTransferRequest::ConfigFilterData(uav_file_list_download_req*)`
+  **@ `0x20d47cc`** (log `"[FileMgr] Recieve not support filter:"`): into the request struct it writes a
+  **type/storage byte at +8**, a **4-byte field at +9 initialised to `0xFFFFFFFF`** (= "all" index/count),
+  and a **filter bitmap dword at +0xD** whose bits are OR-ed per requested media type
+  (`|=1,2,4,8,0x10,0x20` for the file-type/subtype filters). Ordering info defaults ("filelist order info
+  is default"). The transfer-session variant is opened by
+  `ListTransferRequest::CreateStartRequestPack` **@ `0x20d4bb4`** (`"virtual uav_cmd_req …CreateStartRequest…"`).
+  The exact byte packing of the final `get_file_list_req` body still wants one live capture to pin field
+  widths, but the gate (B/C) is the reason for `0xe0`, not the body.
+
+### E. Ordered frames to make `0x00/0x20` return data (Python)
+```
+0. Connected on AOA/DUML (you are).
+1. SUBSCRIBE camera status:      0x02/0xEB set_camera_status_subscribe  → camera 0x01
+      so the camera starts pushing uav_camera_push_camera_status_info_push.
+2. ENTER PLAYBACK / DOWNLOAD (do BOTH; WM160 needs the legacy one):
+     a. 0x02/0x10 set_camera_working_mode, value = 3 (MEDIA_DOWNLOAD)   → camera 0x01   (modern/flat)
+     b. 0x01/0x01 uav_special_special_ctrl_push  (legacy enter-playback)               (send REPEATEDLY,
+        11-byte pack: 9 action bytes + XOR-checksum byte + device/flag byte; enter-playback action)
+        — keep re-sending on a ~100–200 ms timer, exactly like SendSpecialControllPack, until step 3.
+3. WAIT (do NOT race): parse the incoming camera status push and block until it reports
+      IsPlayingBack / download_mode ACTIVE (KeyIsPlayingBackPush / KeyCameraWorkModePush). Only then:
+4. LIST:  0x00/0x20 get_file_list  → camera 0x01, cmd_type 0x02, route 0x5749
+      body = get_file_list_req (index/count = 0xFFFFFFFF for all, storage=SDCARD, type filter bitmap).
+      Now returns real records instead of 0xe0. Page until listLeft==0.
+5. DATA/DELETE: 0x00/0x1F, 0x00/0x28 in the same confirmed download state.
+```
+The one behavioural change vs. our current client: **stop firing `0x00/0x20` on the mode-set ack**; add
+the periodic `0x01/0x01` special-ctrl push and gate the list on the camera's `IsPlayingBack` status push.
+
+### Source index (this section)
+`libsdk_jni.so` recovered `.symtab` (offset `0x2f8`): ctors `uav_general_get_get_file_list_req`@`0x27bb464`,
+`uav_special_special_ctrl_push`@`0x465bbd8`; `CameraQuickModeModule::{ActionEnterPlaybackImpl@0x26aca90,
+ExpectedInPlayback@0x26adc2c, getSwitchPlaybackModeStrategy@0x26ab52c, switchPlaybackModeDirectly@0x26ad994}`;
+`SpecialCommandManager::EnterPlayback@0x4658a38`, `SpecialCommandOneDeviceImpl::SendSpecialControllPack@0x465b4d8`,
+`UpdateReceiver@0x4659f34`; `CommonFileDownloadHandler::RequestFileList@0x216e3d0`;
+`ListTransferRequest::{ConfigFilterData@0x20d47cc, CreateStartRequestPack@0x20d4bb4}`;
+`KeyIsPlayingBackPush@0x3469f98`, `KeyCameraWorkModePush@0x34509f4`. `full_table.txt`: `0x00/0x20`,
+`0x01/0x01 uav_special_special_ctrl_push`, `0x02/0x10`, `0x02/0xEB set_camera_status_subscribe`.
