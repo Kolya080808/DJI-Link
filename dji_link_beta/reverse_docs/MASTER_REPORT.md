@@ -73,32 +73,31 @@ capabilities (26b), 0x08/0x42 fps, 0x08/0x69 bandwidth. There is no separate "st
 Takeoff (starts the motors): `takeoff()` **0x03/2A/01**. Cancels: takeoff 0x0D, land 0x0E, RTH 0x0C.
 **RTH is reliable on the Mini 1** (climb→home→land) — we use it as an emergency button.
 
-### 3.2 Virtual stick — command is `0x01/0x0A`, channel order VERIFIED from the RC dump
-Channel encoding: 4 channels, `value = round(axis·660 + 1024)`, clamp **[364..1684]**, center 1024.
-Command = **special_tlv `cmd_set 0x01 / cmd_id 0x0A`**, receiver FC 0x03 (VirtualJoyStickHelper),
-4×11-bit in uint64 (bits 8/19/30/41 + bit62) + flags 0x0200 + TLV 0x55/0x04 (our `drone.set_sticks`).
+### 3.2 Virtual stick — `0x03/0x8E` DataFlycJoystick ✅ VERIFIED FLYING ON HARDWARE
+The whole-project blocker is SOLVED. WM160 is **MSDK v4-only** (Mini added in 4.13, dropped in v5),
+so the v5 special-TLV `0x01/0x0A` we streamed for months was simply the wrong command and the FC
+ignored it. The real command (from the public `dji-sdk-provided-4.18.jar`, `DataFlycJoystick`,
+byte-exact — see **VIRTUAL_STICK_RESEARCH_2026.md**):
 
-**Channel ORDER = `roll, pitch, throttle, yaw` — VERIFIED** by capturing the RC's own channel
-report (`sender 0x06, cmd_set 0x06 / cmd_id 0x05`, 6× u16 LE, 364..1024..1684) while moving each
-physical stick: ch0=roll ch1=pitch ch2=throttle ch3=yaw ch4=1024(aux) ch5=4096(const). (Earlier
-`roll,pitch,yaw,throttle` had yaw/throttle swapped — fixed in `control.py`.)
+* **`cmd_set 0x03 (FLYC) / cmd_id 0x8E (142)`**, sender APP → receiver FLYC, cmd_type REQUEST, no ack, no encrypt.
+* Payload = **17 bytes**: `[0] flag u8`, then four **f32 LE in PHYSICAL units** (m/s, deg/s).
+* **WM160 wire order (empirical) = `pitch, roll, throttle, yaw`** — the MSDK swaps yaw↔throttle for
+  this DroneType, and roll↔pitch are also swapped on the Mini vs the generic doPack. (`set_sticks_float`.)
+* **flag byte** = `(RollPitch<<6)|(Vertical<<4)|(Yaw<<3)|(Coord<<1)|advanced`; RollPitch VEL=1/ANGLE=0,
+  Vertical VEL=0/POS=1, Yaw ANGVEL=1/ANGLE=0, Coord GROUND=0/BODY=1. **`0x4A` = velocity + BODY**
+  (heading-relative — what a pilot expects; `0x48`=GROUND felt diagonal). `0x48`+zeros = perfect hover,
+  triple-confirmed incl DJI Onboard-SDK `dji_control.hpp` (`0x40|0x00|0x08=0x48`).
 
-Preconditions (MSDK `setVirtualStickModeEnabled`, VERIFIED path): `request_control` 0x49/0x80 01
-to receiver 0x00 **and** 0x03 + `set_ground_station_mode` 0x03/0x80 01 (our `enable_virtual_stick`),
-then takeoff/arm, then stream at **20 Hz (0.05 s)** to match the sample exactly. MSDK semantics
-(dbaldwin VirtualSticksViewController.swift): velocity / angularVelocity / **ground** coordinate,
-physical m/s & deg/s. Mavic Mini has virtual stick since MSDK 4.13; no Course/Home Lock.
+**Enable / control authority = FLYC NavigationSwitch `0x03/0x80`** (NOT the v5 `0x49/0x80`, which is
+`SDKAgent`/file-MOP in v4): **OPEN_GROUND_STATION = 1** flips `SDKCtrlDevice → APP` (grabs control),
+**CLOSE_GROUND_STATION = 2** returns control to the RC. (Sending 0 on release did NOT return control —
+that was the "stuck on APP" bug; fixed to send 2.) Stream at **20 Hz**; the FC watchdog holds a hover if
+frames stop, so send neutral (all-zero) when idle.
 
-**HW status (2026-07-17): takeoff/land VERIFIED working; sticks NOT yet honored.** The `0x01/0x0A`
-payload is now **byte-perfect** (pinned from `libsdk_jni.so` VirtualJoyStickHelper, VIRTUAL_STICK_NATIVE.md),
-channel order verified from the RC dump, all preconditions sent, 20 Hz — the FC still does not move.
-**RC-authority is NOT the blocker:** the working dbaldwin sample runs with the phone plugged INTO the
-remote controller (phone→RC→drone), i.e. its virtual sticks are honored *while the RC is connected*, so
-a connected RC competing for authority cannot be the reason ours are ignored. The remaining suspects are
-an FC-side state/mode the MSDK sets internally that we haven't replicated (candidate: `g_config.control.*`
-control-mode config, or an arm/joystick-mode state that shows up as `FLYC_STATE=JOYSTICK(17)`). **Next
-decisive diagnostic: raw-dump the OSD `FLYC_STATE` while streaming sticks — if it never becomes JOYSTICK,
-the command is being rejected upstream of motion; if it does, the values/mapping are wrong.**
+**HW status (2026-07-18): VERIFIED FLYING.** After takeoff the client auto-enables control once the
+auto-takeoff settles; the OSD shows `FLYC_STATE = Joystick(17)` and `SDKCtrlDevice = APP(1)`, and WASD /
+mouse-yaw / throttle move the drone. Decisive telemetry to confirm acceptance: `FLYC_STATE→Joystick(17)`
++ `SDKCtrlDevice→APP(1)` (OSD-common u8 @0x34). Remaining polish: axis-sign confirmation per airframe.
 
 ### 3.3 Gimbal (camera) — VERIFIED, it moves
 - speed `0x04/0x0C`: int16 LE yaw·10,roll·10,pitch·10 + `0x81 00` (°/s, send ~10 Hz)
@@ -180,19 +179,30 @@ Sender 0x02 → receiver 0x03.
 
 ## 8. FUNCTIONS on the Mini 1 — what WORKS, what does NOT
 ✅ **VERIFIED working on HW:** video liveview (HEVC), telemetry (battery/alt/speed/sats/mode +
-remaining-flight-time + VPS height), **takeoff / land / RTH**, gimbal (moves), camera settings,
-**FC parameter read/write (plaintext)** incl. the **no-GPS/dark takeoff UNLOCK** (`fc_dark_need_gps_0=0`).
-🟡 **In progress:** **virtual-stick control** — enable + takeoff work and the injected `0x01/0x0A`
-payload is now byte-perfect (native-pinned) + 20 Hz + auth to 0x00/0x03, but the FC still doesn't move;
-RC-authority ruled out (the working sample runs with the RC connected). Next: dump `FLYC_STATE` while
-streaming to see if it enters JOYSTICK(17). **Media list/download**
-`0xe0` gate ROOT CAUSE FOUND (native `libsdk_jni.so`): the list is state-gated, not payload-gated — the
-FC won't serve `0x00/0x20` until the camera's status push reports download-mode ACTIVE, and **WM160
-(legacy) does NOT enter it via `0x02/0x10`** — it needs the legacy `SpecialCommandManager::EnterPlayback`:
-an 11-byte bit-packed XOR-checksummed control pack sent **repeatedly on a timer** as **`cmd_set 0x01 /
-cmd_id 0x01`**. Sequence: subscribe `0x02/0xEB` → `0x02/0x10 mode=3` + loop `0x01/0x01` enter-playback →
-wait for `IsPlayingBack` status push → `0x00/0x20` (index/count=0xFFFFFFFF, storage=SDCARD). One live
-capture still wanted to pin the special-pack field packing + list-body widths.
+remaining-flight-time + VPS height + FC-owner + record state), **takeoff / land / RTH**, **virtual-stick
+controlled flight (`0x03/0x8E`, §3.2)** incl. auto-take-control after takeoff + return-to-RC, gimbal
+(moves), camera settings, **FC parameter read/write (plaintext)** incl. the **no-GPS/dark takeoff
+UNLOCK** (`fc_dark_need_gps_0=0`).
+🟢 **Working, HW-confirmed this session (needs light polish):**
+* **Flight mode Cine/Normal/Sport + speed** — WM160 has NO set-mode DUML (modes = FC blocks picked by
+  the RC GEAR channel, which the float joystick can't drive). We EMULATE by writing the active block's
+  max lean angle `g_config.mode_normal_cfg.tilt_atti_range_0` (Cine≈10°/Normal 20°/Sport 30°). Caveat:
+  the FC clamps this param to ~20°, so Cine↔Normal differ but Sport currently caps at Normal — raising
+  the true top speed needs more reversing. (FLIGHT_MODE_SPEED_RESEARCH_2026.md)
+* **Home point** — `DataFlycSetHomePoint 0x03/0x31` (type 0x02=explicit / 0x00=current, lat/lon f64
+  RADIANS, trailing 0x64). Read back via the 0x03/0x44 home push. (HOME_POINT_RESEARCH_2026.md)
+* **Height/distance limits** — FC param write `0x03/0xF9` by hash (the app's path), read back with 0xF8.
+  (FLIGHT_LIMITS_RESEARCH_2026.md)
+* **Camera ISO / exposure / recording** — ISO needs Manual exposure first (`SetExposureMode 0x02/0x1E`
+  is **2 bytes** `[mode,scene]`, mode M=4); recording needs VIDEO work mode (`0x02/0x10 [1]`) before
+  `0x02/0x02`; shutter `0x02/0x28` (Mini supports manual ISO/shutter since fw v01.00.0500 — brightness
+  lever). (CAMERA_MEDIA_RESEARCH_2026.md)
+🟡 **In progress:** **Media list/download.** The `0xe0` NAK ROOT CAUSE is FIXED — `enter_playback` was
+sending mode `[3]`=TRANSCODE; WM160 (legacy PlaybackManager) needs `0x02/0x10 [2]`=PLAYBACK. Entering
+playback now works (no more 0xe0) and yields the `0x02/0x82` PlayBackParams push. The list/download
+itself still needs `media.py` rewritten to the real legacy sequence — cmd_set 0x00: `RequestSendFiles
+0x00/0x22` → pushes `GetPushFiles 0x00/0x24` (list) + `GetPushFile 0x00/0x27` (bytes) + ack `0x00/0x23`
+(our old 0x20/0x1F cmd_ids don't exist on the Mini). One live capture pins the record stride.
 ✅ **Expected available (per MSDK 4.13, not all HW-checked yet):** QuickShots, simulator (props off),
 GPS modes (Normal/Sport/Cine/Tripod), altitude/distance limits, LED/find-my-drone, voice.
 ❌ **Not available (SDK code exists, but the aircraft will reject it):** ActiveTrack/Follow-Me/tracking (no sensors),
@@ -216,12 +226,21 @@ we will get the exact WM160 matrix live on connection.
 drone kit. Pi↔PC — over Wi-Fi (no cable needed), the remote controller powers the Pi.
 **PC software (Python, ready):** `duml/composite/liveview/telemetry/drone/control/diag_codes` + utilities.
 **Honest open items:**
-1. **Virtual stick on HW** — payload/order/preconditions all pinned & byte-perfect, FC still not moving;
-   open question is the FC-side joystick/arm state (dump `FLYC_STATE` next). Fallback: 0x01/0x02 mobile-RC packing.
+1. ~~**Virtual stick on HW**~~ **SOLVED — flies.** Real command = `0x03/0x8E` DataFlycJoystick (§3.2),
+   authority via `0x03/0x80` NavigationSwitch (open=1/close=2). The `0x01/0x0A` we chased was the wrong
+   (MSDK v5) command. Remaining: confirm axis signs per airframe.
 2. ~~**FC parameter hash** — Frida dump~~ **SOLVED** — hash algorithm known, 132-param WM160 set captured
    (`PARAM_TABLE_WM160.md`), read+write verified on HW in plaintext. No Frida needed.
-3. **Pi bring-up** — raw-gadget AOA is finicky, finalized on a live Pi.
-4. Exact WM160 capability matrix — live on connection.
+3. **Media list/download** — 0xe0 fixed (playback = `0x02/0x10 [2]`); `media.py` still needs the legacy
+   0x00/0x22→0x24/0x27 sequence + one live capture.
+4. **True Sport top speed** — `mode_normal_cfg.tilt_atti_range_0` is FC-clamped to ~20°; raising the
+   real ceiling needs more reversing.
+5. **Pi bring-up** — raw-gadget AOA is finicky, finalized on a live Pi.
+6. ~~Telemetry cross-check~~ **DONE** — verified every OSD field vs the MSDK `DataOsdGetPushCommon`
+   getters (TELEMETRY_TRUTH.md). Fixed: **satellites** width u16→**u8** @0x24 (offset was right; u16
+   inflates when p[0x25]≠0), **VPS** s16→**s8** @0x29, and the non-dense **FLYC_STATE** codes (≥18).
+   The `sats=0` seen in the test was a genuine pre-GPS-lock frame, not a decode bug (flyc_state can read
+   GPS_Atti with gpsLevel 0 on the ground). Everything else was byte-correct.
 
 ---
 

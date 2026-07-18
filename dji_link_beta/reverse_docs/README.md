@@ -7,6 +7,16 @@ and `APP_MAP_INDEX.md`; the rest are per-topic references.
 - **`MASTER_REPORT.md`** — the consolidated report.
 - **`APP_MAP_INDEX.md`** — one-page map of every app subsystem, with WM160-support tags.
 
+## ★ 2026 research — derived from the PUBLIC MSDK (`dji-sdk-provided-4.18.jar`), HW-verified
+These supersede earlier guesses where they disagree — the jar is DJI's own un-obfuscated DUML layer.
+- **`VIRTUAL_STICK_RESEARCH_2026.md`** — controlled flight SOLVED: `0x03/0x8E` DataFlycJoystick (17-byte
+  float payload, flag byte, WM160 pitch/roll + yaw/throttle swaps), authority via `0x03/0x80` (open=1/close=2).
+- **`FLIGHT_MODE_SPEED_RESEARCH_2026.md`** — Cine/Normal/Sport + speed via `mode_normal_cfg.tilt_atti_range_0`.
+- **`HOME_POINT_RESEARCH_2026.md`** — set home `0x03/0x31` (explicit / current), lat/lon f64 radians.
+- **`FLIGHT_LIMITS_RESEARCH_2026.md`** — max height/radius via `0x03/0xF9` param write; read back 0xF8.
+- **`CAMERA_MEDIA_RESEARCH_2026.md`** — ISO (needs Manual exposure), recording (needs video mode), shutter
+  `0x02/0x28`, and the media playback/download sequence (0xe0 fix = enter playback with mode `[2]`).
+
 ## Protocol
 - **`DUML_COMMANDS_FULL.md`** — 343 builder-verified DUML commands with byte layouts.
 - **`DUML_ENCRYPTION.md`** — the "SIMPLE" encryption (cmd_type 0x43) for FC config frames: self-inverse byte-keystream XOR, static key, no handshake — implemented in `duml.py`.

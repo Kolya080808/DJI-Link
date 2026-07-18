@@ -20,11 +20,13 @@ drone's own **DUML** protocol, reverse-engineered from the DJI Fly app.
 - **Live video** from the drone (H.265/HEVC), decoded into the app window.
 - **Telemetry** — attitude, altitude, speed, battery, GPS/satellites, flight mode, and
   plain-language reasons when the motors refuse to start (743 decoded diagnostic codes).
-- **Flight control** — takeoff, land, return-to-home, arm/disarm, and continuous stick
-  control (spectator-style: mouse to look/turn, WASD to move, Space/Shift for throttle).
-- **Gimbal & camera** — tilt with the mouse, photo, record, zoom, ISO/EV, and more.
+- **Flight control** — takeoff, land, return-to-home, arm/disarm, and continuous **virtual-stick
+  flight** (hardware-verified: `0x03/0x8E` DataFlycJoystick; spectator-style — mouse to look/turn,
+  WASD to move, Space/Shift for throttle). Control auto-enables once the takeoff settles, and hands
+  back to the remote on release. Flight modes Cine/Normal/Sport.
+- **Gimbal & camera** — tilt with the mouse, photo, record (R toggles), zoom, ISO/shutter/EV.
 - **Settings panel** (Esc) — max altitude and distance (up to the drone's 500 m ceiling,
-  no unlock needed), home point, exposure, camera mode.
+  no unlock needed), home point (current or explicit GPS), exposure, camera mode.
 - **Console** — send any raw DUML command; the entire reversed command surface is reachable.
 - **Zero-config launch** — `python pc_client.py` finds the Pi, connects, and walks you
   through powering on the link.

@@ -64,30 +64,38 @@ Payload origin = first byte of longitude. Verified length in capture = 55 B.
 | motors on | 0x20 | u32 | `bit 3` | bool | native `AreMotorsOn` |
 | GPS signal level | 0x20 | u32 | `>>0x12 & 0xf` | 0..5 | `getGpsLevel()` |
 | voltage warning | 0x20 | u32 | `& 0x600 >>9` | enum | `getVoltageWarning()` |
-| satellite count | 0x24 | **u16** | — | count | `getGpsNum()` (reads **Short**, not u8) |
-| flight action | 0x25 | u8 | — | enum | `getFlightAction()` |
-| **motor start-fail cause** | **0x26** | **u8** | `& 0x7f` (bit7 = "no-start action") | enum | `getMotorFailedCause()` |
+| satellite count | 0x24 | **u8** | — | count | `getGpsNum()` — **re-verified from MSDK jar bytecode: `DataBase.get(0x24, size=1, Short.class)` → the SIZE arg is `iconst_1` = ONE byte. The `Short` is only the return-boxing class; it does NOT mean a 2-byte read. Prior "u16" claim here was WRONG.** |
+| flight action | 0x25 | u8 | — | enum | `getFlightAction()` (size=1 @0x25) |
+| **motor start-fail cause** | **0x26** | **u8** | `& 0x7f` (bit7 = "no-start action") | enum | `getMotorFailedCause()` (size=1 @0x26; on flycVersion≥26 it returns the FULL byte, no mask — our `&0x7f` stays safe for the codes we surface) |
 | GPS-mode failure reason | 0x27 | u8 | `& 0xf` | enum | native `GPSModeFailureReason` |
 | battery % (FC copy) | 0x28 | u32 | field | % | `getBattery()` |
-| VPS/ultrasonic height (swave) | 0x29 | s16 | ×0.1 | m | `getSwaveHeight()` |
+| VPS/ultrasonic height (swave) | 0x29 | **s8** | ×0.1 | m | `getSwaveHeight()` — **re-verified: `DataBase.get(0x29, size=1, Short.class)` = ONE signed byte, NOT s16. Prior "s16" claim was WRONG (a 2-byte read would swallow flyTime@0x2a).** |
 | flight time | 0x2a | u16 | ×1 | s | `getFlyTime()` / native `FlightTimeInSeconds` |
 | motor revolution | 0x2c | s16 | — | — | `getMotorRevolution()` |
 | IMU init-fail reason | 0x31 | u8 | — | enum | native `IMUFailureReason` |
 
-**flyc_state enum (byte@0x1e & 0x7f), WM160 values — index = code:**
+**flyc_state enum (byte@0x1e & 0x7f), WM160 values — CODE = the 3rd ctor arg
+(`FLYC_STATE(String,int ordinal,int CODE)`), which is what `FLYC_STATE.find(int)` matches.
+Re-verified field-by-field from the MSDK jar static initializer. NOTE: code is NOT a dense
+0..N sequence — it MATCHES the ordinal only up to 17, then SKIPS values (18, 20, 21, 22,
+34, 40, 42, 44, 45, 47, 48 are UNUSED codes):**
 ```
-0 Manual        1 Atti          2 Atti_CL       3 Atti_Hover    4 Hover
-5 GPS_Blake     6 GPS_Atti      7 GPS_CL        8 GPS_HomeLock  9 GPS_HotPoint
-10 AssistedTakeoff 11 AutoTakeoff 12 AutoLanding 13 AttiLanding 14 NaviGo
-15 GoHome       16 ClickGo      17 Joystick     18 Cinematic    19 Atti_Limited
-20 NaviSubMode_Draw 21 NaviMissionFollow 22 NaviSubMode_Tracking 23 NaviSubMode_Pointing
-24 PANO         25 Farming      26 FPV          27 SPORT        28 NOVICE
-29 FORCE_LANDING 30 TERRAIN_TRACKING 31 PALM_CONTROL 32 QUICK_SHOT 33 TRIPOD_GPS
-34 TRACK_HEADLOCK 35 ENGINE_START 36 DETOUR      37 TIME_LAPSE   38 POI_WITH_VISION
-39 OMNI_MOVING  40 OTHER
+0 Manual          1 Atti           2 Atti_CL        3 Atti_Hover     4 Hover
+5 GPS_Blake       6 GPS_Atti       7 GPS_CL         8 GPS_HomeLock   9 GPS_HotPoint
+10 AssistedTakeoff 11 AutoTakeoff  12 AutoLanding   13 AttiLanding   14 NaviGo
+15 GoHome         16 ClickGo       17 Joystick      19 Cinematic     23 Atti_Limited
+24 NaviSubMode_Draw 25 NaviMissionFollow 26 NaviSubMode_Tracking 27 NaviSubMode_Pointing
+28 PANO           29 Farming       30 FPV           31 SPORT         32 NOVICE
+33 FORCE_LANDING  35 TERRAIN_TRACKING 36 PALM_CONTROL 37 QUICK_SHOT  38 TRIPOD_GPS
+39 TRACK_HEADLOCK 41 ENGINE_START  43 DETOUR        46 TIME_LAPSE    49 OMNI_MOVING
+50 POI_WITH_VISION 51 SMART_TRACK  52 LOST_POWER_FORCE_LANDING       100 OTHER
 ```
-(`telemetry.py`'s FLYC_STATE dict is wrong from 16 up: 16=ClickGo not CLICK_GO@40,
-17=Joystick ok, 33=TRIPOD_GPS not "wristband", 40=OTHER not ClickGo.)
+(`telemetry.py`'s FLYC_STATE dict is a dense 0..40 sequence — CORRECT for codes 0–17
+but WRONG for every code ≥18: it has 18=Cinematic (real 18 is UNUSED; Cinematic=19),
+19=Atti_Limited (real 23), … everything shifts. For the WM160's day-to-day modes
+(GPS_Atti=6, AutoTakeoff=11, AutoLanding=12, GoHome=15, Joystick=17) it is fine; the
+misnaming only shows for the exotic high-code modes. Replace the dict with the codes above,
+mapping unknown codes to "?N".)
 
 ---
 
@@ -177,14 +185,37 @@ Height and velocity for WM160 come **only** from the s16 fields of **0x03/0x43**
 |---|---|---|
 | altitude offset | s16@0x10 ×0.1 | **correct — keep** |
 | climb/vz offset | s16@0x16 ×0.1 | **correct — keep** (the HUD swap is downstream) |
-| satellites | u8@0x24 | u16@0x24 (`getGpsNum` reads Short) — harmless but read `<H` |
+| **satellites** | **u16@0x24** (current telemetry.py) | **u8@0x24** — `getGpsNum` size arg is `iconst_1` = 1 byte. Read `p[0x24]`, NOT `<H`. (See satellites root-cause note below.) |
+| VPS/swave height | s16@0x29 (current telemetry.py) | **s8@0x29** ×0.1 — `getSwaveHeight` size arg = 1 byte. Read one signed byte, NOT `<h`. |
 | motor-fail cause | u8@0x33 | **u8@0x26 & 0x7f** (0x33 is wrong; 0x26 is `getMotorFailedCause`) |
-| flight-mode names | custom dict, wrong ≥16 | use the enum in §1 (16=ClickGo, 33=TRIPOD_GPS, 40=OTHER) |
+| flight-mode names | dense 0..40 dict, wrong ≥18 | non-dense codes in §1 (17=Joystick, 19=Cinematic, 38=TRIPOD_GPS, 100=OTHER) |
 | battery current | u32@0x05 | s32@0x05 (signed; negative = discharge) |
 | battery temperature | (missing) | add s16@0x11 ×0.1 °C |
 | remaining flight time | (missing / assumed battery) | FC battery-assessment push, u16 seconds @0x00 (cmd_set 0x03) — separate push, see §4 |
 | gohome status | (missing) | u32@0x20 `>>5 & 0x7` |
 | VPS height | (missing) | s16@0x29 ×0.1 m (`getSwaveHeight`, useful indoors/no-GPS) |
+
+---
+
+## 7. SATELLITES root-cause — why the flight showed sats=0 (2026-07 re-verify)
+
+`getGpsNum()` in the MSDK jar is a flat, unversioned read: `DataBase.get(0x24, 1, Short)`.
+**Offset 0x24 is CONFIRMED correct** — it is *not* at a different offset. The only decode
+error is **width**: telemetry.py reads `<H` (2 bytes); DJI reads 1 byte. **Fix width to u8.**
+
+Honest caveat: the u16→u8 width change **does not, by itself, turn a `0` reading into a
+non-zero one.** A little-endian `<H` at 0x24 = `p[0x24] | (p[0x25]<<8)`, whose low byte is
+exactly the u8 value; so u16 reads `0` only when the real u8 sat byte is also `0`. The
+width bug's true failure mode is the opposite: when `flightAction` (byte 0x25) is non-zero,
+the u16 read **inflates** satellites by multiples of 256 — it never zeroes them.
+
+So a genuine `sats=0` during a "GPS" flight is a **pre-lock frame**, not an offset bug. The
+real captured 0x43 frame in `telemetry_dump.txt` proves this:
+`flyc_state@0x1e = 6 (GPS_Atti)` **yet** `gpsLevel(word@0x20>>18&0xf)=0` and
+`p[0x24]=0`. The FC advertises the GPS_Atti *mode* before the fix count / gps level have
+populated, so "mode says GPS but sats 0" is fully reproducible on the ground with no bug.
+**To confirm sats land in byte 0x24 in flight, capture one 0x43 frame after a real 3D lock
+(gpsLevel ≥ 3) and check `p[0x24]` is the HUD sat count.** All evidence says it will be.
 
 Sources: `DataOsdGetPushCommon.smali`, `DataSmartBatteryGetPushDynamicData.smali`,
 `DataBase.smali` (all from app DEX `classes_016b200c/0451d00c`); native table

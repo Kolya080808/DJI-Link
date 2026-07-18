@@ -13,12 +13,14 @@ Transport:
 
 Flight (motors) — only with --live AND after ARM (Enter). Gimbal/camera — always.
 
-Control (hold): W/S pitch · A/D roll · Space/Shift throttle up/down · Q/E yaw
-Hotkeys: Enter ARM/DISARM · T takeoff · C control (ONLY after takeoff) · L landing · H RTH(emergency)
-        V ground-station · [ ] or Up/Down gimbal (HOLD) · N recenter · P photo · R record
-        Z/X zoom +/- · Tab console · Esc exit
-Console (Tab): takeoff/land/rth/gimbal <deg>/photo/rec start|stop/zoom <x>/iso <n>/
-        mode photo|video/videofmt <res> <fps>/speed .../raw <set> <id> <hex> [recv]
+Control (hold): W/S pitch · A/D roll · Space/Shift throttle up/down · Q/E yaw · Mouse-X yaw
+Flight = virtual stick via 0x03/0x8E (DataFlycJoystick); control auto-enables after takeoff settles.
+Hotkeys: Enter ARM/DISARM · T takeoff (auto-C) · C control on/off · L landing · H RTH(emergency)
+        V ground-station(authority) · J stick-flag preset (velocity/BODY…) · N recenter · P photo
+        R record TOGGLE · Z/X zoom · [ ]/Up/Down gimbal · Tab console · Esc settings
+Console (Tab): takeoff/land/rth · home here|<lat> <lon> · setalt <m>/setdist <m>/rthalt <m>
+        fmode cine|normal|sport · hspeed <m/s> · rp height|radius|tilt · iso <n>/shutter <N>|auto/ev <n>
+        rec start|stop · zoom <x> · gimbal <deg>|speed <dps> · raw <set> <id> <hex> [recv]
 """
 
 from __future__ import annotations
@@ -145,7 +147,15 @@ class Client:
         self.control = False        # whether control has been taken
         self.gs = False             # ground-station mode
         self.armed = False          # whether stick stream/takeoff is allowed
-        self.stick_flag = 0         # 0x03/0x8E mode-combo byte (J cycles it to find the right one)
+        self.auto_c = True          # auto-enable control once the takeoff settles
+        self._pending_auto_c = False
+        self._takeoff_t = 0.0
+        self.recording = False      # R toggles video recording (start/stop)
+        # 0x03/0x8E flag byte. J cycles the useful presets to find what feels right.
+        # 0x4A = velocity + BODY (heading-relative, pilot-natural); 0x48 = velocity + GROUND
+        # (world-relative, feels diagonal); 0x0A = angle + BODY (tilt); 0x08 = angle + GROUND.
+        self.stick_flags = [0x4A, 0x48, 0x0A, 0x08]
+        self.stick_flag = 0x4A
         self.stick_mobilerc = False # M toggles 0x01/0x0A (primary) vs 0x01/0x02 (mobile-RC fallback)
         self.axes = {"throttle": 0.0, "yaw": 0.0, "pitch": 0.0, "roll": 0.0}
         self.lock = threading.Lock()
@@ -162,6 +172,7 @@ class Client:
         self.mouse_look = True          # off while the settings panel is open
         self.gimbal_pitch = 0.0         # accumulated target, degrees (down negative)
         self.mouse_yaw = 0.0            # yaw axis from the latest mouse motion
+        self._frame_dx = 0.0           # horizontal mouse travel accumulated within the current frame
 
     def start_stats(self):
         """Heartbeat so a silent link is visibly silent rather than ambiguous."""
@@ -360,22 +371,51 @@ class Client:
         threading.Thread(target=self._send_loop, daemon=True).start()
 
     def _send_loop(self):
+        from telemetry import SDK_CTRL_DEVICE
+        last_diag = 0.0
         while self.running:
+            # Auto-enable control (C) once the auto-takeoff has SETTLED. We must not enable
+            # mid-takeoff (FC not yet in joystick state -> the uncommanded-climb trap), so we
+            # wait for: airborne + a settle delay + out of Assisted/Auto-Takeoff state
+            # (10/11), with an 8 s hard fallback in case the state isn't reported.
+            if (self.live and self.armed and self.auto_c and self._pending_auto_c
+                    and not self.control and self._airborne()):
+                elapsed = time.time() - self._takeoff_t
+                in_takeoff = self.tele.state.flight_mode in (10, 11)
+                if elapsed > 3.0 and (not in_takeoff or elapsed > 8.0):
+                    self._pending_auto_c = False
+                    self.d.enable_virtual_stick(True)
+                    self.control = True
+                    self.gs = True
+                    self.msg("control auto-ON (takeoff settled)")
             if self.live and self.armed and self.control:
+                # Decisive stick diagnostic straight into stdout (the log you share): is the
+                # FC actually accepting us? mode should read Joystick(17); owner should read
+                # APP(1). If they don't flip, the FC is ignoring the sticks, full stop.
+                now = time.time()
+                if now - last_diag >= 1.0:
+                    last_diag = now
+                    st = self.tele.state
+                    owner = SDK_CTRL_DEVICE.get(st.ctrl_device, st.ctrl_device)
+                    a0 = self.axes
+                    log(f"[stick] mode={st.flight_mode_name} FC-owner={owner} "
+                        f"flag=0x{self.stick_flag:02x} alt={st.altitude_m}m  tx roll/pitch/yaw/thr="
+                        f"{a0['roll']:+.2f}/{a0['pitch']:+.2f}/{a0['yaw']:+.2f}/{a0['throttle']:+.2f}")
                 with self.lock:
                     a = dict(self.axes)
                 try:
-                    # Primary = VirtualJoyStickHelper 0x01/0x0A (byte-verified). M toggles the
-                    # mobile-RC fallback 0x01/0x02 for the legacy WM160 (IsSupportVirtualJoyStick=false).
+                    # PRIMARY = DataFlycJoystick 0x03/0x8E (MSDK v4.18, the Mini-supporting
+                    # SDK): flag 0x48 + 4 floats in physical units. See VIRTUAL_STICK_RESEARCH_2026.md.
+                    # M toggles fallbacks: mobile-RC 0x01/0x02, then legacy TLV 0x01/0x0A.
                     if self.stick_mobilerc:
                         self.d.set_sticks_mobilerc(a["roll"], a["pitch"], a["yaw"], a["throttle"])
                     else:
-                        self.d.set_sticks(a["roll"], a["pitch"], a["yaw"], a["throttle"])
+                        self.d.set_sticks_velocity(a["roll"], a["pitch"], a["yaw"], a["throttle"],
+                                                   flag=self.stick_flag)
                 except Exception:
                     pass
-            # 20 Hz (0.05s) — exactly matches the working MSDK sample (dbaldwin
-            # VirtualSticksViewController: Timer 0.05, velocity/angularVelocity/ground). Our
-            # DUML equivalent = VirtualJoyStickHelper 0x01/0x0A + auth 0x49/0x80 + GS 0x03/0x80.
+            # 20 Hz (0.05s) — MSDK virtual-stick rate. DUML = DataFlycJoystick 0x03/0x8E
+            # (flag 0x48 + 4 floats), authority via 0x03/0x80 NavigationSwitch (open=1/close=2).
             time.sleep(0.05)
 
     # whether it's safe to send a takeoff / motor-start command
@@ -466,12 +506,14 @@ def run_console_cmd(cli: Client, line: str):
         elif c in ("readparam", "rp", "param") and args:
             aliases = {"height": "g_config.flying_limit.max_height_0",
                        "radius": "g_config.flying_limit.max_radius_0",
-                       "speed": "g_config.control.horiz_vel_atti_range_0",
+                       "tilt": "g_config.mode_normal_cfg.tilt_atti_range_0",
+                       "speed": "g_config.mode_normal_cfg.tilt_atti_range_0",
                        "gpsenable": "g_config.gps_cfg.gps_enable_0",
                        "novice": "g_config.novice_cfg.max_height_0"}
             name = aliases.get(args[0], args[0])
             d.read_param(name); cli.msg(f"read {name}")
-        elif c in ("takeoff", "to") and cli._flight_ok(): d.takeoff(); cli.msg("takeoff")
+        elif c in ("takeoff", "to") and cli._flight_ok():
+            d.takeoff(); cli._pending_auto_c = True; cli._takeoff_t = time.time(); cli.msg("takeoff")
         elif c == "land": d.land(); cli.msg("land")
         elif c in ("rth", "gohome"): d.return_to_home(); cli.msg("RTH")
         elif c == "control":
@@ -487,11 +529,32 @@ def run_console_cmd(cli: Client, line: str):
             if args and args[0] == "speed": d.gimbal_speed(float(args[1])); cli.msg("gimbal speed")
             else: d.gimbal_angle(float(args[0])); cli.msg(f"gimbal angle {args[0]}")
         elif c == "recenter": d.gimbal_recenter(); cli.msg("gimbal recenter")
+        elif c == "home":
+            if args and args[0] == "here":
+                d.set_home_to_current_location(); cli.msg("home -> current location (needs GPS>=4); watch home= on HUD")
+            elif len(args) >= 2:
+                d.set_home_point(float(args[0]), float(args[1]))
+                cli.msg(f"home -> {args[0]},{args[1]} (must be within ~30m of current home); watch home= on HUD")
+            else:
+                cli.msg("usage: home here   |   home <lat> <lon>")
+        elif c in ("setalt", "maxalt"):
+            d.set_max_altitude(int(args[0])); cli.msg(f"max alt {args[0]} m (verify: rp height)")
+        elif c in ("setdist", "maxdist"):
+            d.set_max_distance(int(args[0])); cli.msg(f"max dist {args[0]} m (verify: rp radius)")
+        elif c == "rthalt":
+            d.set_rth_altitude(int(args[0])); cli.msg(f"RTH alt {args[0]} m")
+        elif c in ("fmode", "flightmode"):
+            d.set_flight_mode(args[0]); cli.msg(f"flight mode {args[0]} (tilt/speed; verify: rp tilt or watch ground speed)")
+        elif c in ("hspeed", "speed"):
+            d.set_horizontal_speed(float(args[0])); cli.msg(f"horiz speed ~{args[0]} m/s (via tilt angle)")
         elif c == "photo": d.take_photo(); cli.msg("photo")
         elif c == "rec": (d.start_record() if args and args[0] == "start" else d.stop_record()); cli.msg("rec " + (args[0] if args else ""))
         elif c == "zoom": d.set_zoom(float(args[0])); cli.msg(f"zoom {args[0]}x")
         elif c == "mode": d.set_camera_mode(0 if args[0] == "photo" else 1); cli.msg(f"camera mode {args[0]}")
         elif c == "iso": d.set_iso(int(args[0])); cli.msg(f"iso {args[0]}")
+        elif c == "shutter":
+            if args and args[0] == "auto": d.set_shutter_auto(); cli.msg("shutter AUTO")
+            else: d.set_shutter(int(args[0])); cli.msg(f"shutter 1/{args[0]} (smaller = brighter)")
         elif c == "ev": d.set_ev(int(args[0])); cli.msg(f"ev {args[0]}")
         elif c == "videofmt": d.set_video_format(int(args[0]), int(args[1])); cli.msg("video format")
         elif c == "codec": d.set_video_codec(args and args[0] == "h265"); cli.msg("codec")
@@ -501,14 +564,14 @@ def run_console_cmd(cli: Client, line: str):
             recv = int(args[3], 0) if len(args) > 3 else DEV_FC
             d.send_raw(cs, cid, pl, receiver=recv); cli.msg(f"raw {cs:#x}/{cid:#x} -> {recv:#x}")
         elif c == "help":
-            cli.msg("takeoff land rth control on|off gs on|off gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> raw <set> <id> <hex> [recv]")
+            cli.msg("takeoff land rth control on|off gs on|off home here|<lat> <lon> setalt <m> setdist <m> rthalt <m> rp height|radius gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> raw <set> <id> <hex> [recv]")
         else:
             cli.msg(f"unknown command: {c} (help)")
     except Exception as e:
         cli.msg(f"error: {e}")
 
 
-MOUSE_YAW_SENS = 0.010          # yaw axis per pixel of horizontal mouse motion
+MOUSE_YAW_SENS = 0.030          # yaw rate per pixel of mouse SPEED this frame (direct: mouse speed = yaw speed)
 MOUSE_GIMBAL_SENS = 0.15        # gimbal degrees per pixel of vertical mouse motion
 # FC virtual-stick (0x03/0x8E) physical scaling — conservative for first tests.
 STICK_ROLLPITCH_MS = 3.0        # roll/pitch full-deflection m/s (MSDK velocity mode)
@@ -558,11 +621,11 @@ class SettingsPanel:
             _W("slider", "Exposure (EV)", lambda v: self._try(lambda: d.set_ev(v), f"EV {v:+d}"),
                lo=-3, hi=3, step=1, val=0),
             _W("choice", "ISO", lambda v: self._try(lambda: d.set_iso(v), f"ISO {v}"),
-               opts=[100, 200, 400, 800, 1600, 3200]),
+               opts=[100, 200, 400, 800, 1600, 3200, 6400, 12800]),
             _W("choice", "Camera mode", lambda v: self._try(
                 lambda: d.set_camera_mode(0 if v == "photo" else 1), v), opts=["photo", "video"]),
             _W("button", "Recenter gimbal", lambda v: self._try(lambda: d.gimbal_recenter(), "recenter")),
-            _W("button", "Set home to here", lambda v: self._try(lambda: d.set_home_to_aircraft(), "home set")),
+            _W("button", "Set home to here", lambda v: self._try(lambda: d.set_home_to_current_location(), "home set")),
             _W("button", "Media: list SD card", lambda v: self._list_media()),
             _W("button", "Media: download first", lambda v: self._download_first()),
             _W("button", "Media: delete first", lambda v: self._delete_first()),
@@ -787,8 +850,9 @@ def run_ui(cli: Client):
                     settings.handle(ev)
             elif ev.type == pygame.MOUSEMOTION and grabbed and not console:
                 dx, dy = ev.rel
-                # X -> yaw rate (spin in place), Y -> gimbal pitch (look up/down).
-                cli.mouse_yaw = max(-1.0, min(1.0, dx * MOUSE_YAW_SENS))
+                # X -> yaw rate (= mouse speed), Y -> gimbal pitch (look up/down).
+                # Sum horizontal travel over the frame; yaw is set from it in the stick block.
+                cli._frame_dx += dx
                 cli.gimbal_pitch = max(-90.0, min(30.0, cli.gimbal_pitch - dy * MOUSE_GIMBAL_SENS))
             elif ev.type == pygame.KEYDOWN:
                 if console:
@@ -811,9 +875,13 @@ def run_ui(cli: Client):
                 elif ev.key == pygame.K_k:
                     cli.d.request_i_frame(); cli.msg("keyframe requested")
                 elif ev.key == pygame.K_j:
-                    # cycle the 0x03/0x8E mode-combo flag to find the one the FC honours
-                    cli.stick_flag = (cli.stick_flag + 1) & 0xFF
-                    cli.msg(f"stick flag = 0x{cli.stick_flag:02x} (J to change)")
+                    # cycle the useful 0x03/0x8E flag presets (frame/axis mode)
+                    i = (cli.stick_flags.index(cli.stick_flag) + 1) % len(cli.stick_flags) \
+                        if cli.stick_flag in cli.stick_flags else 0
+                    cli.stick_flag = cli.stick_flags[i]
+                    _names = {0x4A: "velocity/BODY", 0x48: "velocity/GROUND",
+                              0x0A: "angle/BODY", 0x08: "angle/GROUND"}
+                    cli.msg(f"stick flag = 0x{cli.stick_flag:02x} ({_names.get(cli.stick_flag,'?')}) — J to change")
                 elif ev.key == pygame.K_m:
                     cli.stick_mobilerc = not cli.stick_mobilerc
                     cli.msg(f"stick frame = {'0x01/0x02 mobile-RC' if cli.stick_mobilerc else '0x01/0x0A'}")
@@ -831,7 +899,9 @@ def run_ui(cli: Client):
                 elif ev.key == pygame.K_RETURN:
                     if cli.live: cli.armed = not cli.armed; cli.msg(f"ARMED={cli.armed}")
                     else: cli.msg("ARM unavailable without --live")
-                elif ev.key == pygame.K_t and cli._flight_ok(): cli.d.takeoff(); cli.msg("takeoff")
+                elif ev.key == pygame.K_t and cli._flight_ok():
+                    cli.d.takeoff(); cli._pending_auto_c = True; cli._takeoff_t = time.time()
+                    cli.msg("takeoff" + (" (control will auto-enable when settled)" if cli.auto_c else ""))
                 elif ev.key == pygame.K_l: cli.d.land(); cli.msg("land")
                 elif ev.key == pygame.K_h: cli.d.return_to_home(); cli.msg("RTH (emergency)")
                 elif ev.key == pygame.K_c:
@@ -847,7 +917,11 @@ def run_ui(cli: Client):
                 elif ev.key == pygame.K_n:
                     cli.gimbal_pitch = 0.0; cli.d.gimbal_recenter(); cli.msg("recenter")
                 elif ev.key == pygame.K_p: cli.d.take_photo(); cli.msg("photo")
-                elif ev.key == pygame.K_r: cli.d.start_record(); cli.msg("record start (Shift+R stop)")
+                elif ev.key == pygame.K_r:
+                    if cli.recording:
+                        cli.d.stop_record(); cli.recording = False; cli.msg("record STOP")
+                    else:
+                        cli.d.start_record(); cli.recording = True; cli.msg("record START (R again = stop)")
                 elif ev.key == pygame.K_z: cli.d.set_zoom(2.0); cli.msg("zoom 2x")
                 elif ev.key == pygame.K_x: cli.d.set_zoom(1.0); cli.msg("zoom 1x")
 
@@ -861,10 +935,11 @@ def run_ui(cli: Client):
             held = pygame.key.get_pressed()
             pressed = {name for k, name in KEYMAP.items() if held[k]}
             s = keys_to_sticks(pressed)
-            # Mouse X adds to yaw (spectator spin). Decay to zero when the mouse stops,
-            # since MOUSEMOTION only fires on movement.
+            # Mouse X -> yaw rate, directly proportional to how fast the mouse moved this
+            # frame (mouse speed = yaw speed). Mouse still this frame -> 0 -> yaw stops.
+            cli.mouse_yaw = max(-1.0, min(1.0, cli._frame_dx * MOUSE_YAW_SENS))
+            cli._frame_dx = 0.0
             yaw = s.yaw + (cli.mouse_yaw if grabbed else 0.0)
-            cli.mouse_yaw *= 0.6
             with cli.lock:
                 cli.axes = {"throttle": s.throttle, "yaw": max(-1.0, min(1.0, yaw)),
                             "pitch": s.pitch, "roll": s.roll}
@@ -904,12 +979,21 @@ def run_ui(cli: Client):
         line(screen, 8, f"DJI Mavic Mini 1 — {cli.mode}  {'LIVE' if cli.live else 'DRY'}"
                         f"  {'ARMED' if cli.armed else 'disarmed'}", big,
              (120, 255, 120) if cli.armed else (255, 180, 120))
-        line(screen, 34, f"control={cli.control}  ground_station={cli.gs}"
-                         f"  responding: {sorted(hex(a) for a in cli.responders)}")
+        from telemetry import SDK_CTRL_DEVICE
+        _cd = SDK_CTRL_DEVICE.get(st.ctrl_device, st.ctrl_device)
+        line(screen, 34, f"control={cli.control}  gs={cli.gs}  FC-owner={_cd}"
+                         f"  responding: {sorted(hex(a) for a in cli.responders)}",
+             font, (120, 255, 120) if st.ctrl_device == 1 else (200, 200, 200))
         line(screen, 58, "── TELEMETRY ──", font, (150, 180, 255))
         line(screen, 78, f"mode={st.flight_mode_name}  satellites={st.satellites}  gps={st.gps_level}")
         line(screen, 96, f"battery={st.battery_pct}%  altitude={st.altitude_m}m  flying={st.is_flying}  motors={st.motors_on}")
-        line(screen, 114, f"roll/pitch/yaw={st.roll}/{st.pitch}/{st.yaw}")
+        _hlat = f"{st.home_lat:.5f}" if st.home_lat is not None else "-"
+        _hlon = f"{st.home_lon:.5f}" if st.home_lon is not None else "-"
+        line(screen, 114, f"roll/pitch/yaw={st.roll}/{st.pitch}/{st.yaw}   "
+                          f"max_alt={st.max_height_m}m  home={_hlat},{_hlon} rec={st.home_recorded}")
+        _rec = f"REC {st.record_time_s}s" if st.is_recording else "rec off"
+        line(screen, 132, f"camera: {_rec}   flightmode-tilt: use 'rp tilt'",
+             font, (255, 120, 120) if st.is_recording else (200, 200, 200))
         if st.motor_fail_code:
             line(screen, 134, f"WON'T START: {st.motor_fail_reason}", font, (255, 120, 120))
         line(screen, 162, "── STICKS (WASD/Space/Shift/QE) ──", font, (150, 180, 255))

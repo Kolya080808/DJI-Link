@@ -133,10 +133,12 @@ class Drone:
         self._cmd(0x49, 0x80, b"\x00", receiver=0x00)
         self._cmd(0x49, 0x80, b"\x00", receiver=DEV_FC)
 
-    # Ground station mode — PROBABLY required BEFORE the sticks so the FC listens.
-    # uav_fc_set_ground_station_on_off_req: cmd_set 0x03, cmd_id 0x80, 1 byte.
+    # FLYC NavigationSwitch (cmd_set 0x03, cmd_id 0x80, 1 byte) — the real MSDK
+    # enable/disable for app control. OPEN_GROUND_STATION=1 flips SDKCtrlDevice->APP;
+    # CLOSE_GROUND_STATION=2 returns control to the RC (SDKCtrlDevice->RC). Sending 0 does
+    # NOT release — that was the "stuck on APP" bug. (VIRTUAL_STICK_RESEARCH_2026.md §E)
     def set_ground_station_mode(self, on: bool = True) -> None:
-        self._cmd(0x03, 0x80, bytes([1 if on else 0]), receiver=DEV_FC)
+        self._cmd(0x03, 0x80, bytes([1 if on else 2]), receiver=DEV_FC)
 
     def enable_virtual_stick(self, on: bool = True) -> None:
         """MSDK setVirtualStickModeEnabled analogue: request control + ground-station on
@@ -178,15 +180,33 @@ class Drone:
         # cmd_set 0x03 id 0xFE, 1-byte flag (verified from DataFlycSetMotorForceDisable).
         self._cmd(0x03, 0xFE, bytes([1 if disable else 0]), receiver=DEV_FC)
 
-    # --- flight limits: max altitude / distance WITHOUT the param hash (0x03/0x2D) ---
-    # DataFlycSetLimits, payload [mode u8][value u16 LE metres]. mode High=1/Far=2/Low=3.
+    # --- flight limits: max altitude / distance ---
+    # PRIMARY path = FC param write by name-hash (0x03/0xF9), which is exactly what the DJI
+    # app does (DEX-confirmed) and is EEPROM-persisted (attribute 0x0B). Read back with
+    # read_param() to verify. FC clamps to its table range. (FLIGHT_LIMITS_RESEARCH_2026.md)
     def set_max_altitude(self, metres: int) -> None:
         m = max(15, min(500, int(metres)))            # FC clamps to 15..500
-        self._cmd(0x03, 0x2D, bytes([1]) + struct.pack("<H", m), receiver=DEV_FC)
+        self.set_param("g_config.flying_limit.max_height_0", struct.pack("<H", m))
 
     def set_max_distance(self, metres: int) -> None:
         m = max(15, min(5000, int(metres)))           # FC clamps to 15..5000
+        self.set_param("g_config.flying_limit.max_radius_0", struct.pack("<H", m))
+
+    # Fallback: dedicated DataFlycSetLimits command 0x03/0x2D [mode u8][value u16 LE].
+    # mode High=1/Far=2/Low=3. Byte-correct but the shipped app never calls it — unproven
+    # on WM160, so keep it as a fallback only.
+    def set_max_altitude_cmd(self, metres: int) -> None:
+        m = max(15, min(500, int(metres)))
+        self._cmd(0x03, 0x2D, bytes([1]) + struct.pack("<H", m), receiver=DEV_FC)
+
+    def set_max_distance_cmd(self, metres: int) -> None:
+        m = max(15, min(5000, int(metres)))
         self._cmd(0x03, 0x2D, bytes([2]) + struct.pack("<H", m), receiver=DEV_FC)
+
+    def assistant_unlock(self) -> None:
+        # 0x03/0xDF assistant/config write-unlock (lock_state u32=1). Some FCs want it once
+        # before the first param write; harmless if not required. Not sent automatically.
+        self._cmd(0x03, 0xDF, struct.pack("<I", 1), receiver=DEV_FC)
 
     def get_limits(self, mode: int = 1) -> None:
         self._cmd(0x03, 0x2E, bytes([mode]), receiver=DEV_FC)
@@ -201,9 +221,12 @@ class Drone:
         self._cmd(0x03, 0xF9, _s.pack("<I", param_hash(name)) + value_bytes, receiver=DEV_FC)
 
     def set_horizontal_speed(self, mps: float) -> None:
-        # Horizontal velocity limit is an FC param (float m/s). Name/type best-effort.
-        import struct as _s
-        self.set_param("g_config.control.horiz_vel_atti_range_0", _s.pack("<f", float(mps)))
+        # WM160 has NO m/s speed-cap param (the old horiz_vel_atti_range_0 is Phantom-3-era
+        # and ABSENT on Mini -> was a silent no-op). Speed is bounded by the max lean angle,
+        # so map speed->angle (~2.5 deg per m/s: 8 m/s ~= 20 deg) and write the tilt param,
+        # clamped 5..40 deg. (FLIGHT_MODE_SPEED_RESEARCH_2026.md)
+        tilt = max(5.0, min(40.0, float(mps) * 2.5))
+        self.set_param("g_config.mode_normal_cfg.tilt_atti_range_0", struct.pack("<f", tilt))
 
     def unlock_no_gps(self, unlock: bool = True) -> None:
         # Unlock dark/no-GPS takeoff. Verified from the app: it clears the flag by writing
@@ -214,11 +237,11 @@ class Drone:
     # --- camera working mode: liveview (flight) vs playback (media) ---
     # The camera can't do both; media list/download only answer in playback mode.
     def enter_playback(self) -> None:
-        # File ops (0x00/0x20 list, 0x1F data, 0x28 delete) are serviced ONLY in
-        # MEDIA_DOWNLOAD mode (=3), which is DISTINCT from PLAYBACK (=2) in
-        # CameraWorkMode.smali. Setting 2 makes the camera NAK the whole file family
-        # with 0xe0 ("not available in this state"). Send 3 and nothing after it.
-        self._cmd(0x02, 0x10, bytes([3]), receiver=DEV_CAMERA)   # working_mode = MEDIA_DOWNLOAD
+        # WM160 is a LEGACY camera: media is served in PLAYBACK = wire mode 2 (via
+        # PlaybackManager). Mode 3 = TRANSCODE — sending 3 was the whole cause of the 0xe0
+        # NAK on the file family. Send 2, then wait for the 0x02/0x82 PlayBackParams push.
+        # (CAMERA_MEDIA_RESEARCH_2026.md)
+        self._cmd(0x02, 0x10, bytes([2]), receiver=DEV_CAMERA)   # working_mode = PLAYBACK
 
     def exit_playback(self) -> None:
         self._cmd(0x02, 0x10, bytes([1]), receiver=DEV_CAMERA)   # back to RECORD/liveview
@@ -235,21 +258,42 @@ class Drone:
         import struct as _s
         self._cmd(0x03, 0xF8, _s.pack("<I", param_hash(name)), receiver=DEV_FC)
 
-    def set_flight_mode(self, name: str) -> None:
-        # normal/cinema/sport are NOT a single DUML command on WM160 — the app changes a
-        # set of control-gain params (hash-written) and the RC mode gear. So mode switching
-        # also depends on the param hash, same blocker as speed.
-        raise NotImplementedError(
-            "flight mode = control-gain params (hash write); not a single command on Mini 1")
+    # Cine/Normal/Sport on WM160 are NOT a DUML mode command — the FC picks a pre-stored
+    # block via the RC GEAR channel, which the float joystick 0x03/0x8E has no slot for. So
+    # we EMULATE the gears by writing the active (Normal) block's max lean angle = the speed
+    # cap. tilt higher -> faster. Param persists (RW+EE); write 20 to restore stock Normal.
+    FLIGHT_MODE_TILT = {"cine": 10.0, "cinema": 10.0, "cinematic": 10.0,
+                        "normal": 20.0, "sport": 30.0, "max": 40.0}
 
-    # --- home point (arbitrary lat/lon) 0x03/0x31, coords in RADIANS ---
-    def set_home_point(self, lat_deg: float, lon_deg: float, home_type: int = 0) -> None:
+    def set_flight_mode(self, name: str) -> None:
+        tilt = self.FLIGHT_MODE_TILT.get(str(name).strip().lower())
+        if tilt is None:
+            raise ValueError(f"unknown mode {name!r}; use cine/normal/sport/max")
+        self.set_param("g_config.mode_normal_cfg.tilt_atti_range_0", struct.pack("<f", tilt))
+
+    # --- home point (DataFlycSetHomePoint 0x03/0x31, 18-byte payload) ---
+    # [0] type: 0x02=APP(explicit coord), 0x00=AIRCRAFT(current location);
+    # [1..8] lat f64 LE RADIANS, [9..16] lon f64 LE RADIANS, [17]=0x64 (mInterval const).
+    # Preconditions: initial home already recorded; explicit coord within ~30 m of
+    # home/aircraft or FC rejects (DISTANCE_TOO_FAR). (HOME_POINT_RESEARCH_2026.md)
+    def set_home_point(self, lat_deg: float, lon_deg: float) -> None:
+        """Set home to an EXPLICIT GPS coordinate (type APP=0x02)."""
         import math
-        lat = math.radians(lat_deg)
-        lon = math.radians(lon_deg)
         self._cmd(0x03, 0x31,
-                  bytes([home_type]) + struct.pack("<dd", lat, lon) + bytes([0]),
+                  bytes([0x02]) + struct.pack("<dd", math.radians(lat_deg), math.radians(lon_deg))
+                  + bytes([0x64]),
                   receiver=DEV_FC)
+
+    def set_home_to_current_location(self) -> None:
+        """Set home to the aircraft's CURRENT location (type AIRCRAFT=0x00). Needs GPS>=4."""
+        self._cmd(0x03, 0x31,
+                  bytes([0x00]) + struct.pack("<dd", 0.0, 0.0) + bytes([0x64]),
+                  receiver=DEV_FC)
+
+    def set_rth_altitude(self, metres: int) -> None:
+        # RTH (go-home) height is a param write, not a command. 20..500 m.
+        m = max(20, min(500, int(metres)))
+        self.set_param("g_config.go_home.fixed_go_home_altitude_0", struct.pack("<H", m))
 
     # --- gimbal auto-calibration 0x04/0x08 ---
     def gimbal_calibrate(self) -> None:
@@ -268,13 +312,55 @@ class Drone:
         payload = bytes([0x00]) + packed.to_bytes(8, "little") + b"\x00\x00" + struct.pack("<H", flags)
         self._cmd(0x01, 0x02, payload, receiver=DEV_FC, ack=False)
 
-    # --- alternate stick encoding: FLYC float joystick 0x03/0x8E (candidate 3) ---
-    # 17 bytes [flag u8][roll,pitch,yaw,throttle f32 LE], physical units (MSDK-like).
+    # --- FLYC float joystick 0x03/0x8E = DataFlycJoystick (MSDK v4.18, the SDK that
+    # officially added Mavic Mini support). CONFIRMED byte-for-byte from provided.jar:
+    #   payload = 17 bytes: [0] flag u8, [1..4] roll f32 LE, [5..8] pitch f32 LE,
+    #                       [9..12] yaw f32 LE, [13..16] throttle f32 LE.
+    #   cmd_set=CmdSet.FLYC(0x03), cmd_id=CmdIdFlyc.JoyStick(79)=0x8E, sender APP->FLYC,
+    #   REQUEST, NEEDACK.NO. Values are PHYSICAL units, NOT normalized [-1..1] and NOT
+    #   RC channels. Meaning depends on the flag byte (see build_stick_flag).
+    #
+    # flag byte (from FlightControllerAbstraction.fdd(Vert,RP,Yaw,Coord,bool)):
+    #   flag = (rollpitch<<6) | (vertical<<4) | (yaw<<3) | (coord<<1) | advanced
+    #   bit6 rollpitch: 0=ANGLE(deg), 1=VELOCITY(m/s)
+    #   bit4 vertical : 0=VELOCITY(m/s), 1=POSITION(m)
+    #   bit3 yaw      : 0=ANGLE(deg abs heading), 1=ANGULAR_VELOCITY(deg/s)
+    #   bit1 coord    : 0=GROUND, 1=BODY
+    #   bit0 advanced : setVirtualStickAdvancedModeEnabled
+    # Value ranges (Limits.class): vert vel [-4..5] m/s, rollpitch vel ±15 m/s,
+    #   rollpitch angle ±30 deg, yaw angle ±180 deg, yaw ang.vel ~±100 deg/s.
+    @staticmethod
+    def build_stick_flag(rollpitch_velocity=True, yaw_rate=True,
+                         vertical_velocity=True, body_frame=False, advanced=False) -> int:
+        rp = 1 if rollpitch_velocity else 0
+        vt = 0 if vertical_velocity else 1          # VELOCITY=0, POSITION=1
+        yw = 1 if yaw_rate else 0                    # ANGLE=0, ANGULAR_VELOCITY=1
+        co = 1 if body_frame else 0                  # GROUND=0, BODY=1
+        return ((rp << 6) | (vt << 4) | (yw << 3) | (co << 1) | (1 if advanced else 0)) & 0xFF
+
+    # default flag 0x48 = rollpitch VELOCITY + yaw ANGULAR_VELOCITY + vertical VELOCITY
+    #                     + GROUND frame + advanced off (the "spectator-mode" velocity setup).
     def set_sticks_float(self, roll: float, pitch: float, yaw: float, throttle: float,
-                         flag: int = 0) -> None:
+                         flag: int = 0x48) -> None:
+        # WM160 wire order (EMPIRICAL on hardware) = pitch, roll, throttle, yaw.
+        # The MSDK swaps yaw<->throttle for this DroneType, and on WM160 the first two
+        # floats behave as pitch (fwd/back) then roll (lateral) — i.e. roll<->pitch are
+        # also swapped vs the generic doPack. Slots: [1..4]=pitch [5..8]=roll [9..12]=throttle
+        # [13..16]=yaw. (VIRTUAL_STICK_RESEARCH_2026.md; confirmed by W/S vs A/D behaviour.)
         self._cmd(0x03, 0x8E,
-                  bytes([flag]) + struct.pack("<ffff", roll, pitch, yaw, throttle),
+                  bytes([flag]) + struct.pack("<ffff", pitch, roll, throttle, yaw),
                   receiver=DEV_FC)
+
+    # Scale normalized axes [-1..1] to physical units and send via 0x03/0x8E.
+    def set_sticks_velocity(self, roll: float, pitch: float, yaw: float, throttle: float,
+                            flag: int = 0x4A, h_mps: float = 5.0, v_mps: float = 2.0,
+                            yaw_dps: float = 90.0) -> None:
+        # Default flag 0x4A = velocity + BODY frame (roll/pitch relative to the aircraft's
+        # heading — what a pilot expects). 0x48 = GROUND frame (world-relative; feels
+        # diagonal when the nose isn't aligned). Coord bit only rescopes roll/pitch.
+        c = lambda v: max(-1.0, min(1.0, v))
+        self.set_sticks_float(c(roll) * h_mps, c(pitch) * h_mps,
+                              c(yaw) * yaw_dps, c(throttle) * v_mps, flag=flag)
 
     # ==========================================================
     # APP FUNCTIONS (camera/gimbal/media)
@@ -308,9 +394,12 @@ class Drone:
         # cmd_id 0x01, payload = capture_type (single = protocol 2)
         self._cmd(CMDSET_CAMERA, 0x01, b"\x02", receiver=DEV_CAMERA)
     def start_record(self) -> None:
-        self._cmd(CMDSET_CAMERA, 0x02, b"\x01", receiver=DEV_CAMERA)
+        # Recording only starts if the camera is in VIDEO/RECORD work mode — set it first.
+        # Verify via 0x02/0x80 push (record state != STOP, video time @0x1d climbing).
+        self._cmd(CMDSET_CAMERA, 0x10, b"\x01", receiver=DEV_CAMERA)   # work mode = RECORD/video
+        self._cmd(CMDSET_CAMERA, 0x02, b"\x01", receiver=DEV_CAMERA)   # 1 = START
     def stop_record(self) -> None:
-        self._cmd(CMDSET_CAMERA, 0x02, b"\x00", receiver=DEV_CAMERA)
+        self._cmd(CMDSET_CAMERA, 0x02, b"\x00", receiver=DEV_CAMERA)   # 0 = STOP
     def set_camera_mode(self, mode: int) -> None:
         # 0x02/0x10 set work mode (0=photo,1=video... SDK enum identity)
         self._cmd(CMDSET_CAMERA, 0x10, bytes([mode & 0xFF]), receiver=DEV_CAMERA)
@@ -350,15 +439,35 @@ class Drone:
     # Camera settings (cmd_ids are exact; enum values are standard DJI, verify on HW)
     # Exposure mode (0x02/0x1E): PROGRAM=1, SHUTTER=2, APERTURE=3, MANUAL=4.
     def set_exposure_mode(self, mode: int) -> None:
-        self._cmd(CMDSET_CAMERA, 0x1E, bytes([mode & 0xFF]), receiver=DEV_CAMERA)
+        # DataCameraSetExposureMode = 2 bytes [expMode, senceMode]. Sending only 1 byte gets
+        # the frame dropped, so the camera stays AUTO and ignores ISO. mode: Manual(M)=4.
+        # (CAMERA_MEDIA_RESEARCH_2026.md)
+        self._cmd(CMDSET_CAMERA, 0x1E, bytes([mode & 0xFF, 0x00]), receiver=DEV_CAMERA)
 
-    _ISO_INDEX = {0: 0, 100: 3, 200: 4, 400: 5, 800: 6, 1600: 7, 3200: 8}  # 0=AUTO
+    # 0=AUTO. WM160 sensor tops out at 3200 for video (camera may clamp higher values).
+    _ISO_INDEX = {0: 0, 100: 3, 200: 4, 400: 5, 800: 6, 1600: 7, 3200: 8,
+                  6400: 9, 12800: 10, 25600: 11}
 
     def set_iso(self, iso: int) -> None:
         # ISO takes the enum INDEX, and only applies in MANUAL exposure mode.
         self.set_exposure_mode(4)
         idx = self._ISO_INDEX.get(iso, iso)
         self._cmd(CMDSET_CAMERA, 0x2A, bytes([idx & 0x7F]), receiver=DEV_CAMERA)
+
+    # --- shutter speed = DataCameraSetShutterSpeed (0x02/0x28) — the real brightness lever
+    # in MANUAL. Payload 4 B: [type][integral u16 LE][decimal]. For a 1/N shutter,
+    # integral = (1<<15) | N (bit15 = "reciprocal"). SLOWER shutter (smaller N) = BRIGHTER.
+    # WM160 sensor caps ISO at 3200, so when it's too dark at ISO 3200, slow the shutter.
+    def set_shutter(self, denom: int) -> None:
+        """Set shutter to 1/denom s (e.g. 30 -> 1/30). Smaller denom = brighter."""
+        self.set_exposure_mode(4)                      # shutter only sticks in MANUAL
+        integral = (1 << 15) | (int(denom) & 0x7FFF)
+        self._cmd(CMDSET_CAMERA, 0x28,
+                  bytes([1]) + struct.pack("<H", integral) + bytes([0]), receiver=DEV_CAMERA)
+
+    def set_shutter_auto(self) -> None:
+        """Let the camera auto-pick the shutter (type=AUTO)."""
+        self._cmd(CMDSET_CAMERA, 0x28, bytes([0, 0, 0, 0]), receiver=DEV_CAMERA)
 
     def set_ev(self, ev_thirds: int) -> None:
         # Exposure compensation: 0EV=0x10, each full stop = 3 (1/3-EV) steps. Non-manual only.

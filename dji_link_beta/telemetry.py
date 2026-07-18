@@ -27,6 +27,10 @@ def u8(b, off):
     return b[off] if off < len(b) else None
 
 
+def s8(b, off):
+    return struct.unpack_from("<b", b, off)[0] if off < len(b) else None
+
+
 def u32(b, off):
     return struct.unpack_from("<I", b, off)[0] if off + 4 <= len(b) else None
 
@@ -37,17 +41,23 @@ def s32(b, off):
 
 # flyc_state (byte @0x1e & 0x7F). Verified against the WM160 app enum
 # DataOsdGetPushCommon$FLYC_STATE (index == code); see TELEMETRY_TRUTH.md §1.
+# DataOsdGetPushCommon$SDKCtrlDevice — who currently commands the FC (OSD-common @0x34).
+# APP(1) means the FC accepted our virtual-stick control; RC(0) means the RC still owns it.
+SDK_CTRL_DEVICE = {0: "RC", 1: "APP", 2: "ONBOARD", 3: "CAMERA"}
+
+# DataOsdGetPushCommon$FLYC_STATE: enum find() matches the CODE (3rd ctor arg), which is
+# NOT dense — 18,20,21,22,34,40,42,44,45,47,48 are unused gaps. Codes verified from the jar.
 FLYC_STATE = {
     0: "Manual", 1: "Atti", 2: "Atti_CL", 3: "Atti_Hover", 4: "Hover",
     5: "GPS_Blake", 6: "GPS_Atti", 7: "GPS_CL", 8: "GPS_HomeLock", 9: "GPS_HotPoint",
     10: "AssistedTakeoff", 11: "AutoTakeoff", 12: "AutoLanding", 13: "AttiLanding",
-    14: "NaviGo", 15: "GoHome", 16: "ClickGo", 17: "Joystick", 18: "Cinematic",
-    19: "Atti_Limited", 20: "NaviSubMode_Draw", 21: "NaviMissionFollow",
-    22: "NaviSubMode_Tracking", 23: "NaviSubMode_Pointing", 24: "PANO", 25: "Farming",
-    26: "FPV", 27: "SPORT", 28: "NOVICE", 29: "FORCE_LANDING", 30: "TERRAIN_TRACKING",
-    31: "PALM_CONTROL", 32: "QUICK_SHOT", 33: "TRIPOD_GPS", 34: "TRACK_HEADLOCK",
-    35: "ENGINE_START", 36: "DETOUR", 37: "TIME_LAPSE", 38: "POI_WITH_VISION",
-    39: "OMNI_MOVING", 40: "OTHER",
+    14: "NaviGo", 15: "GoHome", 16: "ClickGo", 17: "Joystick",
+    19: "Cinematic", 23: "Atti_Limited", 24: "NaviSubMode_Draw", 25: "NaviMissionFollow",
+    26: "NaviSubMode_Tracking", 27: "NaviSubMode_Pointing", 28: "PANO", 29: "Farming",
+    30: "FPV", 31: "SPORT", 32: "NOVICE", 33: "FORCE_LANDING", 35: "TERRAIN_TRACKING",
+    36: "PALM_CONTROL", 37: "QUICK_SHOT", 38: "TRIPOD_GPS", 39: "TRACK_HEADLOCK",
+    41: "ENGINE_START", 43: "DETOUR", 46: "TIME_LAPSE", 49: "OMNI_MOVING",
+    50: "POI_WITH_VISION", 51: "SMART_TRACK", 52: "LOST_POWER_FORCE_LANDING", 100: "OTHER",
 }
 
 # Motor start failure cause (payload +0x33) — standard DJI enum (low codes)
@@ -78,6 +88,9 @@ class OsdState:
     flight_mode_name: str | None = None
     is_flying: bool | None = None
     motors_on: bool | None = None
+    ctrl_device: int | None = None      # SDKCtrlDevice: 1=APP => FC accepted our sticks
+    is_recording: bool | None = None    # camera state push (0x02/0x80)
+    record_time_s: int | None = None    # video record duration, seconds (climbs while recording)
     home_set: bool | None = None
     motor_fail_code: int | None = None
     motor_fail_reason: str | None = None
@@ -88,7 +101,8 @@ class OsdState:
     sim_started: bool | None = None
     near_height_limit: bool | None = None
     near_dist_limit: bool | None = None
-    max_height_m: int | None = None
+    max_height_m: float | None = None
+    home_recorded: bool | None = None
     # position (radians -> degrees)
     home_lat: float | None = None
     home_lon: float | None = None
@@ -131,8 +145,23 @@ class Telemetry:
         # from the FC side, which appears as sender 0x03 or 0x09 depending on the build.
         if pkt.cmd_set == 0x03 and pkt.cmd_id == 0x43 and len(p) >= 0x34:
             self._parse_osd(p)
+        elif pkt.cmd_set == 0x03 and pkt.cmd_id == 0x44 and len(p) >= 16:
+            self.parse_home_location(p)          # DataOsdGetPushHome (home lat/lon + recorded)
         elif pkt.cmd_set == 0x0D and pkt.cmd_id == 0x02 and len(p) >= 0x14:
             self._parse_battery(p)
+        elif pkt.cmd_set == 0x02 and pkt.cmd_id == 0x80 and len(p) >= 0x1f:
+            self._parse_camera_state(p)
+
+    def _parse_camera_state(self, p: bytes) -> None:
+        # DataCameraGetPushStateInfo (0x02/0x80): recording flag in the byte-0 bitfield
+        # (0xC0), video record duration u16 @0x1d (seconds, climbs while recording).
+        st = self.state
+        b0 = u8(p, 0)
+        if b0 is not None:
+            st.is_recording = ((b0 >> 6) & 3) in (1, 2)   # getRecordState: 3=STOP is not recording
+        rt = u16(p, 0x1d)
+        if rt is not None:
+            st.record_time_s = rt
 
     def _parse_battery(self, p: bytes) -> None:
         # Smart-battery dynamic (0x0D/0x02) — DataSmartBatteryGetPushDynamicData,
@@ -188,13 +217,15 @@ class Telemetry:
             st.flight_mode_name = FLYC_STATE.get(st.flight_mode, f"?{st.flight_mode}")
         w = u32(p, 0x20)
         if w is not None:
-            st.is_flying = (w & 0x0E) != 0
+            st.is_flying = ((w >> 1) & 3) == 2   # groundOrSky==2 = flying (DataOsdGetPushCommon)
             st.motors_on = bool((w >> 3) & 1)
             st.gps_level = (w >> 18) & 0xF   # getGpsLevel: (u32@0x20 >> 0x12) & 0xF
-        sats = u16(p, 0x24)                  # getGpsNum reads a Short, not a byte
-        if sats is not None: st.satellites = sats
-        vps = s16(p, 0x29)                   # getSwaveHeight (VPS/ultrasonic), metres
+        sats = u8(p, 0x24)                   # getGpsNum is 1 BYTE @0x24 (the "Short" is boxing,
+        if sats is not None: st.satellites = sats   # not width; u16 here inflates when p[0x25]!=0)
+        vps = s8(p, 0x29)                    # getSwaveHeight (VPS) is 1 signed BYTE @0x29 (s16 spilled into flyTime)
         if vps is not None: st.vps_height_m = vps * 0.1
+        cd = u8(p, 0x34)                     # SDKCtrlDevice: 1=APP => our sticks accepted
+        if cd is not None: st.ctrl_device = cd
         # Motor start-fail cause = u8 @0x26 & 0x7F (getMotorFailedCause). The old 0x33
         # was wrong.
         mf = u8(p, 0x26)
@@ -218,8 +249,10 @@ class Telemetry:
         w14 = struct.unpack_from("<H", p, 0x14)[0]
         st.near_height_limit = bool((w14 >> 5) & 1)
         st.near_dist_limit = bool((w14 >> 4) & 1)
-        mh = u8(p, 0x25)
-        if mh is not None: st.max_height_m = mh
+        # LimitMaxFlightHeightInMeter = float32 @0x25 (was mis-read as u8) — the enforced
+        # ceiling reads back here, so writing max_height and watching this confirms it.
+        if len(p) >= 0x29:
+            st.max_height_m = round(struct.unpack_from("<f", p, 0x25)[0], 1)
         w20 = u32(p, 0x20)
         if w20 is not None: st.sim_started = bool(w20 & 1)
 
@@ -228,10 +261,14 @@ class Telemetry:
         return None if v is None else v * 180.0 / math.pi
 
     def parse_home_location(self, p: bytes) -> None:
-        """Home lat/lon push: f64 radians @+0x00/+0x08."""
+        """DataOsdGetPushHome (cmd_set 0x03 / cmd_id 0x44). f64 radians, but the order is
+        LON @+0x00, LAT @+0x08 (opposite of the OSD-general frame). Verified in
+        HOME_POINT_RESEARCH_2026.md — the previous lat/lon were swapped here."""
         if len(p) >= 16:
-            self.state.home_lat = self.rad_to_deg(struct.unpack_from("<d", p, 0)[0])
-            self.state.home_lon = self.rad_to_deg(struct.unpack_from("<d", p, 8)[0])
+            self.state.home_lon = self.rad_to_deg(struct.unpack_from("<d", p, 0)[0])
+            self.state.home_lat = self.rad_to_deg(struct.unpack_from("<d", p, 8)[0])
+        if len(p) >= 0x16:                       # flags u16 @0x14, bit0 = home recorded
+            self.state.home_recorded = bool(struct.unpack_from("<H", p, 0x14)[0] & 1)
 
     def parse_aircraft_location(self, p: bytes) -> None:
         if len(p) >= 16:
