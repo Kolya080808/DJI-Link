@@ -202,14 +202,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: packages-*
           merge-multiple: true
 
       - name: Download release notes
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-notes
           path: notes
