@@ -36,7 +36,7 @@ jobs:
       title:      ${{ steps.parse.outputs.title }}
       prerelease: ${{ steps.parse.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Parse UPDATE.md
         id: parse
@@ -116,7 +116,7 @@ jobs:
               msvc_arch: x86,   cpack_extra: '-D CPACK_WIX_ARCHITECTURE=x86', experimental: true }
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
