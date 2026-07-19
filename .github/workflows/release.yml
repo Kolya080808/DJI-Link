@@ -80,7 +80,7 @@ jobs:
           echo "OK: tag $GITHUB_REF_NAME matches UPDATE.md version $file_version"
 
       - name: Upload release notes
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: release-notes.md
@@ -187,7 +187,7 @@ jobs:
           ls -la dist
 
       - name: Upload packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: packages-${{ matrix.slug }}
           path: dist/*
