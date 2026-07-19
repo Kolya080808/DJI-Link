@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Keep GitHub Actions versions fresh (security + fixes).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    labels:
+      - dependencies
+      - ci

@@ -1,0 +1,236 @@
+name: Release
+
+# A release runs ONLY on a git tag like v1.2.3 (or v1.2.3-rc1).
+# How to cut a release:
+#   1. Edit UPDATE.md (version / title / prerelease / changelog).
+#   2. git tag v1.2.3 && git push origin v1.2.3
+# The workflow then:
+#   - reads UPDATE.md and verifies its "version" matches the tag;
+#   - builds binaries/installers for every platform (Linux/macOS/Windows, 64- and 32-bit);
+#   - computes SHA256 checksums (SHA256SUMS.txt);
+#   - publishes a GitHub Release with the title and body from UPDATE.md.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false      # never cancel a release midway
+
+permissions:
+  contents: write                # required to create a GitHub Release
+
+env:
+  PROJECT: dji-link
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Read UPDATE.md, validate the version against the tag, prepare release notes.
+  # ---------------------------------------------------------------------------
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version:    ${{ steps.parse.outputs.version }}
+      title:      ${{ steps.parse.outputs.title }}
+      prerelease: ${{ steps.parse.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse UPDATE.md
+        id: parse
+        run: |
+          python3 - <<'PY'
+          import os, re
+          text = open('UPDATE.md', encoding='utf-8').read().replace('\r\n', '\n')
+          m = re.match(r'^---\n(.*?)\n---\n?(.*)$', text, re.S)
+          if not m:
+              raise SystemExit('::error::UPDATE.md must start with a "---" YAML frontmatter block')
+          fm, body = m.group(1), m.group(2).strip() + '\n'
+          meta = {}
+          for line in fm.split('\n'):
+              if line.strip().startswith('#') or ':' not in line:
+                  continue
+              k, v = line.split(':', 1)
+              meta[k.strip()] = v.strip().strip('"').strip("'")
+          version = meta.get('version', '').strip()
+          if not version:
+              raise SystemExit('::error::"version:" missing in UPDATE.md frontmatter')
+          title = meta.get('title', '').strip() or f'DJI Link v{version}'
+          prerelease = meta.get('prerelease', 'false').strip().lower() in ('true', '1', 'yes')
+          open('release-notes.md', 'w', encoding='utf-8').write(body)
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f:
+              f.write(f'version={version}\n')
+              f.write(f'title={title}\n')
+              f.write(f'prerelease={"true" if prerelease else "false"}\n')
+          print(f'Parsed UPDATE.md -> version={version!r} title={title!r} prerelease={prerelease}')
+          PY
+
+      - name: Verify tag matches UPDATE.md version
+        run: |
+          set -euo pipefail
+          tag_version="${GITHUB_REF_NAME#v}"
+          file_version="${{ steps.parse.outputs.version }}"
+          if [ "$tag_version" != "$file_version" ]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' (=> $tag_version) does not match UPDATE.md version '$file_version'."
+            echo "Fix UPDATE.md 'version:' or re-tag so they agree, then push again."
+            exit 1
+          fi
+          echo "OK: tag $GITHUB_REF_NAME matches UPDATE.md version $file_version"
+
+      - name: Upload release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Build + package for every platform / architecture.
+  # ---------------------------------------------------------------------------
+  build:
+    needs: prepare
+    name: ${{ matrix.slug }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ---- Linux: plain binary + distro packages (.deb + .rpm) ----
+          - { slug: linux-x86_64,    os: ubuntu-22.04,     generators: 'TGZ;DEB;RPM' }
+          - { slug: linux-arm64,     os: ubuntu-24.04-arm, generators: 'TGZ;DEB;RPM' }
+          - { slug: linux-x86,       os: ubuntu-22.04,     generators: 'TGZ',
+              cmake_extra: '-DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32',
+              experimental: true }
+          # ---- macOS: universal2 (Intel + Apple Silicon) in .dmg + .tar.gz ----
+          - { slug: macos-universal, os: macos-14,         generators: 'TGZ;DragNDrop',
+              osx_archs: 'arm64;x86_64' }
+          # ---- Windows: MSI installer (WiX) + portable .zip ----
+          - { slug: windows-x64,     os: windows-latest,   generators: 'WIX;ZIP',
+              msvc_arch: x64,   cpack_extra: '-D CPACK_WIX_ARCHITECTURE=x64' }
+          - { slug: windows-arm64,   os: windows-11-arm,   generators: 'WIX;ZIP',
+              msvc_arch: arm64, cpack_extra: '-D CPACK_WIX_ARCHITECTURE=arm64', experimental: true }
+          - { slug: windows-x86,     os: windows-latest,   generators: 'WIX;ZIP',
+              msvc_arch: x86,   cpack_extra: '-D CPACK_WIX_ARCHITECTURE=x86', experimental: true }
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install CMake & Ninja
+        uses: lukka/get-cmake@latest
+
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Install 32-bit toolchain (Linux x86)
+        if: matrix.slug == 'linux-x86'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib g++-multilib
+
+      - name: Install RPM tooling (Linux)
+        if: contains(matrix.generators, 'RPM')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+
+      - name: Configure
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDJI_LINK_VERSION="${{ needs.prepare.outputs.version }}" \
+            ${{ matrix.osx_archs && format('-DCMAKE_OSX_ARCHITECTURES="{0}" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0', matrix.osx_archs) || '' }} \
+            ${{ matrix.cmake_extra || '' }}
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.prepare.outputs.version }}"
+          base="${PROJECT}-${version}-${{ matrix.slug }}"
+          mkdir -p dist
+
+          if [ -f build/CPackConfig.cmake ]; then
+            # Standard path: the project's CMake does include(CPack).
+            cpack --config build/CPackConfig.cmake \
+              -G "${{ matrix.generators }}" \
+              -B "$PWD/dist" \
+              -D CPACK_PACKAGE_VERSION="$version" \
+              -D CPACK_PACKAGE_FILE_NAME="$base" \
+              ${{ matrix.cpack_extra || '' }}
+          else
+            # Fallback while CMake has no include(CPack): install and archive.
+            # Installers (NSIS/DMG/DEB) appear once you add CPack — see docs/CI_CD.md.
+            echo "::warning::build/CPackConfig.cmake not found — falling back to cmake --install + archive."
+            cmake --install build --config Release --prefix "stage/$base"
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              (cd stage && 7z a -tzip "$OLDPWD/dist/$base.zip" "$base" >/dev/null)
+            else
+              tar -czf "dist/$base.tar.gz" -C stage "$base"
+            fi
+          fi
+
+          echo "Packaged artifacts:"
+          ls -la dist
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.slug }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Gather everything: checksums + publish the GitHub Release.
+  # ---------------------------------------------------------------------------
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: packages-*
+          merge-multiple: true
+
+      - name: Download release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: notes
+
+      - name: Generate SHA256 checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum * > SHA256SUMS.txt
+          echo "----- SHA256SUMS.txt -----"
+          cat SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ needs.prepare.outputs.title }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          args=(--title "$TITLE" --notes-file notes/release-notes.md)
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" dist/* "${args[@]}"

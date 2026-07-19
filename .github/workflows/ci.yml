@@ -1,0 +1,103 @@
+name: CI
+
+# Compile-check + tests, so broken code never reaches a release.
+# IMPORTANT: runs ONLY when C++ / CMake code changed (path filter below), and only
+# on push to main / in PRs. Changes to dji_link_beta/ (Python), *.md or docs do NOT
+# trigger a build, and feature branches without a PR don't run CI either — iterate freely.
+#
+# Releases (building binaries/installers + checksums + publishing) live separately in
+# release.yml and run ONLY on a git tag vX.Y.Z. See docs/CI_CD.md.
+on:
+  push:
+    branches: [main]
+    paths: &cpp_paths
+      - '**/*.c'
+      - '**/*.cc'
+      - '**/*.cpp'
+      - '**/*.cxx'
+      - '**/*.h'
+      - '**/*.hh'
+      - '**/*.hpp'
+      - '**/*.hxx'
+      - '**/*.inl'
+      - '**/*.ipp'
+      - '**/*.tpp'
+      - '**/CMakeLists.txt'
+      - '**/*.cmake'
+      - 'cmake/**'
+      - 'CMakePresets.json'
+      - 'CMakeUserPresets.json'
+      - 'vcpkg.json'
+      - 'conanfile.txt'
+      - 'conanfile.py'
+      - '.github/workflows/ci.yml'   # re-run if the workflow itself changed
+  pull_request:
+    paths: *cpp_paths
+  workflow_dispatch:                 # manual run from the Actions tab
+
+# A new push to the same branch/PR cancels the previous in-progress run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-gcc,   os: ubuntu-22.04,     cc: gcc,   cxx: g++ }
+          - { name: linux-clang, os: ubuntu-22.04,     cc: clang, cxx: clang++ }
+          - { name: linux-arm64, os: ubuntu-24.04-arm, cc: gcc,   cxx: g++ }
+          - { name: macos,       os: macos-14 }
+          - { name: windows,     os: windows-latest }
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # CMake + Ninja (cross-platform, recent versions).
+      - name: Install CMake & Ninja
+        uses: lukka/get-cmake@latest
+
+      # On Windows, set up the MSVC (cl.exe) environment for the Ninja generator.
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # Compiler cache: ccache on Linux/macOS, sccache on Windows.
+      - name: Compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.name }}
+          variant: ${{ runner.os == 'Windows' && 'sccache' || 'ccache' }}
+
+      - name: Configure
+        shell: bash
+        run: |
+          set -euo pipefail
+          launcher=${{ runner.os == 'Windows' && 'sccache' || 'ccache' }}
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            ${{ matrix.cc  && format('-DCMAKE_C_COMPILER={0}',   matrix.cc)  || '' }} \
+            ${{ matrix.cxx && format('-DCMAKE_CXX_COMPILER={0}', matrix.cxx) || '' }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=$launcher \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=$launcher
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        shell: bash
+        # --no-tests=ignore: while there are no tests yet, "no tests" counts as success,
+        # but real test failures still fail CI.
+        run: ctest --test-dir build --build-config Release --output-on-failure --no-tests=ignore

@@ -1,0 +1,53 @@
+name: Lint
+
+# C++ formatting check (clang-format). Fast, and only when C++ changed.
+on:
+  push:
+    branches: [main]
+    paths: &cpp_paths
+      - '**/*.c'
+      - '**/*.cc'
+      - '**/*.cpp'
+      - '**/*.cxx'
+      - '**/*.h'
+      - '**/*.hh'
+      - '**/*.hpp'
+      - '**/*.hxx'
+      - '**/*.inl'
+      - '**/*.ipp'
+      - '**/*.tpp'
+      - '.clang-format'
+      - '.github/workflows/lint.yml'
+  pull_request:
+    paths: *cpp_paths
+  workflow_dispatch:
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          # All C/C++ sources outside third-party / generated directories.
+          mapfile -d '' files < <(find . \
+            -type d \( -name build -o -name third_party -o -name external -o -name .git -o -name dji_link_beta \) -prune -o \
+            -type f \( -name '*.c'   -o -name '*.cc'  -o -name '*.cpp' -o -name '*.cxx' \
+                    -o -name '*.h'   -o -name '*.hh'  -o -name '*.hpp' -o -name '*.hxx' \
+                    -o -name '*.inl' -o -name '*.ipp' -o -name '*.tpp' \) -print0)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No C/C++ sources yet — nothing to check."
+            exit 0
+          fi
+          clang-format --version
+          clang-format --dry-run --Werror "${files[@]}"

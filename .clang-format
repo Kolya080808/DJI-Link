@@ -1,0 +1,23 @@
+# Base style for DJI Link C++ code. Tweak to taste — this is only a starting point.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+ColumnLimit: 100
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+PointerAlignment: Left
+AlignAfterOpenBracket: Align
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+BreakBeforeBraces: Attach
+IndentCaseLabels: true
+NamespaceIndentation: None
+SortIncludes: CaseInsensitive
+IncludeBlocks: Regroup
+SpaceAfterCStyleCast: true
+FixNamespaceComments: true
+...
