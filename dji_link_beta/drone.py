@@ -449,6 +449,14 @@ class Drone:
     _ISO_INDEX = {0: 0, 100: 3, 200: 4, 400: 5, 800: 6, 1600: 7, 3200: 8,
                   6400: 9, 12800: 10, 25600: 11}
 
+    def set_iso_auto(self) -> None:
+        """Auto ISO: hand exposure back to the camera (PROGRAM), which picks ISO+shutter
+        itself. This is the default from startup — the drone auto-exposes until the user
+        picks a manual ISO/shutter."""
+        self.set_exposure_mode(1)          # PROGRAM (auto)
+        self._shutter_denom = None
+        self._cmd(CMDSET_CAMERA, 0x2A, bytes([0]), receiver=DEV_CAMERA)   # ISO enum 0 = AUTO
+
     def set_iso(self, iso: int) -> None:
         # ISO takes the enum INDEX and only applies in MANUAL exposure. BUT the Mini has a
         # FIXED aperture, so in MANUAL brightness = ISO × shutter only. Switching to MANUAL

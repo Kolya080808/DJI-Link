@@ -145,8 +145,10 @@ class Telemetry:
         # from the FC side, which appears as sender 0x03 or 0x09 depending on the build.
         if pkt.cmd_set == 0x03 and pkt.cmd_id == 0x43 and len(p) >= 0x34:
             self._parse_osd(p)
-        elif pkt.cmd_set == 0x03 and pkt.cmd_id == 0x44 and len(p) >= 16:
-            self.parse_home_location(p)          # DataOsdGetPushHome (home lat/lon + recorded)
+        # NOTE: 0x03/0x44 is NOT the home push on WM160 — a live dump shows it is a device/
+        # config frame (f64 800000.0 twice + ASCII serial "SCCH7A0177DS9"), which is why the
+        # old parse produced lat==lon~=4.6e7 garbage. Real position comes from the 0x43 OSD
+        # frame (lon@0x00, lat@0x08 f64 rad), parsed in _parse_osd. Home-specific push TBD.
         elif pkt.cmd_set == 0x0D and pkt.cmd_id == 0x02 and len(p) >= 0x14:
             self._parse_battery(p)
         elif pkt.cmd_set == 0x02 and pkt.cmd_id == 0x80 and len(p) >= 0x1f:
@@ -201,6 +203,13 @@ class Telemetry:
         # apart. Do NOT feed vz into the altitude HUD slot (that is the "altitude looks
         # like climb rate" symptom, and it is a DISPLAY-side wiring bug, not an offset bug).
         st = self.state
+        # Aircraft GPS position: longitude f64 rad @0x00, latitude f64 rad @0x08 (verified).
+        # Shown on the HUD in place of the (unverified) home push; 0,0 until GPS locks.
+        if len(p) >= 16:
+            _lon = self.rad_to_deg(struct.unpack_from("<d", p, 0)[0])
+            _lat = self.rad_to_deg(struct.unpack_from("<d", p, 8)[0])
+            if -90.0 <= _lat <= 90.0 and -180.0 <= _lon <= 180.0 and (_lat or _lon):
+                st.home_lat, st.home_lon = _lat, _lon
         alt = s16(p, 0x10)
         if alt is not None: st.altitude_m = alt * 0.1        # relative/baro height, metres
         vx, vy, vz = s16(p, 0x12), s16(p, 0x14), s16(p, 0x16)
@@ -270,8 +279,16 @@ class Telemetry:
         LON @+0x00, LAT @+0x08 (opposite of the OSD-general frame). Verified in
         HOME_POINT_RESEARCH_2026.md — the previous lat/lon were swapped here."""
         if len(p) >= 16:
-            self.state.home_lon = self.rad_to_deg(struct.unpack_from("<d", p, 0)[0])
-            self.state.home_lat = self.rad_to_deg(struct.unpack_from("<d", p, 8)[0])
+            lon = self.rad_to_deg(struct.unpack_from("<d", p, 0)[0])
+            lat = self.rad_to_deg(struct.unpack_from("<d", p, 8)[0])
+            # Sanity guard: only accept plausible coordinates. On WM160 the 0x03/0x44 frame
+            # has produced garbage (lat==lon ~= 4.5e7, i.e. a raw f64 ~800000, NOT a coord),
+            # which means this offset/frame is wrong for this firmware — the real home push
+            # still needs a live capture to pin (see HOME_POINT_RESEARCH_2026.md vs §5). Until
+            # then, reject out-of-range values instead of showing nonsense on the HUD.
+            if -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0 and (lat or lon):
+                self.state.home_lon = lon
+                self.state.home_lat = lat
         if len(p) >= 0x16:                       # flags u16 @0x14, bit0 = home recorded
             self.state.home_recorded = bool(struct.unpack_from("<H", p, 0x14)[0] & 1)
 

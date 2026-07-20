@@ -21,7 +21,9 @@ Control (hold): W/S pitch · A/D roll · Space/Shift throttle up/down · Q/E yaw
 Flight = virtual stick via 0x03/0x8E (DataFlycJoystick); control auto-enables after takeoff settles.
 Hotkeys: Enter ARM/DISARM · T takeoff (auto-C) · C control on/off · L landing · H RTH(emergency)
         V ground-station(authority) · J stick-flag preset (velocity/BODY…) · N recenter · P photo
-        R record TOGGLE · Z/X zoom · [ ]/Up/Down gimbal · Tab console · Esc settings
+        R record TOGGLE · [ ]/Up/Down gimbal · Tab console · Esc settings
+        F1 help · F3 hide/show HUD (clean video) · F11 fullscreen
+        (media list/download auto-enter playback; no manual B/zoom/stick-flag keys)
 Console (Tab): takeoff/land/rth · home here|<lat> <lon> · setalt <m>/setdist <m>/rthalt <m>
         fmode cine|normal|sport · hspeed <m/s> · rp height|radius|tilt · iso <n>/shutter <N>|auto/ev <n>
         rec start|stop · zoom <x> · gimbal <deg>|speed <dps> · raw <set> <id> <hex> [recv]
@@ -172,6 +174,7 @@ class Client:
         self.lock = threading.Lock()
         self.running = True
         self.return_to_menu = False  # set by "Exit to main menu": run_ui ends, main() re-shows menu
+        self.show_hud = True         # F3 toggles the telemetry overlay (clean video when off)
         self.last_msg = ""
         self.fullscreen = True
         self.param_sets = {}
@@ -460,7 +463,10 @@ class Client:
         self.running = False
         try:
             if self.live and self.control:
-                self.d.release_control()
+                # Proper hand-back: CLOSE_GROUND_STATION(2) + release, so control returns to
+                # the RC. Plain release_control() (0x49/0x80=0) does NOT release on WM160.
+                self.d.enable_virtual_stick(False)
+                self.control = False
         except Exception:
             pass
         if self.dump_f:
@@ -631,9 +637,11 @@ class SettingsPanel:
                lo=15, hi=5000, step=50, val=500),
             _W("slider", "Brightness (EV)", lambda v: self._try(lambda: d.set_ev(v), f"EV {v:+d}"),
                lo=-3, hi=3, step=1, val=0, note="main brighten/darken lever (auto exposure)"),
-            _W("choice", "ISO (manual)", lambda v: self._try(lambda: d.set_iso(v), f"ISO {v}"),
-               opts=[100, 200, 400, 800, 1600, 3200],
-               note="manual; 3200 is the WM160 sensor ceiling"),
+            _W("choice", "ISO", lambda v: self._try(
+                lambda: (d.set_iso_auto() if v == "auto" else d.set_iso(v)),
+                f"ISO {v}"),
+               opts=["auto", 100, 200, 400, 800, 1600, 3200],
+               note="auto by default; manual caps at 3200 (sensor ceiling)"),
             _W("choice", "Shutter (manual)", lambda v: self._try(
                 lambda: (d.set_shutter_auto() if v == "auto" else d.set_shutter(v)),
                 f"shutter {'auto' if v=='auto' else '1/'+str(v)}"),
@@ -655,6 +663,7 @@ class SettingsPanel:
     def _exit_to_menu(self):
         # End this flight session and go back to the start menu (so the user can reconnect,
         # switch to serial/sim, or just poke around). Resuming the current flight is Esc-again.
+        self._restore_liveview()
         self.open = False
         self.cli.return_to_menu = True
         self.cli.running = False
@@ -663,11 +672,32 @@ class SettingsPanel:
     # The request encoders are proven; the list-response record stride and download chunk
     # framing are native, so the first real capture from the drone finalises them. Every
     # response is dumped for that. Download-by-index works once we have a file from a list.
+    def _ensure_playback(self):
+        # Media commands only work in PLAYBACK mode. Enter it automatically (was the manual
+        # B key) — we drop back to liveview when the panel closes (_restore_liveview).
+        if not self.cli.playback:
+            try:
+                self.cli.d.enter_playback(); self.cli.playback = True
+            except Exception as e:
+                self.cli.msg(f"media: couldn't enter playback: {e}")
+
+    def _restore_liveview(self):
+        # Called when the settings panel closes: if we switched to playback for a media op,
+        # return to the live video feed so flight view is back.
+        if self.cli.playback:
+            try:
+                self.cli.d.exit_playback(); self.cli.d.start_liveview()
+            except Exception:
+                pass
+            self.cli.playback = False
+
     def _list_media(self):
+        self._ensure_playback()
         self._try(lambda: self.cli.media.request_list(0, 50),
                   "media: list requested (result appears when the drone replies)")
 
     def _download_first(self):
+        self._ensure_playback()
         files = self.cli.media.files
         if not files:
             self.cli.msg("media: list first (no files known yet)")
@@ -677,6 +707,7 @@ class SettingsPanel:
                   f"media: downloading {f.file_name}")
 
     def _delete_first(self):
+        self._ensure_playback()
         files = self.cli.media.files
         if not files:
             self.cli.msg("media: list first (no files known yet)")
@@ -776,76 +807,406 @@ class SettingsPanel:
     # group so the panel reads as Flight / Camera / Media / (exit), not one long list.
     _GROUPS = [(0, "FLIGHT"), (3, "CAMERA"), (8, "HOME & MEDIA")]
 
+    # Layout constants — one place to retune the rhythm of the panel.
+    _PAD = 26           # inner padding of the card
+    _ROW_H = 44         # height of one setting row
+    _ROW_GAP = 6        # vertical gap between rows
+    _HEAD_H = 30        # section-header band height
+    _ARROW_W = 30       # width of a ‹ / › hit box
+    _VAL_W = 92         # right-hand value column width
+
+    def _fonts(self):
+        # Build once, reuse every frame (SysFont per frame is expensive). segoe/dejavu is a
+        # proper proportional UI face — a big step up from the console monospace.
+        if getattr(self, "_fcache", None) is None:
+            import gui as _g
+            self._fcache = {
+                "title":   _g._font(23, bold=True),
+                "section": _g._font(12, bold=True),
+                "label":   _g._font(18),
+                "val":     _g._font(18, bold=True),
+                "note":    _g._font(12),
+                "hint":    _g._font(13),
+                "arrow":   _g._font(22, bold=True),
+                "pill":    _g._font(15, bold=True),
+            }
+        return self._fcache
+
+    @staticmethod
+    def _blit_mid(surf, font, text, col, cx, cy):
+        img = font.render(text, True, col)
+        surf.blit(img, img.get_rect(center=(cx, cy)))
+
+    @staticmethod
+    def _blit_right(surf, font, text, col, rx, cy):
+        img = font.render(text, True, col)
+        surf.blit(img, img.get_rect(midright=(rx, cy)))
+
+    @staticmethod
+    def _blit_left(surf, font, text, col, lx, cy):
+        img = font.render(text, True, col)
+        surf.blit(img, img.get_rect(midleft=(lx, cy)))
+
     def draw(self, screen, font, big):
         import pygame
-        import gui as _g   # shared palette so the panel matches the start menu
-        ROW_H, HEAD_H = 40, 26
+        import gui as _g
+        F = self._fonts()
+        PAD, ROW_H, GAP, HEAD_H = self._PAD, self._ROW_H, self._ROW_GAP, self._HEAD_H
         sw, sh = screen.get_size()
-        pw = min(600, sw - 40)
+        pw = min(660, sw - 48)
         n_heads = len(self._GROUPS)
-        body_h = len(self.w) * (ROW_H + 6) + n_heads * HEAD_H
-        ph = min(body_h + 92, sh - 40)
+        body_h = len(self.w) * (ROW_H + GAP) + n_heads * HEAD_H
+        ph = min(body_h + 96, sh - 40)
         px, py = (sw - pw) // 2, (sh - ph) // 2
 
-        # Card with a subtle border + drop shadow.
-        shadow = pygame.Surface((pw + 16, ph + 16), pygame.SRCALPHA)
-        shadow.fill((0, 0, 0, 90)); screen.blit(shadow, (px - 8, py - 4))
-        card = pygame.Surface((pw, ph), pygame.SRCALPHA); card.fill((*_g.PANEL, 248))
+        # ---- card: drop shadow + solid panel + hairline border + title bar ----
+        shadow = pygame.Surface((pw + 24, ph + 24), pygame.SRCALPHA)
+        pygame.draw.rect(shadow, (0, 0, 0, 110), shadow.get_rect(), border_radius=16)
+        screen.blit(shadow, (px - 12, py - 8))
+        card = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        pygame.draw.rect(card, (*_g.PANEL, 250), card.get_rect(), border_radius=14)
         screen.blit(card, (px, py))
-        pygame.draw.rect(screen, _g.PANEL_HI, (px, py, pw, ph), width=1, border_radius=10)
+        pygame.draw.rect(screen, _g.PANEL_HI, (px, py, pw, ph), width=1, border_radius=14)
 
-        title = big.render("Flight settings", True, _g.ACCENT)
-        screen.blit(title, (px + 22, py + 16))
+        self._blit_left(screen, F["title"], "Flight settings", _g.ACCENT, px + PAD, py + 26)
+        pygame.draw.line(screen, _g.PANEL_HI, (px + PAD, py + 48), (px + pw - PAD, py + 48), 1)
+
         headmap = {i: name for i, name in self._GROUPS}
-
         mouse = pygame.mouse.get_pos()
-        y = py + 50
+        left_x = px + PAD                       # label column
+        right_x = px + pw - PAD                 # right edge of controls
+        ctrl_x = px + int(pw * 0.50)            # where the control column starts
+        y = py + 60
+
         for i, w in enumerate(self.w):
             if i in headmap:
-                y += 6
-                screen.blit(font.render(headmap[i], True, _g.MUTED), (px + 22, y + 4))
+                self._blit_left(screen, F["section"], headmap[i], _g.MUTED, left_x, y + HEAD_H // 2 + 2)
+                ly = y + HEAD_H - 6
+                pygame.draw.line(screen, (44, 48, 60), (left_x + 90, ly), (right_x, ly), 1)
                 y += HEAD_H
-            row = pygame.Rect(px + 14, y, pw - 28, ROW_H)
+
+            row = pygame.Rect(px + 12, y, pw - 24, ROW_H)
             w.rect = row
+            cy = row.centery
             hover = row.collidepoint(mouse)
             active = hover or i == self.sel
             if active:
-                pygame.draw.rect(screen, _g.PANEL_HI, row, border_radius=7)
-            col = _g.TEXT if active else (196, 206, 218)
+                pygame.draw.rect(screen, _g.PANEL_HI, row, border_radius=8)
+
             is_btn = w.kind == "button"
             is_exit = w.label.startswith("Exit")
-            lab_col = (_g.GOOD if is_exit else _g.ACCENT_HI) if is_btn and active else col
-            screen.blit(font.render(w.label, True, lab_col), (row.x + 12, y + 4))
-            if w.note:
-                screen.blit(font.render(w.note, True, (150, 150, 120)), (row.x + 12, y + 21))
-            cx0 = row.x + int(row.width * 0.46)
-            cx1 = row.right - 16
-            if w.kind == "slider":
-                ty = y + 20
-                w.track = (cx0, cx1, ty)
-                pygame.draw.line(screen, (60, 66, 80), (cx0, ty), (cx1, ty), 3)
-                frac = (w.val - w.lo) / (w.hi - w.lo) if w.hi > w.lo else 0
-                hx = int(cx0 + frac * (cx1 - cx0))
-                pygame.draw.line(screen, _g.ACCENT, (cx0, ty), (hx, ty), 3)
-                pygame.draw.circle(screen, _g.ACCENT_HI, (hx, ty), 7)
-                screen.blit(font.render(str(w.val), True, col), (cx1 - 46, y + 2))
-            elif w.kind == "choice":
-                # Store the two arrow x-positions so _click can split exactly between them:
-                # left of the midpoint = ‹ (previous), right = › (next).
-                w.track = (cx0, cx1, y)
-                screen.blit(font.render("‹", True, _g.ACCENT), (cx0, y + 3))
-                screen.blit(font.render(str(w.opts[w.oi]), True, col), (cx0 + 26, y + 4))
-                screen.blit(font.render("›", True, _g.ACCENT), (cx1 - 12, y + 3))
-            elif w.kind == "toggle":
-                txt = "ON" if w.on else "OFF"
-                screen.blit(font.render(txt, True, _g.GOOD if w.on else _g.BAD), (cx1 - 40, y + 4))
-            elif w.kind == "button" and not is_exit:
-                screen.blit(font.render("▶", True, _g.ACCENT), (cx1 - 16, y + 4))
-            y += ROW_H + 6
+            base_col = _g.TEXT if active else (196, 206, 218)
 
-        hint = font.render("Esc: resume flight   ·   click a row to change   ·   scroll to adjust sliders",
-                           True, _g.MUTED)
-        screen.blit(hint, (px + 22, py + ph - 26))
+            # ---- label (+ note under it, which lifts the label up a touch) ----
+            if w.note:
+                self._blit_left(screen, F["label"], w.label, base_col, left_x, cy - 8)
+                self._blit_left(screen, F["note"], w.note, (150, 152, 130), left_x, cy + 11)
+            else:
+                lab_col = (_g.GOOD if is_exit else base_col) if is_btn else base_col
+                self._blit_left(screen, F["label"], w.label, lab_col, left_x, cy)
+
+            # ---- control on the right ----
+            if w.kind == "slider":
+                tx0, tx1 = ctrl_x, right_x - self._VAL_W
+                ty = cy
+                w.track = (tx0, tx1, ty)
+                pygame.draw.line(screen, (58, 63, 78), (tx0, ty), (tx1, ty), 4)
+                frac = (w.val - w.lo) / (w.hi - w.lo) if w.hi > w.lo else 0
+                hx = int(tx0 + frac * (tx1 - tx0))
+                pygame.draw.line(screen, _g.ACCENT, (tx0, ty), (hx, ty), 4)
+                pygame.draw.circle(screen, _g.ACCENT_HI, (hx, ty), 8)
+                pygame.draw.circle(screen, _g.PANEL, (hx, ty), 4)
+                self._blit_right(screen, F["val"], str(w.val), base_col, right_x, cy)
+
+            elif w.kind == "choice":
+                # ‹ [ value ] › — arrows are real hit boxes at fixed positions; the value is
+                # centred between them. w.track stores the two arrow centres for _click.
+                la = pygame.Rect(0, 0, self._ARROW_W, ROW_H - 12)
+                ra = pygame.Rect(0, 0, self._ARROW_W, ROW_H - 12)
+                la.midleft = (ctrl_x, cy)
+                ra.midright = (right_x, cy)
+                for rr, glyph in ((la, "‹"), (ra, "›")):
+                    hot = rr.collidepoint(mouse)
+                    pygame.draw.rect(screen, (52, 57, 72) if hot else (36, 40, 52), rr, border_radius=7)
+                    self._blit_mid(screen, F["arrow"], glyph, _g.ACCENT_HI if hot else _g.ACCENT,
+                                   rr.centerx, rr.centery - 1)
+                self._blit_mid(screen, F["val"], str(w.opts[w.oi]), base_col,
+                               (la.right + ra.left) // 2, cy)
+                w.track = (la.centerx, ra.centerx, cy)
+
+            elif w.kind == "toggle":
+                pill = pygame.Rect(0, 0, 66, 26); pill.midright = (right_x, cy)
+                on = w.on
+                pygame.draw.rect(screen, (40, 90, 55) if on else (70, 44, 48), pill, border_radius=13)
+                knob_x = pill.right - 14 if on else pill.left + 14
+                pygame.draw.circle(screen, _g.GOOD if on else _g.BAD, (knob_x, pill.centery), 9)
+                self._blit_mid(screen, F["pill"], "ON" if on else "OFF",
+                               _g.TEXT, pill.centerx - (10 if on else -10), pill.centery)
+
+            elif is_btn:
+                # Action row: a right-aligned pill. Exit is emphasised (green), others neutral.
+                label = "Go" if not is_exit else "Menu"
+                pill = pygame.Rect(0, 0, 84, 28); pill.midright = (right_x, cy)
+                if is_exit:
+                    pygame.draw.rect(screen, _g.GOOD if active else (46, 92, 60), pill, border_radius=8)
+                    self._blit_mid(screen, F["pill"], "Menu", (12, 20, 14), pill.centerx, pill.centery)
+                else:
+                    pygame.draw.rect(screen, _g.PANEL_HI, pill, border_radius=8)
+                    pygame.draw.rect(screen, _g.ACCENT if active else (70, 76, 92), pill, width=1, border_radius=8)
+                    self._blit_mid(screen, F["pill"], "Run", _g.ACCENT_HI if active else _g.MUTED,
+                                   pill.centerx, pill.centery)
+
+            y += ROW_H + GAP
+
+        # ---- footer hint ----
+        pygame.draw.line(screen, _g.PANEL_HI, (px + PAD, py + ph - 34),
+                         (px + pw - PAD, py + ph - 34), 1)
+        self._blit_left(screen, F["hint"],
+                        "Esc — resume flight     click ‹ ›, drag sliders, tap Run/Menu",
+                        _g.MUTED, left_x, py + ph - 18)
+
+
+# ---------------------------------------------------------------- flight HUD
+_HUD_FONTS = None
+
+
+def _hud_fonts():
+    """Build the flight-HUD fonts once (proportional UI face, not the console monospace)."""
+    global _HUD_FONTS
+    if _HUD_FONTS is None:
+        import gui as _g
+        _HUD_FONTS = {
+            "title": _g._font(15, bold=True),
+            "chip":  _g._font(12, bold=True),
+            "lbl":   _g._font(12),
+            "val":   _g._font(17, bold=True),
+            "unit":  _g._font(11),
+            "big":   _g._font(20, bold=True),
+            "small": _g._font(12),
+        }
+    return _HUD_FONTS
+
+
+def _hud_chip(surf, F, text, rect, fg, border, fill=None):
+    import pygame
+    if fill:
+        pygame.draw.rect(surf, fill, rect, border_radius=7)
+    pygame.draw.rect(surf, border, rect, width=1, border_radius=7)
+    img = F["chip"].render(text, True, fg)
+    surf.blit(img, img.get_rect(center=rect.center))
+
+
+def _hud_pad(surf, F, cx, cy, half, x, y, label):
+    """A small square stick-pad with a dot at (x,y) in [-1,1]. Shows one axis pair."""
+    import pygame, gui as _g
+    r = pygame.Rect(cx - half, cy - half, half * 2, half * 2)
+    pygame.draw.rect(surf, (0, 0, 0, 0), r)
+    s = pygame.Surface((r.w, r.h), pygame.SRCALPHA); s.fill((10, 12, 16, 150))
+    surf.blit(s, r.topleft)
+    pygame.draw.rect(surf, (70, 76, 92), r, width=1, border_radius=6)
+    pygame.draw.line(surf, (46, 50, 62), (r.centerx, r.top + 4), (r.centerx, r.bottom - 4), 1)
+    pygame.draw.line(surf, (46, 50, 62), (r.left + 4, r.centery), (r.right - 4, r.centery), 1)
+    dx = max(-1.0, min(1.0, x)); dy = max(-1.0, min(1.0, y))
+    px = int(r.centerx + dx * (half - 6))
+    py = int(r.centery - dy * (half - 6))
+    pygame.draw.circle(surf, _g.ACCENT_HI, (px, py), 5)
+    img = F["small"].render(label, True, _g.MUTED)
+    surf.blit(img, img.get_rect(midtop=(r.centerx, r.bottom + 3)))
+
+
+def _draw_flight_hud(screen, cli):
+    """A clean, designed telemetry overlay: status card (top-left), REC badge (top-right),
+    and a twin stick indicator (bottom-right). Replaces the old stacked text lines."""
+    import pygame
+    import gui as _g
+    from telemetry import SDK_CTRL_DEVICE
+    F = _hud_fonts()
+    st = cli.tele.state
+    sw, sh = screen.get_size()
+
+    def right(font, text, col, rx, cy):
+        img = font.render(text, True, col); screen.blit(img, img.get_rect(midright=(rx, cy)))
+
+    def left(font, text, col, lx, cy):
+        img = font.render(text, True, col); screen.blit(img, img.get_rect(midleft=(lx, cy)))
+
+    # ---------- top-left status card ----------
+    X, Y, W = 16, 16, 300
+    pad = 14
+    card_h = 232
+    card = pygame.Surface((W, card_h), pygame.SRCALPHA)
+    pygame.draw.rect(card, (18, 20, 26, 205), card.get_rect(), border_radius=12)
+    screen.blit(card, (X, Y))
+    pygame.draw.rect(screen, (48, 53, 66), (X, Y, W, card_h), width=1, border_radius=12)
+    lx, rx = X + pad, X + W - pad
+    y = Y + 20
+
+    # title + mode chip
+    left(F["title"], "DJI Mavic Mini 1", _g.TEXT, lx, y)
+    mode_txt = f"{cli.mode.upper()} · {'LIVE' if cli.live else 'DRY'}"
+    mc = pygame.Rect(0, 0, F["chip"].size(mode_txt)[0] + 16, 20); mc.midright = (rx, y)
+    _hud_chip(screen, F, mode_txt, mc, _g.ACCENT_HI, (60, 90, 130), fill=(30, 40, 56))
+    y += 26
+
+    # battery bar
+    pct = st.battery_pct if st.battery_pct is not None else 0
+    bcol = _g.GOOD if pct > 50 else (_g.WARN if pct > 20 else _g.BAD)
+    bar = pygame.Rect(lx, y, W - 2 * pad, 20)
+    pygame.draw.rect(screen, (36, 40, 52), bar, border_radius=6)
+    fillw = int((W - 2 * pad) * max(0, min(100, pct)) / 100)
+    if fillw > 4:
+        pygame.draw.rect(screen, bcol, (bar.x, bar.y, fillw, bar.h), border_radius=6)
+    volt = f"{st.battery_mv/1000:.1f}V" if st.battery_mv else ""
+    left(F["chip"], f"{pct}%", (12, 16, 20) if pct > 20 else _g.TEXT, lx + 8, bar.centery)
+    right(F["chip"], volt, _g.TEXT, rx - 8, bar.centery)
+    y += 30
+
+    # status chips: ARMED / CONTROL / FC-owner
+    owner = SDK_CTRL_DEVICE.get(st.ctrl_device, str(st.ctrl_device))
+    chips = [
+        ("ARMED" if cli.armed else "DISARMED", cli.armed),
+        ("CTRL ON" if cli.control else "CTRL OFF", cli.control),
+        (f"FC:{owner}", st.ctrl_device == 1),
+    ]
+    cxp = lx
+    for text, on in chips:
+        w = F["chip"].size(text)[0] + 16
+        rc = pygame.Rect(cxp, y, w, 22)
+        fg = _g.GOOD if on else _g.MUTED
+        _hud_chip(screen, F, text, rc, fg, (fg[0]//3, fg[1]//3, fg[2]//3),
+                  fill=(24, 34, 26) if on else (30, 32, 40))
+        cxp += w + 6
+    y += 32
+
+    # telemetry grid — two columns of label/value
+    def cell(col_x, label, value, vcol=_g.TEXT):
+        left(F["lbl"], label, _g.MUTED, col_x, y + 7)
+        left(F["val"], value, vcol, col_x, y + 24)
+
+    c0, c1 = lx, lx + (W - 2 * pad) // 2 + 6
+    _ft = f"{st.flight_time_s//60}:{st.flight_time_s%60:02d}" if st.flight_time_s is not None else "—"
+    alt = f"{st.altitude_m:.1f} m" if st.altitude_m is not None else "—"
+    cell(c0, "ALTITUDE", alt)
+    cell(c1, "FLY TIME", _ft)
+    y += 40
+    cell(c0, "SATS · GPS", f"{st.satellites if st.satellites is not None else '—'} · {st.gps_level if st.gps_level is not None else '—'}")
+    cell(c1, "MODE", st.flight_mode_name or "—")
+    y += 40
+    # home + max alt line
+    _maxa = f"{st.max_height_m:g} m" if st.max_height_m is not None else "—"
+    _home = (f"{st.home_lat:.5f},{st.home_lon:.5f}" if st.home_lat is not None else "not set")
+    left(F["small"], f"home {_home}  ·  max alt {_maxa}", _g.MUTED, lx, y + 6)
+    left(F["small"], "F1 help · Esc settings · F3 hide", (110, 116, 130), lx, y + 24)
+
+    # motor-start failure (only when relevant) — a red banner under the card
+    if st.motor_fail_code:
+        fb = pygame.Rect(X, Y + card_h + 6, W, 26)
+        s = pygame.Surface((fb.w, fb.h), pygame.SRCALPHA); s.fill((80, 20, 24, 210))
+        screen.blit(s, fb.topleft)
+        left(F["chip"], f"WON'T START: {st.motor_fail_reason}", _g.BAD, fb.x + 10, fb.centery)
+
+    # ---------- top-right REC badge ----------
+    if st.is_recording:
+        rt = f"REC {st.record_time_s or 0}s"
+        w = F["title"].size(rt)[0] + 40
+        rb = pygame.Rect(sw - 16 - w, 16, w, 30)
+        s = pygame.Surface((rb.w, rb.h), pygame.SRCALPHA); s.fill((20, 12, 14, 200))
+        screen.blit(s, rb.topleft)
+        pygame.draw.rect(screen, (120, 40, 44), rb, width=1, border_radius=8)
+        pygame.draw.circle(screen, _g.BAD, (rb.x + 16, rb.centery), 6)
+        right(F["title"], rt, _g.TEXT, rb.right - 12, rb.centery)
+
+    # ---------- bottom-right twin stick pads ----------
+    with cli.lock:
+        a = dict(cli.axes)
+    half = 42
+    gap = 24
+    base_y = sh - half - 34
+    rpad_cx = sw - 16 - half
+    lpad_cx = rpad_cx - half * 2 - gap
+    _hud_pad(screen, F, lpad_cx, base_y, half, a["yaw"], a["throttle"], "yaw / thr")
+    _hud_pad(screen, F, rpad_cx, base_y, half, a["roll"], a["pitch"], "roll / pitch")
+
+
+# ---------------------------------------------------------------- help overlay
+# (key, what it does / WHEN to use it). Grouped into sections drawn in two columns.
+_HELP_SECTIONS = [
+    ("FLIGHT — do these in order", [
+        ("Enter", "ARM / disarm motors — always first"),
+        ("T", "take off (control auto-enables once stable)"),
+        ("C", "control on/off — only AFTER takeoff"),
+        ("L", "land (auto-releases control back to RC)"),
+        ("H", "Return-to-Home — emergency recall"),
+    ]),
+    ("MOVE — hold while flying", [
+        ("W / S", "pitch forward / back"),
+        ("A / D", "roll left / right"),
+        ("Space / Shift", "throttle up / down"),
+        ("Q / E", "yaw left / right"),
+        ("Mouse", "yaw (left-right) + gimbal tilt (up-down)"),
+    ]),
+    ("CAMERA", [
+        ("P", "take a photo"),
+        ("R", "start / stop recording"),
+        ("[ ] or ↑ ↓", "gimbal tilt"),
+        ("N", "recenter gimbal"),
+    ]),
+    ("VIEW & SYSTEM", [
+        ("Esc", "flight settings panel"),
+        ("Tab", "console (type any command)"),
+        ("F1", "this help (Esc/F1 to close)"),
+        ("F3", "hide / show the HUD"),
+        ("F11", "fullscreen toggle"),
+        ("V", "ground-station authority toggle"),
+        ("U", "no-GPS takeoff unlock"),
+        ("K", "request a video keyframe"),
+        ("G", "dump packet samples (debug)"),
+    ]),
+]
+
+
+def _draw_help(screen):
+    import pygame
+    import gui as _g
+    F = _hud_fonts()
+    fh = _g._font(24, bold=True)
+    fsec = _g._font(14, bold=True)
+    fkey = _g._font(14, bold=True)
+    fdesc = _g._font(14)
+    sw, sh = screen.get_size()
+    pw = min(940, sw - 40)
+    ph = min(600, sh - 40)
+    px, py = (sw - pw) // 2, (sh - ph) // 2
+
+    # dim the world, then the card
+    dim = pygame.Surface((sw, sh), pygame.SRCALPHA); dim.fill((0, 0, 0, 150)); screen.blit(dim, (0, 0))
+    card = pygame.Surface((pw, ph), pygame.SRCALPHA)
+    pygame.draw.rect(card, (*_g.PANEL, 250), card.get_rect(), border_radius=14)
+    screen.blit(card, (px, py))
+    pygame.draw.rect(screen, _g.PANEL_HI, (px, py, pw, ph), width=1, border_radius=14)
+
+    screen.blit(fh.render("Controls & help", True, _g.ACCENT), (px + 26, py + 20))
+    pygame.draw.line(screen, _g.PANEL_HI, (px + 26, py + 56), (px + pw - 26, py + 56), 1)
+
+    col_w = (pw - 52) // 2
+    col_x = [px + 26, px + 26 + col_w]
+    col_y = [py + 72, py + 72]
+    # distribute sections: first two in the left column, rest in the right
+    layout = [0, 0, 1, 1]
+    for si, (title, rows) in enumerate(_HELP_SECTIONS):
+        c = layout[si] if si < len(layout) else (si % 2)
+        x = col_x[c]; y = col_y[c]
+        screen.blit(fsec.render(title, True, _g.ACCENT_HI), (x, y))
+        y += 26
+        for key, desc in rows:
+            screen.blit(fkey.render(key, True, _g.TEXT), (x + 6, y))
+            screen.blit(fdesc.render(desc, True, (188, 196, 208)), (x + 150, y))
+            y += 22
+        y += 12
+        col_y[c] = y
+
+    hint = fdesc.render("Esc or F1 — close", True, _g.MUTED)
+    screen.blit(hint, hint.get_rect(midbottom=(px + pw // 2, py + ph - 12)))
 
 
 # ---------------------------------------------------------------- UI (pygame)
@@ -877,6 +1238,7 @@ def run_ui(cli: Client):
     clock = pygame.time.Clock()
     console = False
     cbuf = ""
+    help_open = False
     gimbal_last = 0.0
     settings = SettingsPanel(cli)
 
@@ -905,10 +1267,16 @@ def run_ui(cli: Client):
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
                 cli.running = False
+            elif help_open:
+                # Help overlay swallows input; Esc or F1 closes it.
+                if ev.type == pygame.KEYDOWN and ev.key in (pygame.K_ESCAPE, pygame.K_F1):
+                    help_open = False
+                    set_grab(grabbed)
             elif settings.open:
                 # The panel owns all input while it is up.
                 if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
                     settings.open = False
+                    settings._restore_liveview()   # back to live video if a media op used playback
                     set_grab(grabbed)
                 else:
                     settings.handle(ev)
@@ -936,16 +1304,13 @@ def run_ui(cli: Client):
                     screen = make_screen(cli.fullscreen)
                     font = pygame.font.SysFont("consolas", fsize)
                     big = pygame.font.SysFont("consolas", fsize + 1, bold=True)
+                elif ev.key == pygame.K_F3:
+                    cli.show_hud = not cli.show_hud    # hide all overlay text: clean video only
+                    cli.msg("HUD " + ("shown" if cli.show_hud else "hidden — F3 to show"))
+                elif ev.key == pygame.K_F1:
+                    help_open = True; set_grab(False)  # controls & help overlay (Esc/F1 closes)
                 elif ev.key == pygame.K_k:
                     cli.d.request_i_frame(); cli.msg("keyframe requested")
-                elif ev.key == pygame.K_j:
-                    # cycle the useful 0x03/0x8E flag presets (frame/axis mode)
-                    i = (cli.stick_flags.index(cli.stick_flag) + 1) % len(cli.stick_flags) \
-                        if cli.stick_flag in cli.stick_flags else 0
-                    cli.stick_flag = cli.stick_flags[i]
-                    _names = {0x4A: "velocity/BODY", 0x48: "velocity/GROUND",
-                              0x0A: "angle/BODY", 0x08: "angle/GROUND"}
-                    cli.msg(f"stick flag = 0x{cli.stick_flag:02x} ({_names.get(cli.stick_flag,'?')}) — J to change")
                 elif ev.key == pygame.K_m:
                     cli.stick_mobilerc = not cli.stick_mobilerc
                     cli.msg(f"stick frame = {'0x01/0x02 mobile-RC' if cli.stick_mobilerc else '0x01/0x0A'}")
@@ -953,12 +1318,6 @@ def run_ui(cli: Client):
                     cli.dump_packets()      # capture packet samples for calibration
                 elif ev.key == pygame.K_u:
                     cli.d.unlock_no_gps(True); cli.msg("no-GPS takeoff unlock sent (U)")
-                elif ev.key == pygame.K_b:
-                    cli.playback = not cli.playback
-                    if cli.playback:
-                        cli.d.enter_playback(); cli.msg("PLAYBACK mode (media) — B to return to liveview")
-                    else:
-                        cli.d.exit_playback(); cli.d.start_liveview(); cli.msg("LIVEVIEW mode")
                 elif ev.key == pygame.K_TAB: console = True; cbuf = ""; set_grab(False)
                 elif ev.key == pygame.K_RETURN:
                     if cli.live: cli.armed = not cli.armed; cli.msg(f"ARMED={cli.armed}")
@@ -966,7 +1325,15 @@ def run_ui(cli: Client):
                 elif ev.key == pygame.K_t and cli._flight_ok():
                     cli.d.takeoff(); cli._pending_auto_c = True; cli._takeoff_t = time.time()
                     cli.msg("takeoff" + (" (control will auto-enable when settled)" if cli.auto_c else ""))
-                elif ev.key == pygame.K_l: cli.d.land(); cli.msg("land")
+                elif ev.key == pygame.K_l:
+                    cli.d.land()
+                    cli._pending_auto_c = False          # cancel any pending post-takeoff auto-C
+                    if cli.control:                      # release virtual stick so the FC lands cleanly
+                        cli.control = False; cli.gs = False
+                        cli.d.enable_virtual_stick(False)
+                        cli.msg("land (control auto-OFF, returned to RC)")
+                    else:
+                        cli.msg("land")
                 elif ev.key == pygame.K_h: cli.d.return_to_home(); cli.msg("RTH (emergency)")
                 elif ev.key == pygame.K_c:
                     if not cli.control and not cli._airborne():
@@ -986,8 +1353,6 @@ def run_ui(cli: Client):
                         cli.d.stop_record(); cli.recording = False; cli.msg("record STOP")
                     else:
                         cli.d.start_record(); cli.recording = True; cli.msg("record START (R again = stop)")
-                elif ev.key == pygame.K_z: cli.d.set_zoom(2.0); cli.msg("zoom 2x")
-                elif ev.key == pygame.K_x: cli.d.set_zoom(1.0); cli.msg("zoom 1x")
 
         if console or settings.open:
             grabbed = False
@@ -1035,40 +1400,8 @@ def run_ui(cli: Client):
                                   (sh - img.get_height()) // 2))
             except Exception:
                 pass
-        # Dark translucent backdrop behind the HUD so text is readable over bright video.
-        hud_bg = pygame.Surface((min(screen.get_width(), 560), 250))
-        hud_bg.set_alpha(150); hud_bg.fill((0, 0, 0))
-        screen.blit(hud_bg, (0, 0))
-        st = cli.tele.state
-        line(screen, 8, f"DJI Mavic Mini 1 — {cli.mode}  {'LIVE' if cli.live else 'DRY'}"
-                        f"  {'ARMED' if cli.armed else 'disarmed'}", big,
-             (120, 255, 120) if cli.armed else (255, 180, 120))
-        from telemetry import SDK_CTRL_DEVICE
-        _cd = SDK_CTRL_DEVICE.get(st.ctrl_device, st.ctrl_device)
-        line(screen, 34, f"control={cli.control}  gs={cli.gs}  FC-owner={_cd}"
-                         f"  responding: {sorted(hex(a) for a in cli.responders)}",
-             font, (120, 255, 120) if st.ctrl_device == 1 else (200, 200, 200))
-        line(screen, 58, "── TELEMETRY ──", font, (150, 180, 255))
-        line(screen, 78, f"mode={st.flight_mode_name}  satellites={st.satellites}  gps={st.gps_level}")
-        _ft = f"{st.flight_time_s // 60}:{st.flight_time_s % 60:02d}" if st.flight_time_s is not None else "-"
-        line(screen, 96, f"battery={st.battery_pct}%  altitude={st.altitude_m}m  flying={st.is_flying}  motors={st.motors_on}  fly-time={_ft}")
-        _hlat = f"{st.home_lat:.5f}" if st.home_lat is not None else "-"
-        _hlon = f"{st.home_lon:.5f}" if st.home_lon is not None else "-"
-        line(screen, 114, f"roll/pitch/yaw={st.roll}/{st.pitch}/{st.yaw}   "
-                          f"max_alt={st.max_height_m}m  home={_hlat},{_hlon} rec={st.home_recorded}")
-        _rec = f"REC {st.record_time_s}s" if st.is_recording else "rec off"
-        line(screen, 132, f"camera: {_rec}   flightmode-tilt: use 'rp tilt'",
-             font, (255, 120, 120) if st.is_recording else (200, 200, 200))
-        if st.motor_fail_code:
-            line(screen, 134, f"WON'T START: {st.motor_fail_reason}", font, (255, 120, 120))
-        line(screen, 162, "── STICKS (WASD/Space/Shift/QE) ──", font, (150, 180, 255))
-        with cli.lock:
-            a = cli.axes
-        line(screen, 182, f"thr={a['throttle']:+.2f} yaw={a['yaw']:+.2f} pitch={a['pitch']:+.2f} roll={a['roll']:+.2f}")
-        line(screen, 214, "ORDER: Enter=ARM -> T=takeoff -> C=control (C only AFTER takeoff)  |  L=land H=RTH",
-             font, (150, 150, 160))
-        line(screen, 232, "WASD=move Space/Shift=throttle Mouse=yaw+gimbal  V=gs N=recenter P=photo R=record Z/X=zoom  Tab=console Esc=settings",
-             font, (150, 150, 160))
+        if cli.show_hud:
+            _draw_flight_hud(screen, cli)
         if console:
             pygame.draw.rect(screen, (30, 30, 40), (0, 300, screen.get_width(), 60))
             line(screen, 308, "> " + cbuf + "_", big, (255, 255, 180))
@@ -1076,6 +1409,8 @@ def run_ui(cli: Client):
             line(screen, 308, cli.last_msg, font, (200, 200, 120))
         if settings.open:
             settings.draw(screen, font, big)
+        if help_open:
+            _draw_help(screen)
         pygame.display.flip()
         clock.tick(30)
 
