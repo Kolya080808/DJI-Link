@@ -6,7 +6,11 @@ PC = brain. ALL functions for the drone: flight (WASD), gimbal, camera + setting
 telemetry (human-readable), video, and a CONSOLE for any DUML command (the whole
 surface from reverse_docs) — i.e. literally every function of the app.
 
-Transport:
+Startup: with no flags, a graphical start menu (gui.py) appears — connect via Pi
+(with on-screen Pi discovery, AP-join, Wi-Fi pick), via serial, or run the simulator.
+The console is reserved for logs; logs also go to logs/latest.log (see applog.py).
+
+Transport (flags bypass the menu, for testing):
   --pi HOST[:PORT]  via Pi bridge (raw AOA -> composite demux: DUML + video)
   --serial PORT     directly into remote controller/drone (serial, DUML only, no video)
   --sim             no hardware (loopback): test UI/control/console
@@ -34,21 +38,28 @@ from duml import DumlPacket, DumlStream
 from drone import Drone, DEV_FC, DEV_CAMERA, DEV_GIMBAL
 from telemetry import Telemetry
 from control import keys_to_sticks
+import applog
 import composite
 
 
 # ---------------------------------------------------------------- video sink
 VERBOSE = False
+_LOG = applog.get_logger()   # replaced by applog.setup() in main(); safe no-op before then
 
 
 def log(*a):
-    """Console log. Always on for milestones; VERBOSE adds per-packet detail."""
-    print(f"[{time.strftime('%H:%M:%S')}]", *a, flush=True)
+    """Console log + file (logs/latest.log). Always on for milestones."""
+    line = " ".join(str(x) for x in a)
+    print(f"[{time.strftime('%H:%M:%S')}] {line}", flush=True)
+    _LOG.info(line)
 
 
 def vlog(*a):
+    """Verbose detail: printed only in --verbose, but ALWAYS written to the log file."""
+    line = " ".join(str(x) for x in a)
     if VERBOSE:
-        log(*a)
+        print(f"[{time.strftime('%H:%M:%S')}] {line}", flush=True)
+    _LOG.debug(line)
 
 
 class VideoSink:
@@ -160,6 +171,7 @@ class Client:
         self.axes = {"throttle": 0.0, "yaw": 0.0, "pitch": 0.0, "roll": 0.0}
         self.lock = threading.Lock()
         self.running = True
+        self.return_to_menu = False  # set by "Exit to main menu": run_ui ends, main() re-shows menu
         self.last_msg = ""
         self.fullscreen = True
         self.param_sets = {}
@@ -442,6 +454,7 @@ class Client:
     def msg(self, s):
         self.last_msg = s
         print("  " + s)
+        _LOG.info(s)
 
     def close(self):
         self.running = False
@@ -616,12 +629,16 @@ class SettingsPanel:
                lo=15, hi=500, step=5, val=120),
             _W("slider", "Max distance (m)", lambda v: self._try(lambda: d.set_max_distance(v), f"max dist {v} m"),
                lo=15, hi=5000, step=50, val=500),
-            _W("slider", "Max speed (m/s)", lambda v: self._try(lambda: d.set_horizontal_speed(v), f"max speed {v}"),
-               lo=1, hi=15, step=1, val=6, note="needs a runtime param-hash (see Limitations)"),
-            _W("slider", "Exposure (EV)", lambda v: self._try(lambda: d.set_ev(v), f"EV {v:+d}"),
-               lo=-3, hi=3, step=1, val=0),
-            _W("choice", "ISO", lambda v: self._try(lambda: d.set_iso(v), f"ISO {v}"),
-               opts=[100, 200, 400, 800, 1600, 3200, 6400, 12800]),
+            _W("slider", "Brightness (EV)", lambda v: self._try(lambda: d.set_ev(v), f"EV {v:+d}"),
+               lo=-3, hi=3, step=1, val=0, note="main brighten/darken lever (auto exposure)"),
+            _W("choice", "ISO (manual)", lambda v: self._try(lambda: d.set_iso(v), f"ISO {v}"),
+               opts=[100, 200, 400, 800, 1600, 3200],
+               note="manual; 3200 is the WM160 sensor ceiling"),
+            _W("choice", "Shutter (manual)", lambda v: self._try(
+                lambda: (d.set_shutter_auto() if v == "auto" else d.set_shutter(v)),
+                f"shutter {'auto' if v=='auto' else '1/'+str(v)}"),
+               opts=["auto", 1000, 500, 250, 125, 60, 30, 15, 8, 4],
+               note="SLOWER (smaller) = brighter. video floor ~1/30; photo can go lower"),
             _W("choice", "Camera mode", lambda v: self._try(
                 lambda: d.set_camera_mode(0 if v == "photo" else 1), v), opts=["photo", "video"]),
             _W("button", "Recenter gimbal", lambda v: self._try(lambda: d.gimbal_recenter(), "recenter")),
@@ -629,11 +646,18 @@ class SettingsPanel:
             _W("button", "Media: list SD card", lambda v: self._list_media()),
             _W("button", "Media: download first", lambda v: self._download_first()),
             _W("button", "Media: delete first", lambda v: self._delete_first()),
-            _W("button", "Exit (resume flight)", lambda v: self._close()),
+            _W("button", "Exit to main menu", lambda v: self._exit_to_menu()),
         ]
 
     def _close(self):
         self.open = False
+
+    def _exit_to_menu(self):
+        # End this flight session and go back to the start menu (so the user can reconnect,
+        # switch to serial/sim, or just poke around). Resuming the current flight is Esc-again.
+        self.open = False
+        self.cli.return_to_menu = True
+        self.cli.running = False
 
     # ---- media (SD card) ----
     # The request encoders are proven; the list-response record stride and download chunk
@@ -703,9 +727,11 @@ class SettingsPanel:
                     self.dragging = w
                     self._drag(w, pos[0])
                 elif w.kind == "choice":
-                    # left third = previous, right third = next, middle = next
-                    x0, _, x1 = (w.track or (w.rect.left, 0, w.rect.right))
-                    self._cycle(w, -1 if pos[0] < (w.rect.left + w.rect.width // 2) - 30 else 1)
+                    # Arrows sit at x0 (‹) and x1 (›); split at their midpoint so a click on
+                    # ‹ decrements and › increments. (Old code split at the row's centre, which
+                    # fell to the RIGHT of ‹, so clicking ‹ wrongly incremented.)
+                    x0, x1, _ = (w.track or (w.rect.left, w.rect.right, 0))
+                    self._cycle(w, -1 if pos[0] < (x0 + x1) // 2 else 1)
                 elif w.kind == "toggle":
                     w.on = not w.on; w.action(w.on)
                 elif w.kind == "button":
@@ -746,47 +772,80 @@ class SettingsPanel:
                 w.on = not w.on; w.action(w.on)
 
     # ---- draw ----
+    # Widgets are grouped visually: a small heading is drawn above the first row of each
+    # group so the panel reads as Flight / Camera / Media / (exit), not one long list.
+    _GROUPS = [(0, "FLIGHT"), (3, "CAMERA"), (8, "HOME & MEDIA")]
+
     def draw(self, screen, font, big):
         import pygame
+        import gui as _g   # shared palette so the panel matches the start menu
+        ROW_H, HEAD_H = 40, 26
         sw, sh = screen.get_size()
-        pw = min(560, sw - 40)
-        ph = min(len(self.w) * 46 + 70, sh - 40)
+        pw = min(600, sw - 40)
+        n_heads = len(self._GROUPS)
+        body_h = len(self.w) * (ROW_H + 6) + n_heads * HEAD_H
+        ph = min(body_h + 92, sh - 40)
         px, py = (sw - pw) // 2, (sh - ph) // 2
-        overlay = pygame.Surface((pw, ph)); overlay.set_alpha(240); overlay.fill((20, 22, 28))
-        screen.blit(overlay, (px, py))
-        screen.blit(big.render("Settings", True, (150, 200, 255)), (px + 20, py + 14))
+
+        # Card with a subtle border + drop shadow.
+        shadow = pygame.Surface((pw + 16, ph + 16), pygame.SRCALPHA)
+        shadow.fill((0, 0, 0, 90)); screen.blit(shadow, (px - 8, py - 4))
+        card = pygame.Surface((pw, ph), pygame.SRCALPHA); card.fill((*_g.PANEL, 248))
+        screen.blit(card, (px, py))
+        pygame.draw.rect(screen, _g.PANEL_HI, (px, py, pw, ph), width=1, border_radius=10)
+
+        title = big.render("Flight settings", True, _g.ACCENT)
+        screen.blit(title, (px + 22, py + 16))
+        headmap = {i: name for i, name in self._GROUPS}
+
         mouse = pygame.mouse.get_pos()
+        y = py + 50
         for i, w in enumerate(self.w):
-            y = py + 52 + i * 46
-            row = pygame.Rect(px + 12, y, pw - 24, 40)
+            if i in headmap:
+                y += 6
+                screen.blit(font.render(headmap[i], True, _g.MUTED), (px + 22, y + 4))
+                y += HEAD_H
+            row = pygame.Rect(px + 14, y, pw - 28, ROW_H)
             w.rect = row
             hover = row.collidepoint(mouse)
-            if hover or i == self.sel:
-                pygame.draw.rect(screen, (36, 40, 50), row, border_radius=6)
-            col = (235, 240, 245) if (hover or i == self.sel) else (200, 210, 220)
-            screen.blit(font.render(w.label, True, col), (row.x + 10, y + 4))
+            active = hover or i == self.sel
+            if active:
+                pygame.draw.rect(screen, _g.PANEL_HI, row, border_radius=7)
+            col = _g.TEXT if active else (196, 206, 218)
+            is_btn = w.kind == "button"
+            is_exit = w.label.startswith("Exit")
+            lab_col = (_g.GOOD if is_exit else _g.ACCENT_HI) if is_btn and active else col
+            screen.blit(font.render(w.label, True, lab_col), (row.x + 12, y + 4))
             if w.note:
-                screen.blit(font.render(w.note, True, (150, 150, 120)), (row.x + 10, y + 21))
+                screen.blit(font.render(w.note, True, (150, 150, 120)), (row.x + 12, y + 21))
             cx0 = row.x + int(row.width * 0.46)
             cx1 = row.right - 16
             if w.kind == "slider":
                 ty = y + 20
                 w.track = (cx0, cx1, ty)
-                pygame.draw.line(screen, (70, 76, 88), (cx0, ty), (cx1, ty), 3)
+                pygame.draw.line(screen, (60, 66, 80), (cx0, ty), (cx1, ty), 3)
                 frac = (w.val - w.lo) / (w.hi - w.lo) if w.hi > w.lo else 0
                 hx = int(cx0 + frac * (cx1 - cx0))
-                pygame.draw.circle(screen, (120, 200, 255), (hx, ty), 7)
+                pygame.draw.line(screen, _g.ACCENT, (cx0, ty), (hx, ty), 3)
+                pygame.draw.circle(screen, _g.ACCENT_HI, (hx, ty), 7)
                 screen.blit(font.render(str(w.val), True, col), (cx1 - 46, y + 2))
             elif w.kind == "choice":
-                screen.blit(font.render("‹", True, col), (cx0, y + 4))
-                screen.blit(font.render(str(w.opts[w.oi]), True, col), (cx0 + 24, y + 4))
-                screen.blit(font.render("›", True, col), (cx1 - 12, y + 4))
+                # Store the two arrow x-positions so _click can split exactly between them:
+                # left of the midpoint = ‹ (previous), right = › (next).
+                w.track = (cx0, cx1, y)
+                screen.blit(font.render("‹", True, _g.ACCENT), (cx0, y + 3))
+                screen.blit(font.render(str(w.opts[w.oi]), True, col), (cx0 + 26, y + 4))
+                screen.blit(font.render("›", True, _g.ACCENT), (cx1 - 12, y + 3))
             elif w.kind == "toggle":
                 txt = "ON" if w.on else "OFF"
-                screen.blit(font.render(txt, True, (120, 255, 160) if w.on else (200, 120, 120)),
-                            (cx1 - 40, y + 4))
-            elif w.kind == "button":
-                screen.blit(font.render("▶", True, col), (cx1 - 16, y + 4))
+                screen.blit(font.render(txt, True, _g.GOOD if w.on else _g.BAD), (cx1 - 40, y + 4))
+            elif w.kind == "button" and not is_exit:
+                screen.blit(font.render("▶", True, _g.ACCENT), (cx1 - 16, y + 4))
+            y += ROW_H + 6
+
+        hint = font.render("Esc: resume flight   ·   click a row to change   ·   scroll to adjust sliders",
+                           True, _g.MUTED)
+        screen.blit(hint, (px + 22, py + ph - 26))
 
 
 # ---------------------------------------------------------------- UI (pygame)
@@ -796,7 +855,8 @@ def run_ui(cli: Client):
               pygame.K_q: "q", pygame.K_e: "e", pygame.K_SPACE: "space",
               pygame.K_LSHIFT: "shift", pygame.K_RSHIFT: "shift",
               pygame.K_LEFT: "left", pygame.K_RIGHT: "right"}
-    pygame.init()
+    if not pygame.get_init():
+        pygame.init()
     WINDOWED_SIZE = (900, 600)
 
     def make_screen(full: bool):
@@ -804,7 +864,11 @@ def run_ui(cli: Client):
             return pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
         return pygame.display.set_mode(WINDOWED_SIZE, pygame.RESIZABLE)
 
-    screen = make_screen(cli.fullscreen)
+    # A display may already exist (the pre-flight menu created it); reuse it unless the
+    # requested fullscreen state differs, so we don't drop and recreate the window.
+    screen = pygame.display.get_surface()
+    if screen is None or bool(screen.get_flags() & pygame.FULLSCREEN) != bool(cli.fullscreen):
+        screen = make_screen(cli.fullscreen)
     pygame.display.set_caption("DJI Mavic Mini 1 — PC control")
     # Scale text with the window so fullscreen is readable rather than a corner of ants.
     fsize = 13
@@ -986,7 +1050,8 @@ def run_ui(cli: Client):
              font, (120, 255, 120) if st.ctrl_device == 1 else (200, 200, 200))
         line(screen, 58, "── TELEMETRY ──", font, (150, 180, 255))
         line(screen, 78, f"mode={st.flight_mode_name}  satellites={st.satellites}  gps={st.gps_level}")
-        line(screen, 96, f"battery={st.battery_pct}%  altitude={st.altitude_m}m  flying={st.is_flying}  motors={st.motors_on}")
+        _ft = f"{st.flight_time_s // 60}:{st.flight_time_s % 60:02d}" if st.flight_time_s is not None else "-"
+        line(screen, 96, f"battery={st.battery_pct}%  altitude={st.altitude_m}m  flying={st.is_flying}  motors={st.motors_on}  fly-time={_ft}")
         _hlat = f"{st.home_lat:.5f}" if st.home_lat is not None else "-"
         _hlon = f"{st.home_lon:.5f}" if st.home_lon is not None else "-"
         line(screen, 114, f"roll/pitch/yaw={st.roll}/{st.pitch}/{st.yaw}   "
@@ -1018,7 +1083,11 @@ def run_ui(cli: Client):
 
 
 def discover_pi() -> tuple[str | None, int]:
-    """Find the Pi and walk the user through getting online + powering the link on.
+    """Console Pi discovery — the pre-GUI flow. The normal path now uses the graphical
+    gui.preflight() menu + gui.DiscoveryScreen; this remains as a headless/no-display
+    fallback and is not called by main() when a display is available.
+
+    Find the Pi and walk the user through getting online + powering the link on.
 
     Follows the agreed flow: reach the Pi over the current network if possible; else
     join its access point; only ask about internet when we actually had to join the AP
@@ -1082,62 +1151,79 @@ def main() -> int:
                     help="append every non-video composite unit (to see media/DUML replies)")
     args = ap.parse_args()
 
-    global VERBOSE
+    global VERBOSE, _LOG
     VERBOSE = args.verbose
+    _LOG = applog.setup(verbose=args.verbose)   # latest.log + dated archive + weekly cleanup
+    log(f"[log] logging to {applog.LATEST}")
     live = not args.dry and not args.sim      # flight enabled by default; ARM still gates motors
 
-    from transport import NetTransport, CompositeTransport
-    if args.sim:
-        from transport import LogTransport
-        t = LogTransport(verbose=True); mode = "sim"
-        print("[sim] loopback — commands are printed, no hardware")
-    elif args.serial:
-        from transport import SerialTransport
-        t = SerialTransport(args.serial); mode = "serial"
-    else:
-        # Default path: explicit --pi host, or auto-discover.
-        if args.pi:
-            host, _, p = args.pi.partition(":")
-            port = int(p) if p else 9910
-        else:
-            host, port = discover_pi()
-        if not host:
-            print("\n[pi] Could not reach the Pi. Make sure it is powered and either on")
-            print("     your Wi-Fi or broadcasting its 'PI_DJI_LINK-*' network, then retry.")
-            print("     You can also test the interface with no hardware:  py -3 pc_client.py --sim")
-            return 2
-        # Pi = dumb jump-host: wrap outgoing in composite, demux incoming ourselves
-        t = CompositeTransport(NetTransport(host, port)); mode = "pi"
+    from transport import NetTransport, CompositeTransport, LogTransport, SerialTransport
+    import pygame, gui, netfind
 
-    cli = Client(t, mode, live)
-    # Config-param writes: SIMPLE encryption is CONDITIONAL on the link being encrypted
-    # (KEYVALUE_DUML_TRANSPORT.md). Our RC/AOA link is plaintext (plain 0x03/0x80 works),
-    # so the FC expects plaintext 0xF9 too — forcing encryption made it silently drop the
-    # unlock write. Keep plaintext; flip to True only if a future link negotiates encryption.
-    cli.d.encrypt_config = False
-    cli.fullscreen = not args.windowed
-    if args.dump_video:
-        cli.dump_f = open(args.dump_video, "wb")
-        log(f"[video] dumping raw payloads to {args.dump_video}")
-    if args.capture:
-        cli.capture_f = open(args.capture, "w")
-        log(f"[capture] logging OSD/battery packets to {args.capture}")
-    if args.dump_raw:
-        cli.raw_dump_f = open(args.dump_raw, "w")
-        log(f"[dump-raw] logging non-video composite units to {args.dump_raw}")
-    cli.start_rx(); cli.start_sender()
-    if not args.no_video:
-        cli.start_video()
-    cli.start_stats()
-    try:
-        run_ui(cli)
-    except KeyboardInterrupt:
-        log("interrupted — shutting down")
-    except RuntimeError as e:
-        print(e); return 2
-    finally:
-        cli.close()
-    return 0
+    base_live = not args.dry     # --dry blocks flight; --sim forces it off below
+    first = True                 # CLI flags pin the connection on the FIRST run only;
+                                 # "Exit to main menu" then drops to the graphical menu.
+    while True:
+      # ---- choose a connection (flags first run, else the graphical menu) ----
+      if first and args.sim:
+        spec = {"mode": "sim"}
+      elif first and args.serial:
+        spec = {"mode": "serial", "port": args.serial}
+      elif first and args.pi:
+        host, _, p = args.pi.partition(":")
+        spec = {"mode": "pi", "host": host, "port": int(p) if p else 9910}
+      else:
+        if not pygame.get_init():
+            pygame.init()
+        surf = pygame.display.get_surface() or pygame.display.set_mode((900, 600), pygame.RESIZABLE)
+        pygame.display.set_caption("DJI Mavic Mini 1 — PC control")
+        spec = gui.preflight(surf, pygame.time.Clock(), netfind, applog.tail, default_serial="")
+      first = False
+
+      if spec["mode"] == "quit":
+        log("[menu] quit")
+        return 0
+      if spec["mode"] == "sim":
+        t = LogTransport(verbose=True); mode = "sim"; live = False
+        log("[sim] loopback — commands are printed, no hardware")
+      elif spec["mode"] == "serial":
+        t = SerialTransport(spec["port"]); mode = "serial"; live = base_live
+      else:  # pi — dumb jump-host: wrap outgoing in composite, demux incoming ourselves
+        t = CompositeTransport(NetTransport(spec["host"], spec["port"])); mode = "pi"; live = base_live
+
+      cli = Client(t, mode, live)
+      # Config-param writes: SIMPLE encryption is CONDITIONAL on the link being encrypted
+      # (KEYVALUE_DUML_TRANSPORT.md). Our RC/AOA link is plaintext (plain 0x03/0x80 works),
+      # so the FC expects plaintext 0xF9 too — forcing encryption made it silently drop the
+      # unlock write. Keep plaintext; flip to True only if a future link negotiates encryption.
+      cli.d.encrypt_config = False
+      cli.fullscreen = not args.windowed
+      if args.dump_video:
+          cli.dump_f = open(args.dump_video, "wb")
+          log(f"[video] dumping raw payloads to {args.dump_video}")
+      if args.capture:
+          cli.capture_f = open(args.capture, "w")
+          log(f"[capture] logging OSD/battery packets to {args.capture}")
+      if args.dump_raw:
+          cli.raw_dump_f = open(args.dump_raw, "w")
+          log(f"[dump-raw] logging non-video composite units to {args.dump_raw}")
+      cli.start_rx(); cli.start_sender()
+      if not args.no_video:
+          cli.start_video()
+      cli.start_stats()
+      want_menu = False
+      try:
+          run_ui(cli)
+          want_menu = cli.return_to_menu
+      except KeyboardInterrupt:
+          log("interrupted — shutting down")
+      except RuntimeError as e:
+          print(e); return 2
+      finally:
+          cli.close()
+      if not want_menu:
+          return 0
+      log("[menu] returning to main menu")
 
 
 if __name__ == "__main__":

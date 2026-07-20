@@ -70,7 +70,7 @@ Payload origin = first byte of longitude. Verified length in capture = 55 B.
 | GPS-mode failure reason | 0x27 | u8 | `& 0xf` | enum | native `GPSModeFailureReason` |
 | battery % (FC copy) | 0x28 | u32 | field | % | `getBattery()` |
 | VPS/ultrasonic height (swave) | 0x29 | **s8** | ×0.1 | m | `getSwaveHeight()` — **re-verified: `DataBase.get(0x29, size=1, Short.class)` = ONE signed byte, NOT s16. Prior "s16" claim was WRONG (a 2-byte read would swallow flyTime@0x2a).** |
-| flight time | 0x2a | u16 | ×1 | s | `getFlyTime()` / native `FlightTimeInSeconds` |
+| flight time (elapsed) | 0x2a | u16 | **×0.1** | s | `getFlyTime()` — **RAW field is DECISECONDS (0.1 s)**, the getter divides by 10. Reading it raw made the HUD run ~10× fast (observed live). Divide by 10. |
 | motor revolution | 0x2c | s16 | — | — | `getMotorRevolution()` |
 | IMU init-fail reason | 0x31 | u8 | — | enum | native `IMUFailureReason` |
 
@@ -159,6 +159,13 @@ the HUD shows as "xx:xx" / minutes). The app surfaces it via key `KeyRemainingFl
 `getEstimatedRemainingFlightTime()`. **Action:** to display remaining flight time you must
 subscribe to / parse this FC battery-assessment push (u16 seconds @0x00); it will never
 appear in 0x0D/0x02.
+
+**Don't confuse it with ELAPSED flight time.** The app's top-bar timer is `getFlyTime()` =
+u16 **deciseconds** @0x2a of the ordinary 0x03/0x43 OSD push (§1) — divide by 10 for seconds.
+That one is verified and is now parsed live (`_parse_osd` → `state.flight_time_s = raw//10`,
+shown on the HUD as `fly-time m:ss`).
+REMAINING time (this §4) still needs a live capture of the keyed FC assessment push to pin
+its live cmd_id before it can be wired — that is the only piece still outstanding here.
 
 Battery-warning thresholds live in `uav_fc_electricity_push`:
 `LowBatteryWarningThreshold` @0x1b:u16 `&0x7f`, `SeriousLowBatteryWarningThreshold` @…

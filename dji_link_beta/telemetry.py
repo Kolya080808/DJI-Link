@@ -224,6 +224,11 @@ class Telemetry:
         if sats is not None: st.satellites = sats   # not width; u16 here inflates when p[0x25]!=0)
         vps = s8(p, 0x29)                    # getSwaveHeight (VPS) is 1 signed BYTE @0x29 (s16 spilled into flyTime)
         if vps is not None: st.vps_height_m = vps * 0.1
+        ft = u16(p, 0x2a)                    # getFlyTime(): ELAPSED flight time @0x2a.
+        # The RAW wire field is DECISECONDS (0.1 s), not seconds — getFlyTime() divides by
+        # 10 internally. Reading it raw made the HUD timer run ~10x too fast (observed live:
+        # ~4 real s showed ~1 min). Convert here; store integer seconds.
+        if ft is not None: st.flight_time_s = ft // 10   # (app's top-bar timer; NOT remaining time)
         cd = u8(p, 0x34)                     # SDKCtrlDevice: 1=APP => our sticks accepted
         if cd is not None: st.ctrl_device = cd
         # Motor start-fail cause = u8 @0x26 & 0x7F (getMotorFailedCause). The old 0x33

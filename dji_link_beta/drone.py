@@ -58,6 +58,7 @@ class Drone:
         # (DJI Assistant 2) path uses plaintext — set False for serial.
         self.encrypt_config = True
         self._seq = 0
+        self._shutter_denom = None   # last user-set 1/N shutter (None = auto); see set_iso/set_shutter
         self._stream = DumlStream()
         self._rx_thread: threading.Thread | None = None
         self._running = False
@@ -449,10 +450,22 @@ class Drone:
                   6400: 9, 12800: 10, 25600: 11}
 
     def set_iso(self, iso: int) -> None:
-        # ISO takes the enum INDEX, and only applies in MANUAL exposure mode.
+        # ISO takes the enum INDEX and only applies in MANUAL exposure. BUT the Mini has a
+        # FIXED aperture, so in MANUAL brightness = ISO × shutter only. Switching to MANUAL
+        # FREEZES the shutter at whatever auto-exposure last picked (outdoors that's very fast,
+        # 1/500–1/2000), and ISO alone can't beat a fast frozen shutter — that's the "ISO
+        # doesn't brighten, still dark" symptom. So when the user hasn't pinned a shutter,
+        # drop to a sane 1/60 here so the ISO change is actually visible. (Video ISO is also
+        # hard-capped at 3200 on this sensor — 6400+ get clamped.) For a plain "make it
+        # brighter", prefer set_ev() (AUTO + exposure compensation) instead.
         self.set_exposure_mode(4)
         idx = self._ISO_INDEX.get(iso, iso)
         self._cmd(CMDSET_CAMERA, 0x2A, bytes([idx & 0x7F]), receiver=DEV_CAMERA)
+        if self._shutter_denom is None:
+            # 1/30 is the SLOWEST (brightest) shutter usable for 30fps video, so it's the
+            # brightest sane default for a dark scene. In PHOTO the user can go slower still
+            # (1/8, 1/4…) via the shutter control for much more light. User override sticks.
+            self.set_shutter(30)
 
     # --- shutter speed = DataCameraSetShutterSpeed (0x02/0x28) — the real brightness lever
     # in MANUAL. Payload 4 B: [type][integral u16 LE][decimal]. For a 1/N shutter,
@@ -461,16 +474,23 @@ class Drone:
     def set_shutter(self, denom: int) -> None:
         """Set shutter to 1/denom s (e.g. 30 -> 1/30). Smaller denom = brighter."""
         self.set_exposure_mode(4)                      # shutter only sticks in MANUAL
+        self._shutter_denom = int(denom)               # remember so set_iso() won't override it
         integral = (1 << 15) | (int(denom) & 0x7FFF)
         self._cmd(CMDSET_CAMERA, 0x28,
                   bytes([1]) + struct.pack("<H", integral) + bytes([0]), receiver=DEV_CAMERA)
 
     def set_shutter_auto(self) -> None:
         """Let the camera auto-pick the shutter (type=AUTO)."""
+        self._shutter_denom = None
         self._cmd(CMDSET_CAMERA, 0x28, bytes([0, 0, 0, 0]), receiver=DEV_CAMERA)
 
     def set_ev(self, ev_thirds: int) -> None:
-        # Exposure compensation: 0EV=0x10, each full stop = 3 (1/3-EV) steps. Non-manual only.
+        # Exposure compensation — the natural "make it brighter/darker" lever. EV only works
+        # in an AUTO/PROGRAM exposure mode (in MANUAL the camera ignores it), so force PROGRAM
+        # first; otherwise a prior set_iso() left us in MANUAL and the EV slider did nothing.
+        # 0EV=0x10, each full stop = 3 (1/3-EV) steps.
+        self.set_exposure_mode(1)                      # PROGRAM (auto) — EV applies here
+        self._shutter_denom = None                     # back under auto-exposure control
         val = 0x10 + int(ev_thirds) * 3
         self._cmd(CMDSET_CAMERA, 0x2E, bytes([max(0, min(0xFF, val))]), receiver=DEV_CAMERA)
     def set_white_balance(self, mode: int, ct_index: int = 0) -> None:

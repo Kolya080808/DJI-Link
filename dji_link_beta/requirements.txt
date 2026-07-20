@@ -1,1 +1,2 @@
 pyusb>=1.2.1
+pygame>=2.5    # GUI + in-flight HUD/controls (menu, Pi discovery, video window)

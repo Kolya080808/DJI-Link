@@ -36,7 +36,7 @@ jobs:
       title:      ${{ steps.parse.outputs.title }}
       prerelease: ${{ steps.parse.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Parse UPDATE.md
         id: parse
@@ -80,7 +80,7 @@ jobs:
           echo "OK: tag $GITHUB_REF_NAME matches UPDATE.md version $file_version"
 
       - name: Upload release notes
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: release-notes.md
@@ -116,7 +116,7 @@ jobs:
               msvc_arch: x86,   cpack_extra: '-D CPACK_WIX_ARCHITECTURE=x86', experimental: true }
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -187,7 +187,7 @@ jobs:
           ls -la dist
 
       - name: Upload packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: packages-${{ matrix.slug }}
           path: dist/*
@@ -202,14 +202,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: packages-*
           merge-multiple: true
 
       - name: Download release notes
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-notes
           path: notes

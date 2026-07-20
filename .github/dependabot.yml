@@ -10,3 +10,10 @@ updates:
     labels:
       - dependencies
       - ci
+    # Bundle all GitHub Actions bumps into ONE pull request per week instead of one
+    # PR per action (which is what produced the three separate checkout/upload/download
+    # PRs). Review + merge in a single click.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
