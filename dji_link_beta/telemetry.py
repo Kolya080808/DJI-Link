@@ -145,10 +145,18 @@ class Telemetry:
         # from the FC side, which appears as sender 0x03 or 0x09 depending on the build.
         if pkt.cmd_set == 0x03 and pkt.cmd_id == 0x43 and len(p) >= 0x34:
             self._parse_osd(p)
-        # NOTE: 0x03/0x44 is NOT the home push on WM160 — a live dump shows it is a device/
-        # config frame (f64 800000.0 twice + ASCII serial "SCCH7A0177DS9"), which is why the
-        # old parse produced lat==lon~=4.6e7 garbage. Real position comes from the 0x43 OSD
-        # frame (lon@0x00, lat@0x08 f64 rad), parsed in _parse_osd. Home-specific push TBD.
+        # DataOsdGetPushCommon is ALSO published on the OSD cmd_set (0x09/0x01), same layout.
+        elif pkt.cmd_set == 0x09 and pkt.cmd_id == 0x01 and len(p) >= 0x34:
+            self._parse_osd(p)
+        # Home push = DataOsdGetPushHome, reachable via FLYC 0x03/0x44 OR OSD 0x09/0x02
+        # (identical struct: lon@0x00, lat@0x08 f64 rad, flags@0x14). Confirmed from DJI
+        # bytecode (HOME_POINT_RESEARCH_2026_v2.md). The old "0x44 is a device frame" note
+        # was wrong: the 800000.0 f64 was a home-not-recorded sentinel (flags bit0=0, caught
+        # by the range guard), and the ASCII serial came from a different (version) frame.
+        elif pkt.cmd_set == 0x03 and pkt.cmd_id == 0x44 and len(p) >= 0x16:
+            self.parse_home_location(p)
+        elif pkt.cmd_set == 0x09 and pkt.cmd_id == 0x02 and len(p) >= 0x16:
+            self.parse_home_location(p)
         elif pkt.cmd_set == 0x0D and pkt.cmd_id == 0x02 and len(p) >= 0x14:
             self._parse_battery(p)
         elif pkt.cmd_set == 0x02 and pkt.cmd_id == 0x80 and len(p) >= 0x1f:
@@ -204,12 +212,13 @@ class Telemetry:
         # like climb rate" symptom, and it is a DISPLAY-side wiring bug, not an offset bug).
         st = self.state
         # Aircraft GPS position: longitude f64 rad @0x00, latitude f64 rad @0x08 (verified).
-        # Shown on the HUD in place of the (unverified) home push; 0,0 until GPS locks.
+        # This is the DRONE's live position, NOT home — home comes from the 0x44/0x09-0x02
+        # push via parse_home_location. 0,0 until GPS locks.
         if len(p) >= 16:
             _lon = self.rad_to_deg(struct.unpack_from("<d", p, 0)[0])
             _lat = self.rad_to_deg(struct.unpack_from("<d", p, 8)[0])
             if -90.0 <= _lat <= 90.0 and -180.0 <= _lon <= 180.0 and (_lat or _lon):
-                st.home_lat, st.home_lon = _lat, _lon
+                st.drone_lat, st.drone_lon = _lat, _lon
         alt = s16(p, 0x10)
         if alt is not None: st.altitude_m = alt * 0.1        # relative/baro height, metres
         vx, vy, vz = s16(p, 0x12), s16(p, 0x14), s16(p, 0x16)
@@ -275,24 +284,24 @@ class Telemetry:
         return None if v is None else v * 180.0 / math.pi
 
     def parse_home_location(self, p: bytes) -> None:
-        """DataOsdGetPushHome (cmd_set 0x03 / cmd_id 0x44). f64 radians, but the order is
-        LON @+0x00, LAT @+0x08 (opposite of the OSD-general frame). Verified in
-        HOME_POINT_RESEARCH_2026.md — the previous lat/lon were swapped here."""
+        """DataOsdGetPushHome (FLYC 0x03/0x44 or OSD 0x09/0x02). f64 radians, order LON@0x00,
+        LAT@0x08 (opposite of the SET-home command). Confirmed byte-for-byte from DJI's own
+        getters (HOME_POINT_RESEARCH_2026_v2.md §1)."""
         if len(p) >= 16:
             lon = self.rad_to_deg(struct.unpack_from("<d", p, 0)[0])
             lat = self.rad_to_deg(struct.unpack_from("<d", p, 8)[0])
-            # Sanity guard: only accept plausible coordinates. On WM160 the 0x03/0x44 frame
-            # has produced garbage (lat==lon ~= 4.5e7, i.e. a raw f64 ~800000, NOT a coord),
-            # which means this offset/frame is wrong for this firmware — the real home push
-            # still needs a live capture to pin (see HOME_POINT_RESEARCH_2026.md vs §5). Until
-            # then, reject out-of-range values instead of showing nonsense on the HUD.
+            # Range guard: until home is recorded the FC pushes an uninitialised sentinel
+            # (f64 ~800000.0 -> ~4.6e7 deg, rejected here). Gate the HUD on home_recorded.
             if -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0 and (lat or lon):
                 self.state.home_lon = lon
                 self.state.home_lat = lat
         if len(p) >= 0x16:                       # flags u16 @0x14, bit0 = home recorded
             self.state.home_recorded = bool(struct.unpack_from("<H", p, 0x14)[0] & 1)
+            self.state.home_set = self.state.home_recorded
 
     def parse_aircraft_location(self, p: bytes) -> None:
+        # DataOsdGetPushCommon: LONGITUDE f64@0x00, LATITUDE f64@0x08 (rad). Was byte-swapped
+        # here (lat<-@0x00) — corrected per DJI getters (HOME_POINT_RESEARCH_2026_v2.md §7.3).
         if len(p) >= 16:
-            self.state.drone_lat = self.rad_to_deg(struct.unpack_from("<d", p, 0)[0])
-            self.state.drone_lon = self.rad_to_deg(struct.unpack_from("<d", p, 8)[0])
+            self.state.drone_lon = self.rad_to_deg(struct.unpack_from("<d", p, 0)[0])
+            self.state.drone_lat = self.rad_to_deg(struct.unpack_from("<d", p, 8)[0])

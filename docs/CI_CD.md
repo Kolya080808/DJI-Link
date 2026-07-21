@@ -112,6 +112,39 @@ CI runs `ctest`. While there are no tests it's not an error (`--no-tests=ignore`
 add some, register them with `enable_testing()` + `add_test(...)` (or `gtest_discover_tests`)
 and they'll be checked automatically on every PR.
 
+## Raspberry Pi installer
+
+Every release also ships a one-command installer for the Pi jump-host (the `pi-installer`
+job in `release.yml`). It publishes two assets:
+
+| Asset | What |
+|-------|------|
+| `install-pi.sh` | self-contained `curl \| bash` bootstrap, stamped with this repo + tag |
+| `dji-link-pi.tar.gz` | the `pi/` bundle (bridge scripts + `setup_pi.sh`) it downloads |
+
+On a **clean** Raspberry Pi (Zero 2 W), bring it up in one line:
+
+```bash
+curl -fsSL https://github.com/OWNER/REPO/releases/latest/download/install-pi.sh | sudo bash
+```
+
+The installer downloads the matching `dji-link-pi.tar.gz`, unpacks it to `/opt/dji-link`,
+then runs `setup_pi.sh` which:
+
+- enables `dwc2` in peripheral mode and builds the `raw_gadget` kernel module (the Pi kernel
+  ships it disabled);
+- installs a **systemd service** (`dji-bridge.service`) and `enable`s it, so the AOA↔TCP
+  bridge **starts automatically on every boot / power-up** — after the install finishes you
+  can unplug power, and on the next power-up the service is running with nothing to launch by
+  hand;
+- starts the service immediately if no reboot is pending (a first-time `dwc2` change needs one
+  reboot, after which it comes up on its own).
+
+Check it with `systemctl status dji-bridge` and `journalctl -u dji-bridge -f`.
+
+> `raw_gadget` is an out-of-tree module, so it must be rebuilt after a kernel upgrade —
+> re-run the installer (or `sudo bash /opt/dji-link/pi/setup_pi.sh --dir /opt/dji-link/pi --service`).
+
 ## Under the hood
 
 - **Compiler cache** — `ccache` (Linux/macOS) and `sccache` (Windows) in CI, so repeat builds

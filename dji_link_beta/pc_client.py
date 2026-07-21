@@ -287,12 +287,29 @@ class Client:
             vlog(f"[duml] rx sender=0x{p.sender:02x} recv=0x{p.receiver:02x} "
                  f"set=0x{p.cmd_set:02x} id=0x{p.cmd_id:02x} len={len(p.payload)} "
                  f"{p.payload[:24].hex()}")
-            # Media responses (general cmd_set 0x00): file list / file data.
+            # Camera-state pushes feed the media readiness gate (0x02/0x80 getMode==PLAYBACK,
+            # or the 0x02/0x82 playback-params push). Without this wait_playback_ready() never
+            # unblocks and the list request races ahead of the mode switch → 0xe0.
+            if self.media and p.cmd_set == 0x02 and p.sender != 0x02:
+                if p.cmd_id == 0x80:
+                    self.media.note_camera_state(p.payload)
+                elif p.cmd_id == 0x82:
+                    self.media.note_playback_params(p.payload)
+            # Media responses (general cmd_set 0x00). WM160 uses the RequestSendFiles handshake:
+            # 0x22 request → the file list arrives as a separate 0x24 (GetPushFiles) PUSH, and
+            # file bytes as 0x27 (GetPushFile). cmd_id 0x20 is NOT implemented (0xE0 INVALID_CMD).
             if self.media and p.cmd_set == 0x00 and p.sender != 0x02:
-                if p.cmd_id == 0x20:
+                if p.cmd_id == 0x24:                       # GetPushFiles = the file list
                     n = len(self.media.on_list_response(p.payload))
                     self.msg(f"media: {n} file(s) — {self.media.last_note}")
-                elif p.cmd_id == 0x1F:
+                elif p.cmd_id == 0x22 and len(p.payload) == 1:
+                    # 1-byte ACK to our RequestSendFiles — decode the Ccode so 0xE0/0xE4/0xE8
+                    # are legible instead of silent.
+                    cc = p.payload[0]
+                    names = {0x00: "OK", 0xE0: "INVALID_CMD", 0xE3: "INVALID_PARAM",
+                             0xE4: "WRONG_STATE", 0xE8: "NO_SDCARD"}
+                    self.msg(f"media: RequestSendFiles ack = 0x{cc:02x} {names.get(cc,'?')}")
+                elif p.cmd_id == 0x27:                     # GetPushFile = file data chunk
                     self._media_raw = getattr(self, "_media_raw", 0) + len(p.payload)
                     log(f"[media] data chunk {len(p.payload)}B (total {self._media_raw}B) — "
                         "framing captured for offline finalisation")
@@ -635,6 +652,9 @@ class SettingsPanel:
                lo=15, hi=500, step=5, val=120),
             _W("slider", "Max distance (m)", lambda v: self._try(lambda: d.set_max_distance(v), f"max dist {v} m"),
                lo=15, hi=5000, step=50, val=500),
+            _W("slider", "RTH altitude (m)", lambda v: self._try(lambda: d.set_rth_altitude(v), f"RTH alt {v} m"),
+               lo=20, hi=500, step=5, val=30,
+               note="height the drone climbs to before returning home (verify: HUD home push)"),
             _W("slider", "Brightness (EV)", lambda v: self._try(lambda: d.set_ev(v), f"EV {v:+d}"),
                lo=-3, hi=3, step=1, val=0, note="main brighten/darken lever (auto exposure)"),
             _W("choice", "ISO", lambda v: self._try(
@@ -658,6 +678,7 @@ class SettingsPanel:
         ]
 
     def _close(self):
+        self._restore_liveview()   # always exit playback when the panel closes
         self.open = False
 
     def _exit_to_menu(self):
@@ -693,8 +714,12 @@ class SettingsPanel:
 
     def _list_media(self):
         self._ensure_playback()
-        self._try(lambda: self.cli.media.request_list(0, 50),
-                  "media: list requested (result appears when the drone replies)")
+        try:
+            self.cli.media.request_list(0, 50)
+            self.cli.msg("media: list requested (result appears when the drone replies)")
+        except Exception as e:
+            self.cli.msg(f"media list error: {e}")
+            self._restore_liveview()   # don't leave drone stuck in playback on error
 
     def _download_first(self):
         self._ensure_playback()
@@ -703,8 +728,12 @@ class SettingsPanel:
             self.cli.msg("media: list first (no files known yet)")
             return
         f = files[0]
-        self._try(lambda: self.cli.media.download(f, f.file_name or "download.bin"),
-                  f"media: downloading {f.file_name}")
+        try:
+            self.cli.media.download(f, f.file_name or "download.bin")
+            self.cli.msg(f"media: downloading {f.file_name}")
+        except Exception as e:
+            self.cli.msg(f"media download error: {e}")
+            self._restore_liveview()
 
     def _delete_first(self):
         self._ensure_playback()
@@ -712,8 +741,12 @@ class SettingsPanel:
         if not files:
             self.cli.msg("media: list first (no files known yet)")
             return
-        self._try(lambda: self.cli.media.delete(files[0]),
-                  f"media: delete {files[0].file_name} requested")
+        try:
+            self.cli.media.delete(files[0])
+            self.cli.msg(f"media: delete {files[0].file_name} requested")
+        except Exception as e:
+            self.cli.msg(f"media delete error: {e}")
+            self._restore_liveview()
 
     def _try(self, fn, msg):
         try:
@@ -1092,10 +1125,16 @@ def _draw_flight_hud(screen, cli):
     cell(c0, "SATS · GPS", f"{st.satellites if st.satellites is not None else '—'} · {st.gps_level if st.gps_level is not None else '—'}")
     cell(c1, "MODE", st.flight_mode_name or "—")
     y += 40
-    # home + max alt line
+    # GPS position (drone_lat/lon from OSD 0x43) + home point (from 0x44, only when recorded)
+    def _fmt_coord(lat, lon):
+        if lat is None: return "no GPS"
+        return f"{lat:.5f},{lon:.5f}"
+    _gps  = _fmt_coord(st.drone_lat, st.drone_lon)
+    _home = (_fmt_coord(st.home_lat, st.home_lon)
+             if (st.home_recorded and st.home_lat is not None)
+             else "not recorded")
     _maxa = f"{st.max_height_m:g} m" if st.max_height_m is not None else "—"
-    _home = (f"{st.home_lat:.5f},{st.home_lon:.5f}" if st.home_lat is not None else "not set")
-    left(F["small"], f"home {_home}  ·  max alt {_maxa}", _g.MUTED, lx, y + 6)
+    left(F["small"], f"GPS {_gps}  ·  home {_home}  ·  max alt {_maxa}", _g.MUTED, lx, y + 6)
     left(F["small"], "F1 help · Esc settings · F3 hide", (110, 116, 130), lx, y + 24)
 
     # motor-start failure (only when relevant) — a red banner under the card

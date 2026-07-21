@@ -105,7 +105,7 @@ mouse-yaw / throttle move the drone. Decisive telemetry to confirm acceptance: `
 - modes: FOLLOW/FPV/FREE, recenter, extended downward tilt.
 
 ### 3.4 Camera — 101 commands (full table `reverse_docs/CMD_TABLE.txt`)
-Ready: photo `0x02/01` (type 2=single), record `0x02/02` (1=start/0=stop/2=pause/3=resume),
+Ready: photo `0x02/01` (**type 1=SINGLE**; 2=HDR, 4=BURST, 5=AEB), record `0x02/02` (1=start/0=stop/2=pause/3=resume),
 mode `0x02/10`, zoom `0x02/34` (`09 00 00 <u16=×100>`), ISO `0x2a`, shutter `0x28` (7b), EV `0x2e`,
 WB `0x2c` (5b), video format `0x18` (5b), photo mode `0x6a`, codec `0xab` (H264/H265).
 
@@ -189,20 +189,31 @@ UNLOCK** (`fc_dark_need_gps_0=0`).
   max lean angle `g_config.mode_normal_cfg.tilt_atti_range_0` (Cine≈10°/Normal 20°/Sport 30°). Caveat:
   the FC clamps this param to ~20°, so Cine↔Normal differ but Sport currently caps at Normal — raising
   the true top speed needs more reversing. (FLIGHT_MODE_SPEED_RESEARCH_2026.md)
-* **Home point** — `DataFlycSetHomePoint 0x03/0x31` (type 0x02=explicit / 0x00=current, lat/lon f64
-  RADIANS, trailing 0x64). Read back via the 0x03/0x44 home push. (HOME_POINT_RESEARCH_2026.md)
+* **Home point** — SET `DataFlycSetHomePoint 0x03/0x31` 18B: [0]type(APP=2 explicit / AIRCRAFT=0 current),
+  [1..8] **LAT** f64 rad, [9..16] **LON** f64 rad, [17] interval(=0). READ home = `DataOsdGetPushHome`
+  (FLYC `0x03/0x44` OR OSD `0x09/0x02`): **LON@0x00, LAT@0x08** f64 rad, flags u16@0x14 (bit0=isHomeRecord),
+  goHomeHeight u16@0x16 (note: read push is lon-first, SET is lat-first). The old "0x44 isn't home" note was
+  wrong — the 800000.0 was a home-not-recorded sentinel. **RTH altitude** = param `go_home.fixed_go_home_altitude_0`
+  (hash 0x38cc63dc, u16 metres 20..500) via `0x03/0xF9`; echoed back at goHomeHeight@0x16.
+  (HOME_POINT_RESEARCH_2026_v2.md, RTH_ALTITUDE_RESEARCH_2026.md)
 * **Height/distance limits** — FC param write `0x03/0xF9` by hash (the app's path), read back with 0xF8.
   (FLIGHT_LIMITS_RESEARCH_2026.md)
 * **Camera ISO / exposure / recording** — ISO needs Manual exposure first (`SetExposureMode 0x02/0x1E`
   is **2 bytes** `[mode,scene]`, mode M=4); recording needs VIDEO work mode (`0x02/0x10 [1]`) before
-  `0x02/0x02`; shutter `0x02/0x28` (Mini supports manual ISO/shutter since fw v01.00.0500 — brightness
-  lever). (CAMERA_MEDIA_RESEARCH_2026.md)
-🟡 **In progress:** **Media list/download.** The `0xe0` NAK ROOT CAUSE is FIXED — `enter_playback` was
-sending mode `[3]`=TRANSCODE; WM160 (legacy PlaybackManager) needs `0x02/0x10 [2]`=PLAYBACK. Entering
-playback now works (no more 0xe0) and yields the `0x02/0x82` PlayBackParams push. The list/download
-itself still needs `media.py` rewritten to the real legacy sequence — cmd_set 0x00: `RequestSendFiles
-0x00/0x22` → pushes `GetPushFiles 0x00/0x24` (list) + `GetPushFile 0x00/0x27` (bytes) + ack `0x00/0x23`
-(our old 0x20/0x1F cmd_ids don't exist on the Mini). One live capture pins the record stride.
+  `0x02/0x02`. **RECORD ROOT-CAUSE (2026):** the mode switch is async, so firing set-mode then START
+  back-to-back makes the camera drop START — `start_record` now waits + re-sends START. Photo type =
+  SINGLE=1 (was HDR=2). Verify via `0x02/0x80` push (recordState (u32@0x00>>6)&3, videoRecordTime@0x1D).
+  Shutter `0x02/0x28`. (RECORD_PHOTO_RESEARCH_2026.md, CAMERA_MEDIA_RESEARCH_2026.md)
+🟡 **In progress:** **Media list/download.** Two root causes, both now fixed in code:
+(1) enter-playback was mode `[3]`=TRANSCODE; WM160 needs `0x02/0x10 [2]`=PLAYBACK.
+(2) **the list cmd_id was wrong: `0x20`/`0x1F` return `0xE0 = INVALID_CMD` on WM160** (decoded from the
+app's own `Ccode` enum — the firmware doesn't implement 0x20). **Correct WM160 path (HW-confirmed +
+dji-firmware-tools): `0x00/0x22` RequestSendFiles [CURRENT] → the list is PUSHED back as `0x00/0x24`
+GetPushFiles** (NOT in the ACK); file bytes via `0x00/0x26` RequestFile → `0x00/0x27` GetPushFile; delete
+`0x00/0x28`. `media.py` rewritten to this handshake + a readiness gate (getMode byte[4]==2 of `0x02/0x80`);
+pc_client now listens for the 0x24 push and decodes the 0x22 ACK code. Remaining: the 0x24 record layout +
+0x26/0x27 chunk framing are native → one live capture pins them (responses dumped to media_list*_dump.bin).
+(MEDIA_0XE0_RESEARCH_2026.md — supersedes the 0x20/0x1F claim in MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md)
 ✅ **Expected available (per MSDK 4.13, not all HW-checked yet):** QuickShots, simulator (props off),
 GPS modes (Normal/Sport/Cine/Tripod), altitude/distance limits, LED/find-my-drone, voice.
 ❌ **Not available (SDK code exists, but the aircraft will reject it):** ActiveTrack/Follow-Me/tracking (no sensors),
@@ -231,8 +242,9 @@ drone kit. Pi↔PC — over Wi-Fi (no cable needed), the remote controller power
    (MSDK v5) command. Remaining: confirm axis signs per airframe.
 2. ~~**FC parameter hash** — Frida dump~~ **SOLVED** — hash algorithm known, 132-param WM160 set captured
    (`PARAM_TABLE_WM160.md`), read+write verified on HW in plaintext. No Frida needed.
-3. **Media list/download** — 0xe0 fixed (playback = `0x02/0x10 [2]`); `media.py` still needs the legacy
-   0x00/0x22→0x24/0x27 sequence + one live capture.
+3. **Media list/download** — 0xe0 fixed twice: playback mode `[2]`, AND the list cmd is `0x00/0x22`
+   RequestSendFiles → `0x00/0x24` push (NOT 0x20/0x1F, which NAK 0xE0 INVALID_CMD on WM160). `media.py`
+   rewritten. Remaining: one live capture to pin the 0x24 list-record stride + 0x26/0x27 chunk framing.
 4. **True Sport top speed** — `mode_normal_cfg.tilt_atti_range_0` is FC-clamped to ~20°; raising the
    real ceiling needs more reversing.
 5. **Pi bring-up** — raw-gadget AOA is finicky, finalized on a live Pi.

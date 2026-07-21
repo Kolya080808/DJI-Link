@@ -16,11 +16,24 @@ to the drone.
 | `bridge.py` | AOA ↔ TCP bridge for the laptop |
 | `setup_gadget.sh` | enables dwc2/raw_gadget, finds the UDC |
 
-## Installation on the Pi
+## One-line install (recommended, from a release)
+
+On a clean Pi this does everything — dwc2, the `raw_gadget` module, and a boot service
+that auto-starts the bridge on every power-up:
+
 ```bash
+curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh | sudo bash
+```
+
+After it finishes (and one first-time reboot if asked), the `dji-bridge` service comes up by
+itself whenever the Pi is powered — nothing to launch by hand. See `docs/CI_CD.md`.
+
+## Manual installation on the Pi
+```bash
+sudo bash setup_pi.sh --service    # full bring-up + boot service (the first time asks for a reboot)
+# or the minimal gadget-only path:
 sudo bash setup_gadget.sh          # the first time it will ask for a reboot
-# after the reboot:
-sudo bash setup_gadget.sh          # shows the UDC name (e.g. 20980000.usb)
+sudo bash setup_gadget.sh          # after the reboot: shows the UDC name (e.g. 20980000.usb)
 ```
 Important: plug the Pi Zero into the remote controller **via the middle port (USB), not PWR** — only that one carries data.
 

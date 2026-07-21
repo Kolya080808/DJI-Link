@@ -273,22 +273,25 @@ class Drone:
         self.set_param("g_config.mode_normal_cfg.tilt_atti_range_0", struct.pack("<f", tilt))
 
     # --- home point (DataFlycSetHomePoint 0x03/0x31, 18-byte payload) ---
-    # [0] type: 0x02=APP(explicit coord), 0x00=AIRCRAFT(current location);
-    # [1..8] lat f64 LE RADIANS, [9..16] lon f64 LE RADIANS, [17]=0x64 (mInterval const).
-    # Preconditions: initial home already recorded; explicit coord within ~30 m of
-    # home/aircraft or FC rejects (DISTANCE_TOO_FAR). (HOME_POINT_RESEARCH_2026.md)
+    # doPack confirmed byte-for-byte from DJI bytecode (HOME_POINT_RESEARCH_2026_v2.md §3):
+    # [0] homeType: APP=0x02 (explicit coord), AIRCRAFT=0x00 (current location), RC=0x01;
+    # [1..8] LAT f64 LE RADIANS, [9..16] LON f64 LE RADIANS, [17] interval.
+    # NOTE: SET order is lat-first, the OPPOSITE of the READ push (lon-first). The app sends
+    # interval=0 for a one-shot set (mInterval only matters for dynamic/FOLLOW home), so we
+    # send 0 to mirror it. Preconditions: AIRCRAFT needs a GPS fix; explicit APP coord must be
+    # a valid lat/lon (a distance-vs-current-home limit is probable, verify on hardware).
     def set_home_point(self, lat_deg: float, lon_deg: float) -> None:
         """Set home to an EXPLICIT GPS coordinate (type APP=0x02)."""
         import math
         self._cmd(0x03, 0x31,
                   bytes([0x02]) + struct.pack("<dd", math.radians(lat_deg), math.radians(lon_deg))
-                  + bytes([0x64]),
+                  + bytes([0x00]),
                   receiver=DEV_FC)
 
     def set_home_to_current_location(self) -> None:
-        """Set home to the aircraft's CURRENT location (type AIRCRAFT=0x00). Needs GPS>=4."""
+        """Set home to the aircraft's CURRENT location (type AIRCRAFT=0x00). Needs GPS fix."""
         self._cmd(0x03, 0x31,
-                  bytes([0x00]) + struct.pack("<dd", 0.0, 0.0) + bytes([0x64]),
+                  bytes([0x00]) + struct.pack("<dd", 0.0, 0.0) + bytes([0x00]),
                   receiver=DEV_FC)
 
     def set_rth_altitude(self, metres: int) -> None:
@@ -391,14 +394,38 @@ class Drone:
         self._cmd(0x04, 0x0C, self._gimbal_speed_payload(pitch_dps, yaw_dps, roll_dps),
                   receiver=DEV_GIMBAL)
     # --- camera — CONFIRMED by reversing (cmd_set 0x02, receiver camera) ---
-    def take_photo(self) -> None:
-        # cmd_id 0x01, payload = capture_type (single = protocol 2)
-        self._cmd(CMDSET_CAMERA, 0x01, b"\x02", receiver=DEV_CAMERA)
+    # DataCameraSetPhoto$TYPE (confirmed from smali): SINGLE=1, HDR=2, BURST=4, AEB=5...
+    PHOTO_SINGLE, PHOTO_HDR, PHOTO_BURST, PHOTO_AEB = 1, 2, 4, 5
+
+    def take_photo(self, ptype: int = PHOTO_SINGLE) -> None:
+        # Camera must be in PHOTO/capture work mode (0x00) to accept a photo command.
+        # If we were recording, the mode is still VIDEO(1) and the photo is silently dropped.
+        # Same async fix as start_record: set mode first, wait ~300 ms, then send the command.
+        import time
+        self._cmd(CMDSET_CAMERA, 0x10, b"\x00", receiver=DEV_CAMERA)   # work mode = PHOTO
+
+        def _seq():
+            time.sleep(0.3)
+            self._cmd(CMDSET_CAMERA, 0x01, bytes([ptype & 0xFF]), receiver=DEV_CAMERA)
+        threading.Thread(target=_seq, daemon=True).start()
+
     def start_record(self) -> None:
-        # Recording only starts if the camera is in VIDEO/RECORD work mode — set it first.
-        # Verify via 0x02/0x80 push (record state != STOP, video time @0x1d climbing).
+        # ROOT CAUSE of "record won't start": the camera must be in RECORD/video work mode,
+        # and the mode switch is ASYNC. Firing set-mode (0x10,1) then START (0x02,1) back-to-
+        # back races the transition, so the camera drops the START (the app instead waits for
+        # the pushed mode to become RECORD). Fix: set mode, give the switch time to land, then
+        # send START — and re-send it a couple times (mirrors DataCameraSetRecord's repeat
+        # Timer) so a single dropped frame doesn't leave us un-recording. Run on a daemon
+        # thread so the UI/telemetry loop doesn't stall. (RECORD_PHOTO_RESEARCH_2026.md §5-6)
+        import time
         self._cmd(CMDSET_CAMERA, 0x10, b"\x01", receiver=DEV_CAMERA)   # work mode = RECORD/video
-        self._cmd(CMDSET_CAMERA, 0x02, b"\x01", receiver=DEV_CAMERA)   # 1 = START
+
+        def _seq():
+            for i in range(3):
+                time.sleep(0.4 if i == 0 else 0.6)   # let the mode switch settle, then retry
+                self._cmd(CMDSET_CAMERA, 0x02, b"\x01", receiver=DEV_CAMERA)   # 1 = START
+        threading.Thread(target=_seq, daemon=True).start()
+
     def stop_record(self) -> None:
         self._cmd(CMDSET_CAMERA, 0x02, b"\x00", receiver=DEV_CAMERA)   # 0 = STOP
     def set_camera_mode(self, mode: int) -> None:

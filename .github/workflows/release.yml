@@ -195,10 +195,51 @@ jobs:
           retention-days: 7
 
   # ---------------------------------------------------------------------------
+  # Raspberry Pi installer: a self-contained `curl | bash` script + the pi/ bundle
+  # it downloads. Lets a bare Pi be prepared as the AOA jump-host in one command,
+  # and installs a systemd service that auto-starts the bridge on every power-up.
+  # ---------------------------------------------------------------------------
+  pi-installer:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Package the pi/ bundle
+        run: |
+          set -euo pipefail
+          mkdir -p dist stage/pi
+          # Everything the Pi needs at runtime (transparent AOA<->TCP bridge + setup).
+          cp dji_link_beta/pi/*.py dji_link_beta/pi/*.sh stage/pi/
+          cp dji_link_beta/pi/README.md stage/pi/ 2>/dev/null || true
+          tar -czf dist/dji-link-pi.tar.gz -C stage pi
+          echo "Bundle contents:"
+          tar -tzf dist/dji-link-pi.tar.gz
+
+      - name: Stamp the installer script (repo / tag / asset)
+        run: |
+          set -euo pipefail
+          sed -e "s|@@REPO@@|${GITHUB_REPOSITORY}|g" \
+              -e "s|@@TAG@@|${GITHUB_REF_NAME}|g" \
+              -e "s|@@ASSET@@|dji-link-pi.tar.gz|g" \
+              dji_link_beta/pi/install.sh > dist/install-pi.sh
+          chmod +x dist/install-pi.sh
+          echo "----- stamped install-pi.sh header -----"
+          head -n 20 dist/install-pi.sh
+
+      - name: Upload Pi installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages-pi-installer
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
   # Gather everything: checksums + publish the GitHub Release.
   # ---------------------------------------------------------------------------
   release:
-    needs: [prepare, build]
+    needs: [prepare, build, pi-installer]
     runs-on: ubuntu-latest
     steps:
       - name: Download packages

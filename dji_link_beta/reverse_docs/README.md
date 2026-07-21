@@ -12,10 +12,24 @@ These supersede earlier guesses where they disagree — the jar is DJI's own un-
 - **`VIRTUAL_STICK_RESEARCH_2026.md`** — controlled flight SOLVED: `0x03/0x8E` DataFlycJoystick (17-byte
   float payload, flag byte, WM160 pitch/roll + yaw/throttle swaps), authority via `0x03/0x80` (open=1/close=2).
 - **`FLIGHT_MODE_SPEED_RESEARCH_2026.md`** — Cine/Normal/Sport + speed via `mode_normal_cfg.tilt_atti_range_0`.
-- **`HOME_POINT_RESEARCH_2026.md`** — set home `0x03/0x31` (explicit / current), lat/lon f64 radians.
+- **`HOME_POINT_RESEARCH_2026_v2.md`** — ★ latest. READ home = `DataOsdGetPushHome` (FLYC `0x03/0x44` or OSD
+  `0x09/0x02`): LON f64@0x00, LAT f64@0x08 (radians), flags u16@0x14 (bit0=isHomeRecord), goHomeHeight u16@0x16.
+  SET home = `0x03/0x31` 18B, type+LAT+LON (lat-first, opposite of the read push). Resolves the old "0x44 isn't
+  home" mistake (the 800000.0 was a home-not-recorded sentinel). Supersedes `HOME_POINT_RESEARCH_2026.md`.
+- **`RECORD_PHOTO_RESEARCH_2026.md`** — ★ why recording didn't start: set-mode→START race (async mode switch drops
+  START). Fix = wait + re-send START. Photo type SINGLE=1 (was HDR=2). Verify push `0x02/0x80` (recordState, videoRecordTime@0x1D).
+- **`RTH_ALTITUDE_RESEARCH_2026.md`** — ★ RTH/go-home altitude = param `g_config.go_home.fixed_go_home_altitude_0`
+  (hash 0x38cc63dc, u16 LE metres, 20..500) via `0x03/0xF9`; no dedicated command. Read back `0x03/0xF8`; telemetry echo goHomeHeight@0x16.
+- **`MEDIA_0XE0_RESEARCH_2026.md`** — ★★ AUTHORITATIVE media reverse (HW-confirmed). `0xE0 = INVALID_CMD`
+  (app Ccode enum) → WM160 does NOT implement cmd_id `0x20`/`0x1F`. Correct path = **`0x00/0x22`
+  RequestSendFiles [CURRENT] → list PUSHED back as `0x00/0x24` GetPushFiles**; file via `0x26`→`0x27`;
+  delete `0x28`. Confirmed by app smali + dji-firmware-tools. media.py rewritten to this.
+- **`MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md`** — earlier pass; its 0x20/0x1F conclusion is CORRECTED by the
+  above (0x20 NAKs 0xE0 on hardware). Still useful for the mode fix + readiness signal.
 - **`FLIGHT_LIMITS_RESEARCH_2026.md`** — max height/radius via `0x03/0xF9` param write; read back 0xF8.
 - **`CAMERA_MEDIA_RESEARCH_2026.md`** — ISO (needs Manual exposure), recording (needs video mode), shutter
   `0x02/0x28`, and the media playback/download sequence (0xe0 fix = enter playback with mode `[2]`).
+- **`HOME_POINT_RESEARCH_2026.md`** — superseded by v2 (kept for history).
 
 ## Protocol
 - **`DUML_COMMANDS_FULL.md`** — 343 builder-verified DUML commands with byte layouts.
@@ -39,8 +53,10 @@ These supersede earlier guesses where they disagree — the jar is DJI's own un-
 - **`ERROR_CODES.md`** — 743 diagnostic codes with local English text (in `diag_codes_full.py`).
 
 ## Media
-- **`MEDIA_TRANSPORT_TRUTH.md`** — media goes over the same radio/DUML link, but needs playback mode (`0x02/0x10`) first and the firmware's real request bytes (one live capture outstanding).
-- **`MEDIA_TRANSFER.md`** — earlier media protocol notes (request layout superseded by the above).
+- **`MEDIA_0XE0_RESEARCH_2026.md`** — ★★ authoritative, HW-confirmed (0x22/0x24 handshake; see 2026 list above).
+- **`MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md`** — earlier pass, 0x20/0x1F conclusion corrected by the above.
+- **`MEDIA_TRANSPORT_TRUTH.md`** — native-lib mining; the `get_file_list_req 0x20` claim is wrong for WM160.
+- **`MEDIA_TRANSFER.md`** — earliest media notes (superseded).
 
 ## App subsystems
 `DOMAIN_*.md` — one reference per subsystem: account, activation/motorlock, transport (USB/AOA),

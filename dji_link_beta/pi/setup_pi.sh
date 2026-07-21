@@ -11,14 +11,25 @@
 #   sudo bash setup_pi.sh                      # set up this machine, use ~/pi if present
 #   sudo bash setup_pi.sh <git-url>            # also clone/update the project first
 #   sudo bash setup_pi.sh <git-url> --service  # and run bridge.py at boot
+#   sudo bash setup_pi.sh --dir /opt/dji-link/pi --service   # use already-present files
 #
 # A reboot is required the first time (dwc2 is a device-tree change).
 set -euo pipefail
 
-REPO_URL="${1:-}"
+REPO_URL=""
 WANT_SERVICE=0
-for a in "$@"; do [ "$a" = "--service" ] && WANT_SERVICE=1; done
-[ "${REPO_URL:-}" = "--service" ] && REPO_URL=""
+FORCE_DIR=""
+_prev=""
+for a in "$@"; do
+    case "$a" in
+        --service) WANT_SERVICE=1 ;;
+        --dir)     _prev="dir" ;;
+        --*)       _prev="" ;;
+        *)
+            if [ "$_prev" = "dir" ]; then FORCE_DIR="$a"; _prev="";
+            elif [ -z "$REPO_URL" ]; then REPO_URL="$a"; fi ;;
+    esac
+done
 
 # Run as root, but keep track of the real user so files do not end up root-owned.
 RUN_USER="${SUDO_USER:-pi}"
@@ -105,7 +116,11 @@ chmod 666 /dev/raw-gadget 2>/dev/null || true
 
 # ---------------------------------------------------------------- 4. project
 echo "[4/5] project files"
-if [ -n "$REPO_URL" ]; then
+if [ -n "$FORCE_DIR" ]; then
+    PI_DIR="$FORCE_DIR"
+    [ -d "$PI_DIR" ] || { echo "!! --dir $PI_DIR does not exist"; exit 1; }
+    echo "     using $PI_DIR"
+elif [ -n "$REPO_URL" ]; then
     DEST="$RUN_HOME/dji-link"
     if [ -d "$DEST/.git" ]; then
         sudo -u "$RUN_USER" git -C "$DEST" pull --ff-only || echo "     (pull failed, keeping local)"
@@ -143,7 +158,13 @@ WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
     systemctl enable dji-bridge.service
-    echo "     dji-bridge.service enabled (starts at boot)"
+    # Start it now too, unless dwc2 was just enabled (no UDC until the reboot).
+    if [ "$NEED_REBOOT" = "0" ] && [ -e /dev/raw-gadget ]; then
+        systemctl restart dji-bridge.service || true
+        echo "     dji-bridge.service enabled + started"
+    else
+        echo "     dji-bridge.service enabled (will start after the reboot)"
+    fi
     echo "     logs: journalctl -u dji-bridge -f"
 else
     echo "     skipped (pass --service to run the bridge at boot)"
