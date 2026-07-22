@@ -24,6 +24,11 @@ These supersede earlier guesses where they disagree — the jar is DJI's own un-
   (app Ccode enum) → WM160 does NOT implement cmd_id `0x20`/`0x1F`. Correct path = **`0x00/0x22`
   RequestSendFiles [CURRENT] → list PUSHED back as `0x00/0x24` GetPushFiles**; file via `0x26`→`0x27`;
   delete `0x28`. Confirmed by app smali + dji-firmware-tools. media.py rewritten to this.
+- **`MEDIA_DELETE_VIEW_RESEARCH_2026.md`** — ★★ delete + view/thumbnail (app + dji-firmware-tools + MSDK v4,
+  all consistent). DELETE = `0x00/0x28` count-prefixed u32 index list (native deleteFiles(ArrayList);
+  fallback camera-set `0x02/0x79` DeletePhoto). VIEW = `0x00/0x26` RequestFile + 1-byte grade
+  (ORIGIN=0/THUMBNAIL=1/SCREENNAIL=2) + offset/size from the record's PhotoAndVideoNailInfo → bytes on
+  `0x00/0x27`. 16-byte request layout from litchis packer. media.py has delete()/fetch_thumbnail()/fetch_screennail().
 - **`MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md`** — earlier pass; its 0x20/0x1F conclusion is CORRECTED by the
   above (0x20 NAKs 0xE0 on hardware). Still useful for the mode fix + readiness signal.
 - **`FLIGHT_LIMITS_RESEARCH_2026.md`** — max height/radius via `0x03/0xF9` param write; read back 0xF8.
@@ -53,7 +58,8 @@ These supersede earlier guesses where they disagree — the jar is DJI's own un-
 - **`ERROR_CODES.md`** — 743 diagnostic codes with local English text (in `diag_codes_full.py`).
 
 ## Media
-- **`MEDIA_0XE0_RESEARCH_2026.md`** — ★★ authoritative, HW-confirmed (0x22/0x24 handshake; see 2026 list above).
+- **`MEDIA_0XE0_RESEARCH_2026.md`** — ★★ authoritative list/download (0x22/0x24 handshake).
+- **`MEDIA_DELETE_VIEW_RESEARCH_2026.md`** — ★★ authoritative delete (0x28) + view/thumbnail (0x26 grade byte).
 - **`MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md`** — earlier pass, 0x20/0x1F conclusion corrected by the above.
 - **`MEDIA_TRANSPORT_TRUTH.md`** — native-lib mining; the `get_file_list_req 0x20` claim is wrong for WM160.
 - **`MEDIA_TRANSFER.md`** — earliest media notes (superseded).

@@ -211,9 +211,16 @@ app's own `Ccode` enum — the firmware doesn't implement 0x20). **Correct WM160
 dji-firmware-tools): `0x00/0x22` RequestSendFiles [CURRENT] → the list is PUSHED back as `0x00/0x24`
 GetPushFiles** (NOT in the ACK); file bytes via `0x00/0x26` RequestFile → `0x00/0x27` GetPushFile; delete
 `0x00/0x28`. `media.py` rewritten to this handshake + a readiness gate (getMode byte[4]==2 of `0x02/0x80`);
-pc_client now listens for the 0x24 push and decodes the 0x22 ACK code. Remaining: the 0x24 record layout +
-0x26/0x27 chunk framing are native → one live capture pins them (responses dumped to media_list*_dump.bin).
-(MEDIA_0XE0_RESEARCH_2026.md — supersedes the 0x20/0x1F claim in MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md)
+pc_client now listens for the 0x24 push and decodes the 0x22 ACK code.
+**DELETE + VIEW (MEDIA_DELETE_VIEW_RESEARCH_2026.md, app+dft+MSDK):** delete = `0x00/0x28` count-prefixed
+u32 index list (multi-delete is native-normal; fallback camera-set `0x02/0x79` DeletePhoto). View/thumbnail
+= `0x00/0x26` RequestFile + **1-byte grade (ORIGIN=0/THUMBNAIL=1/SCREENNAIL=2)** + offset/size (from the
+list record's PhotoAndVideoNailInfo) → bytes on `0x00/0x27`; a thumbnail is just a short byte-range read,
+no dedicated cmd_id. media.py now has delete(list)/fetch_thumbnail()/fetch_screennail(); pc_client has a
+"thumbnail first" button and reassembles 0x27 chunks (raw dumped to media_chunk_dump.bin).
+Remaining (capture-only): the 0x24 record layout incl. the nailInfo quad, the 0x28 index byte-order, and
+the 0x26/0x27 chunk header — one live capture pins them.
+(MEDIA_0XE0_RESEARCH_2026.md + MEDIA_DELETE_VIEW_RESEARCH_2026.md — supersede the 0x20/0x1F claim in MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md)
 ✅ **Expected available (per MSDK 4.13, not all HW-checked yet):** QuickShots, simulator (props off),
 GPS modes (Normal/Sport/Cine/Tripod), altitude/distance limits, LED/find-my-drone, voice.
 ❌ **Not available (SDK code exists, but the aircraft will reject it):** ActiveTrack/Follow-Me/tracking (no sensors),

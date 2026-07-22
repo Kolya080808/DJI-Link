@@ -311,8 +311,31 @@ class Client:
                     self.msg(f"media: RequestSendFiles ack = 0x{cc:02x} {names.get(cc,'?')}")
                 elif p.cmd_id == 0x27:                     # GetPushFile = file data chunk
                     self._media_raw = getattr(self, "_media_raw", 0) + len(p.payload)
+                    # Always dump the raw chunk so the exact native header can be pinned from a
+                    # real capture (the litchis template below is a best-guess).
+                    try:
+                        with open("media_chunk_dump.bin", "ab") as cf:
+                            cf.write(p.payload)
+                    except OSError:
+                        pass
+                    # Best-guess header (litchis FileData template): [hdr u32][dataLen u32]
+                    # [fileIndex u32][nameLen u8][name][bytes]. Strip it, feed the file bytes to
+                    # the reassembler at a running offset. If the header guess is wrong the dump
+                    # still preserves the truth for offline finalisation.
+                    pl = p.payload
+                    try:
+                        if len(pl) >= 13:
+                            name_len = pl[12]
+                            body = pl[13 + name_len:]
+                        else:
+                            body = b""
+                        off = getattr(self, "_media_off", 0)
+                        self.media.on_data_chunk(off, body)
+                        self._media_off = off + len(body)
+                    except Exception:
+                        pass
                     log(f"[media] data chunk {len(p.payload)}B (total {self._media_raw}B) — "
-                        "framing captured for offline finalisation")
+                        "raw dumped to media_chunk_dump.bin for offline finalisation")
             # FC param-info response (0x03/0xF0): pull the ASCII name so we learn the real
             # param names straight from the drone.
             if p.cmd_set == 0x03 and p.cmd_id in (0xF0, 0xF7, 0xF8, 0xF9) and p.sender != 0x02:
@@ -672,6 +695,7 @@ class SettingsPanel:
             _W("button", "Recenter gimbal", lambda v: self._try(lambda: d.gimbal_recenter(), "recenter")),
             _W("button", "Set home to here", lambda v: self._try(lambda: d.set_home_to_current_location(), "home set")),
             _W("button", "Media: list SD card", lambda v: self._list_media()),
+            _W("button", "Media: thumbnail first", lambda v: self._thumbnail_first()),
             _W("button", "Media: download first", lambda v: self._download_first()),
             _W("button", "Media: delete first", lambda v: self._delete_first()),
             _W("button", "Exit to main menu", lambda v: self._exit_to_menu()),
@@ -721,6 +745,21 @@ class SettingsPanel:
             self.cli.msg(f"media list error: {e}")
             self._restore_liveview()   # don't leave drone stuck in playback on error
 
+    def _thumbnail_first(self):
+        self._ensure_playback()
+        files = self.cli.media.files
+        if not files:
+            self.cli.msg("media: list first (no files known yet)")
+            return
+        f = files[0]
+        self.cli._media_off = 0        # reset the reassembly offset for a new transfer
+        try:
+            self.cli.media.fetch_thumbnail(f, (f.file_name or "file") + ".thumb.jpg")
+            self.cli.msg(f"media: thumbnail {f.file_name} (grade 1; arrives on 0x27 push)")
+        except Exception as e:
+            self.cli.msg(f"media thumbnail error: {e}")
+            self._restore_liveview()
+
     def _download_first(self):
         self._ensure_playback()
         files = self.cli.media.files
@@ -728,6 +767,7 @@ class SettingsPanel:
             self.cli.msg("media: list first (no files known yet)")
             return
         f = files[0]
+        self.cli._media_off = 0        # reset the reassembly offset for a new transfer
         try:
             self.cli.media.download(f, f.file_name or "download.bin")
             self.cli.msg(f"media: downloading {f.file_name}")

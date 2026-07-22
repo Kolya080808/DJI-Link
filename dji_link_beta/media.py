@@ -27,24 +27,8 @@ from __future__ import annotations
 import struct
 import time
 
-# --- ByteStreamHelper primitives (little-endian), matching the app serializer ---
-def w_i32(v):  return struct.pack("<i", int(v))
-def w_i64(v):  return struct.pack("<q", int(v))
-def w_bool(v): return struct.pack("<B", 1 if v else 0)
-def w_list(items): return struct.pack("<i", len(items)) + b"".join(items)
-
-# FileType filters (§8)
-FT_MEDIA = 0
-FILTER_ALL_PHOTO = 25
-FILTER_ALL_VIDEO = 26
-# FileDataType
-DATA_ORIGIN = 0
-DATA_THUMBNAIL = 1
-DATA_SCREEN = 2
-# MediaFileType
+# MediaFileType (0x24 list-record fileType field): photo vs video
 MFT_JPEG, MFT_DNG, MFT_MOV, MFT_MP4 = 0, 1, 2, 3
-TIME_NEW_FIRST = 1
-DELETE_SINGLE = 3
 
 CMDSET_GENERAL = 0x00
 # NOTE: cmd_ids 0x20 (get_file_list) / 0x1F (get_file_data) are NOT implemented on WM160 —
@@ -60,60 +44,42 @@ CID_PUSH_FILE = 0x27        # GetPushFile (data push, drone->app)
 SELECT_CURRENT, SELECT_NEXT = 0, 1
 ACK_SUCCESS, ACK_ABORT = 0x00, 0x22
 
-
-def file_list_request_native(index: int, count: int, slot: int = 0, ftype: int = FT_MEDIA) -> bytes:
-    """Best-guess NATIVE get_file_list_req (0x00/0x20): u32 index, u16 count, u8 slot, u8 type.
-    The app re-serializes this in C++, so the exact widths are capture-pending — this is the
-    shortest-plausible struct to try first; parse_file_list dumps the reply to pin it."""
-    return struct.pack("<IHBB", index & 0xFFFFFFFF, count & 0xFFFF, slot & 0xFF, ftype & 0xFF)
+# Data grade for RequestFile (RequestDataType / litchis SubType — verified in two app enums
+# + MSDK THUMBNAIL/PREVIEW; MEDIA_DELETE_VIEW_RESEARCH_2026.md §B1).
+GRADE_ORIGIN, GRADE_THUMBNAIL, GRADE_SCREENNAIL = 0, 1, 2
 
 
-def file_data_request_native(file_index: int, data_type: int, off: int, size: int,
-                             slot: int = 0) -> bytes:
-    """Best-guess NATIVE get_file_data_req (0x00/0x1F): u32 index, u8 subtype(ORIGIN/THUMB/
-    SCREEN), u8 slot, u32 offset, u32 size. Capture-pending, same caveat as the list req."""
-    return struct.pack("<IBBII", file_index & 0xFFFFFFFF, data_type & 0xFF, slot & 0xFF,
-                       off & 0xFFFFFFFF, size & 0xFFFFFFFF)
+def request_file_req(index: int, grade: int, offset: int, size: int,
+                     sub_index: int = 0, count: int = 1) -> bytes:
+    """RequestFile 0x00/0x26 payload — 16-byte layout confirmed from litchis.DataRequestFile
+    .doPack (MEDIA_DELETE_VIEW_RESEARCH_2026.md §B3):
+      [index u32][subIndex u16][grade u8][count u8][offset u32][size u32]  (all LE)
+    grade: ORIGIN=0 (full file, off=0 size=fileSize) / THUMBNAIL=1 / SCREENNAIL=2 (larger
+    preview) — for thumb/screen, off+size come from the list record's PhotoAndVideoNailInfo.
+    The COMMON-0x26 the native emits is the analog of this tuple; exact field order is
+    capture-confirmable (the reply is dumped)."""
+    return struct.pack("<IHBBII", index & 0xFFFFFFFF, sub_index & 0xFFFF, grade & 0xFF,
+                       count & 0xFF, offset & 0xFFFFFFFF, size & 0xFFFFFFFF)
 
 
-# ---------------------------------------------------------------- request encoders
-def file_list_request(index: int, count: int, *, file_type=FT_MEDIA, slot=0,
-                      is_all=False, is_sub=False, filters=(FILTER_ALL_PHOTO, FILTER_ALL_VIDEO),
-                      order_type=0, time_order=TIME_NEW_FIRST, size_order=0) -> bytes:
-    b = w_i32(index) + w_i32(count) + w_i32(0)
-    b += w_i32(file_type) + w_i32(slot)
-    b += w_i32(0) + w_i32(0)
-    b += w_bool(is_all) + w_bool(is_sub)
-    b += w_list([w_i32(f) for f in filters])
-    b += w_i32(order_type) + w_i32(time_order) + w_i32(size_order)
-    return b
+def delete_request(indices) -> bytes:
+    """DeleteFile 0x00/0x28 payload — count-prefixed list of u32 file indices (native
+    deleteFiles(ArrayList) is keyed by index; multi-delete is normal). Single = one index.
+    Widths are the dji-firmware-tools convention; confirm on the first live ACK."""
+    idx = list(indices)
+    return struct.pack("<H", len(idx)) + b"".join(struct.pack("<I", i & 0xFFFFFFFF) for i in idx)
 
 
-def file_data_request(file_index: int, media_file_type: int, data_type: int,
-                      off: int, size: int, *, slot=0, sub_index=0, seg_sub=0, uuid=0,
-                      nail=(0, 0, 0, 0)) -> bytes:
-    b = w_i32(file_index) + w_i32(1) + w_i32(data_type) + w_i32(slot)
-    b += w_i64(off) + w_i64(size)
-    b += w_i32(sub_index) + w_i32(seg_sub)
-    b += w_i32(0) + w_i32(0)
-    b += w_i32(media_file_type)
-    b += w_bool(False) + w_bool(size > 0xFFFFFFFF)
-    b += w_i64(uuid)
-    b += w_list([])
-    b += b"".join(w_i64(x) for x in nail)
-    b += w_bool(False) + w_i32(0)
-    return b
-
-
-def delete_single_request(mediafile_bytes: bytes, slot=0) -> bytes:
-    filepkg = w_i32(FT_MEDIA) + w_list([mediafile_bytes]) + w_list([]) + w_list([])
-    tag = w_bool(False) * 4
-    return w_i32(slot) + w_i32(DELETE_SINGLE) + filepkg + tag
+# NOTE: the old ByteStreamHelper "CSDK envelope" encoders (file_list_request / file_data_request
+# / delete_single_request) were removed — they were the MediaManager (newer-camera) format and
+# never matched WM160's wire. The confirmed WM160 encoders are request_file_req / delete_request
+# above (MEDIA_0XE0_RESEARCH_2026.md + MEDIA_DELETE_VIEW_RESEARCH_2026.md).
 
 
 # ---------------------------------------------------------------- response parse (best-effort)
 class MediaFile:
-    __slots__ = ("file_index", "file_type", "file_name", "file_size", "duration_ms", "raw")
+    __slots__ = ("file_index", "file_type", "file_name", "file_size", "duration_ms", "raw",
+                 "thumb_off", "thumb_size", "screen_off", "screen_size")
 
     def __init__(self, **kw):
         for k in self.__slots__:
@@ -261,9 +227,9 @@ class MediaClient:
             payload = bytes([SELECT_CURRENT])                 # default: RequestSendFiles CURRENT
             self.last_note = "list: RequestSendFiles 0x22 [CURRENT] sent (list arrives as 0x24 push)"
         else:
-            # Diagnostic: paged-native probe = 0x22 with index/count, in case the 1-byte
-            # form is rejected as INVALID_PARAM on this firmware.
-            payload = file_list_request_native(index, count)
+            # Diagnostic: paged-native probe = 0x22 with index/count (matches the native
+            # fetchMediaFiles(start,count) API), in case the 1-byte form NAKs INVALID_PARAM.
+            payload = struct.pack("<IH", index & 0xFFFFFFFF, count & 0xFFFF)
             self.last_note = f"list: RequestSendFiles 0x22 paged ({len(payload)}B) sent"
         self.d.send_raw(CMDSET_GENERAL, CID_REQ_SEND_FILES, payload, receiver=self.receiver)
 
@@ -288,17 +254,28 @@ class MediaClient:
         self.last_note = note + f"  (raw {len(payload)}B -> {path})"
         return self.files
 
-    def download(self, mf: MediaFile, dest: str, data_type=DATA_ORIGIN):
-        """Start a full-resolution download via RequestFile 0x00/0x26 (the file-transfer
-        request in the confirmed 0x22/0x24/0x26/0x27 cluster). Data streams back as 0x00/0x27
-        (GetPushFile) pushes → on_data_chunk. cmd_id 0x1F is NOT implemented on WM160 (would
-        NAK 0xE0, same as 0x20). The 0x26 payload beyond the file index is native/paged — the
-        first HW capture pins it (responses dumped)."""
+    def _start_view(self, mf: MediaFile, dest: str, grade: int, off: int, size: int):
+        """Common path: RequestFile 0x00/0x26 with a grade byte; bytes stream back as 0x00/0x27
+        (GetPushFile) → on_data_chunk. Used for original / thumbnail / screennail alike — a
+        thumbnail is just a short byte-range read (MEDIA_DELETE_VIEW_RESEARCH_2026.md §B)."""
         self._dl = {"file": open(dest, "wb"), "path": dest, "received": 0,
-                    "size": mf.file_size, "index": mf.file_index, "seen": set()}
+                    "size": size, "index": mf.file_index, "seen": set()}
         self.d.send_raw(CMDSET_GENERAL, CID_REQUEST_FILE,
-                        file_data_request_native(mf.file_index, data_type, 0, mf.file_size),
+                        request_file_req(mf.file_index, grade, off, size),
                         receiver=self.receiver)
+
+    def download(self, mf: MediaFile, dest: str):
+        """Download the full-resolution ORIGINAL (grade 0, whole file)."""
+        self._start_view(mf, dest, GRADE_ORIGIN, 0, mf.file_size or 0)
+
+    def fetch_thumbnail(self, mf: MediaFile, dest: str):
+        """Small cached thumbnail (grade 1). Offset/size come from the list record's nailInfo
+        when known; else 0/0 and let the camera pick (some firmware treats grade alone)."""
+        self._start_view(mf, dest, GRADE_THUMBNAIL, mf.thumb_off or 0, mf.thumb_size or 0)
+
+    def fetch_screennail(self, mf: MediaFile, dest: str):
+        """Larger preview image (grade 2, ~960x540 "screennail")."""
+        self._start_view(mf, dest, GRADE_SCREENNAIL, mf.screen_off or 0, mf.screen_size or 0)
 
     def on_data_chunk(self, offset: int, data: bytes, seq: int | None = None):
         if not self._dl:
@@ -335,8 +312,11 @@ class MediaClient:
         self.d.send_raw(CMDSET_GENERAL, CID_SET_RESEND, struct.pack("<I", index & 0xFFFFFFFF),
                         receiver=self.receiver)
 
-    def delete(self, mf: MediaFile):
-        if not mf.raw:
-            raise ValueError("no raw MediaFile bytes to address the delete")
+    def delete(self, files):
+        """Delete one or more files by index (0x00/0x28 DeleteFile, count-prefixed index list).
+        Pass a single MediaFile or a list. Multi-delete is native-normal (native deleteFiles
+        takes an ArrayList keyed by index). If 0x28 NAKs 0xE0/0xD9, fall back to the camera-set
+        0x02/0x79 selection model (MEDIA_DELETE_VIEW_RESEARCH_2026.md §A+§C2)."""
+        fs = files if isinstance(files, (list, tuple)) else [files]
         self.d.send_raw(CMDSET_GENERAL, CID_FILE_DELETE,
-                        delete_single_request(mf.raw), receiver=self.receiver)
+                        delete_request([f.file_index for f in fs]), receiver=self.receiver)

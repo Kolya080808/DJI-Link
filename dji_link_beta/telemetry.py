@@ -140,27 +140,45 @@ class Telemetry:
 
     def feed_packet(self, pkt) -> None:
         p = pkt.payload
-        # OSD general from the FC. Identify by cmd_id 0x43 (not "any FC packet ≥52 B",
-        # which caught unrelated 0x03 messages and produced garbage). The push originates
-        # from the FC side, which appears as sender 0x03 or 0x09 depending on the build.
-        if pkt.cmd_set == 0x03 and pkt.cmd_id == 0x43 and len(p) >= 0x34:
+        # OSD-common push (DataOsdGetPushCommon). Offsets are triple-confirmed (app + MSDK 4.18
+        # + dji-firmware-tools) — NOT the bug. The real bug was accepting a MIS-ALIGNED / wrong
+        # frame: coords then fail the range guard (→None) while the shifted mode byte still maps
+        # to a valid FLYC_STATE (the "GPS_Atti but no GPS/coords/alt" symptom). Fix per
+        # OSD_TELEMETRY_RESEARCH_2026.md: require FC sender + full length + a coherence gate.
+        FLYC = 0x03
+        if (pkt.sender == FLYC and pkt.cmd_set == 0x03 and pkt.cmd_id == 0x43
+                and len(p) >= 0x35 and self._osd_coherent(p)):
             self._parse_osd(p)
-        # DataOsdGetPushCommon is ALSO published on the OSD cmd_set (0x09/0x01), same layout.
-        elif pkt.cmd_set == 0x09 and pkt.cmd_id == 0x01 and len(p) >= 0x34:
+        # OSD-set alias 0x09/0x01 (same model). Only trust it if it passes the same coherence
+        # gate — until a live dump proves WM160 emits it unshifted.
+        elif (pkt.cmd_set == 0x09 and pkt.cmd_id == 0x01
+                and len(p) >= 0x35 and self._osd_coherent(p)):
             self._parse_osd(p)
-        # Home push = DataOsdGetPushHome, reachable via FLYC 0x03/0x44 OR OSD 0x09/0x02
-        # (identical struct: lon@0x00, lat@0x08 f64 rad, flags@0x14). Confirmed from DJI
-        # bytecode (HOME_POINT_RESEARCH_2026_v2.md). The old "0x44 is a device frame" note
-        # was wrong: the 800000.0 f64 was a home-not-recorded sentinel (flags bit0=0, caught
-        # by the range guard), and the ASCII serial came from a different (version) frame.
-        elif pkt.cmd_set == 0x03 and pkt.cmd_id == 0x44 and len(p) >= 0x16:
+        # Home push = DataOsdGetPushHome (FLYC 0x03/0x44 or OSD 0x09/0x02): lon@0x00, lat@0x08
+        # f64 rad, flags u16@0x14 (bit0=recorded), goHomeHeight u16@0x16. Confirmed app+MSDK+dft.
+        elif pkt.sender == FLYC and pkt.cmd_set == 0x03 and pkt.cmd_id == 0x44 and len(p) >= 0x18:
             self.parse_home_location(p)
-        elif pkt.cmd_set == 0x09 and pkt.cmd_id == 0x02 and len(p) >= 0x16:
+        elif pkt.cmd_set == 0x09 and pkt.cmd_id == 0x02 and len(p) >= 0x18:
             self.parse_home_location(p)
         elif pkt.cmd_set == 0x0D and pkt.cmd_id == 0x02 and len(p) >= 0x14:
             self._parse_battery(p)
         elif pkt.cmd_set == 0x02 and pkt.cmd_id == 0x80 and len(p) >= 0x1f:
             self._parse_camera_state(p)
+
+    @staticmethod
+    def _osd_coherent(p: bytes) -> bool:
+        """Reject a mis-aligned / wrong frame masquerading as OSD-common. On a correctly
+        aligned DataOsdGetPushCommon, pitch/roll/yaw (s16 @0x18/0x1a/0x1c, ×0.1°) are within
+        ±180° and flycVersion (u8 @0x2f) is nonzero. A shifted frame fails these, so we skip
+        it instead of publishing a phantom GPS_Atti with dead coordinates.
+        (OSD_TELEMETRY_RESEARCH_2026.md §8/§10)"""
+        pi, ro, ya = s16(p, 0x18), s16(p, 0x1a), s16(p, 0x1c)
+        if pi is None or ro is None or ya is None:
+            return False
+        if not (-1800 <= pi <= 1800 and -1800 <= ro <= 1800 and -1800 <= ya <= 1800):
+            return False
+        fv = u8(p, 0x2f)
+        return fv is not None and fv != 0
 
     def _parse_camera_state(self, p: bytes) -> None:
         # DataCameraGetPushStateInfo (0x02/0x80): recording flag in the byte-0 bitfield
