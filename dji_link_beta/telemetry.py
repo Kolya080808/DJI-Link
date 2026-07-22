@@ -101,11 +101,12 @@ class OsdState:
     sim_started: bool | None = None
     near_height_limit: bool | None = None
     near_dist_limit: bool | None = None
-    max_height_m: float | None = None
+    max_height_m: float | None = None      # flying_limit.max_height_0, read via param 0xF8
+    max_distance_m: float | None = None    # flying_limit.max_radius_0, read via param 0xF8
+    rth_altitude_m: float | None = None    # go_home.fixed_go_home_altitude_0, via param 0xF8
     home_recorded: bool | None = None
-    # position (radians -> degrees)
-    home_lat: float | None = None
-    home_lon: float | None = None
+    # aircraft position (radians -> degrees). Home coordinate readback is intentionally NOT
+    # kept — it never worked on WM160; only the home_recorded flag above is trusted.
     drone_lat: float | None = None
     drone_lon: float | None = None
     updated: set = field(default_factory=set)
@@ -140,23 +141,18 @@ class Telemetry:
 
     def feed_packet(self, pkt) -> None:
         p = pkt.payload
-        # OSD-common push (DataOsdGetPushCommon). Offsets are triple-confirmed (app + MSDK 4.18
-        # + dji-firmware-tools) — NOT the bug. The real bug was accepting a MIS-ALIGNED / wrong
-        # frame: coords then fail the range guard (→None) while the shifted mode byte still maps
-        # to a valid FLYC_STATE (the "GPS_Atti but no GPS/coords/alt" symptom). Fix per
-        # OSD_TELEMETRY_RESEARCH_2026.md: require FC sender + full length + a coherence gate.
-        FLYC = 0x03
-        if (pkt.sender == FLYC and pkt.cmd_set == 0x03 and pkt.cmd_id == 0x43
-                and len(p) >= 0x35 and self._osd_coherent(p)):
+        # OSD-common push (DataOsdGetPushCommon). Match on cmd_set/cmd_id only — do NOT also
+        # require sender==0x03: on some WM160 builds this push arrives with sender 0x09 (OSD)
+        # rather than 0x03 (FLYC), and requiring 0x03 silently dropped ALL telemetry. Offsets
+        # are triple-confirmed (app+MSDK+dft); _parse_osd fills what it can and leaves the rest
+        # None. (Ground/no-GPS frames legitimately have 0/0 coords → shown as "no GPS".)
+        if pkt.cmd_set == 0x03 and pkt.cmd_id == 0x43 and len(p) >= 0x34:
             self._parse_osd(p)
-        # OSD-set alias 0x09/0x01 (same model). Only trust it if it passes the same coherence
-        # gate — until a live dump proves WM160 emits it unshifted.
-        elif (pkt.cmd_set == 0x09 and pkt.cmd_id == 0x01
-                and len(p) >= 0x35 and self._osd_coherent(p)):
+        elif pkt.cmd_set == 0x09 and pkt.cmd_id == 0x01 and len(p) >= 0x34:
             self._parse_osd(p)
         # Home push = DataOsdGetPushHome (FLYC 0x03/0x44 or OSD 0x09/0x02): lon@0x00, lat@0x08
         # f64 rad, flags u16@0x14 (bit0=recorded), goHomeHeight u16@0x16. Confirmed app+MSDK+dft.
-        elif pkt.sender == FLYC and pkt.cmd_set == 0x03 and pkt.cmd_id == 0x44 and len(p) >= 0x18:
+        elif pkt.cmd_set == 0x03 and pkt.cmd_id == 0x44 and len(p) >= 0x18:
             self.parse_home_location(p)
         elif pkt.cmd_set == 0x09 and pkt.cmd_id == 0x02 and len(p) >= 0x18:
             self.parse_home_location(p)
@@ -164,21 +160,6 @@ class Telemetry:
             self._parse_battery(p)
         elif pkt.cmd_set == 0x02 and pkt.cmd_id == 0x80 and len(p) >= 0x1f:
             self._parse_camera_state(p)
-
-    @staticmethod
-    def _osd_coherent(p: bytes) -> bool:
-        """Reject a mis-aligned / wrong frame masquerading as OSD-common. On a correctly
-        aligned DataOsdGetPushCommon, pitch/roll/yaw (s16 @0x18/0x1a/0x1c, ×0.1°) are within
-        ±180° and flycVersion (u8 @0x2f) is nonzero. A shifted frame fails these, so we skip
-        it instead of publishing a phantom GPS_Atti with dead coordinates.
-        (OSD_TELEMETRY_RESEARCH_2026.md §8/§10)"""
-        pi, ro, ya = s16(p, 0x18), s16(p, 0x1a), s16(p, 0x1c)
-        if pi is None or ro is None or ya is None:
-            return False
-        if not (-1800 <= pi <= 1800 and -1800 <= ro <= 1800 and -1800 <= ya <= 1800):
-            return False
-        fv = u8(p, 0x2f)
-        return fv is not None and fv != 0
 
     def _parse_camera_state(self, p: bytes) -> None:
         # DataCameraGetPushStateInfo (0x02/0x80): recording flag in the byte-0 bitfield
@@ -302,17 +283,11 @@ class Telemetry:
         return None if v is None else v * 180.0 / math.pi
 
     def parse_home_location(self, p: bytes) -> None:
-        """DataOsdGetPushHome (FLYC 0x03/0x44 or OSD 0x09/0x02). f64 radians, order LON@0x00,
-        LAT@0x08 (opposite of the SET-home command). Confirmed byte-for-byte from DJI's own
-        getters (HOME_POINT_RESEARCH_2026_v2.md §1)."""
-        if len(p) >= 16:
-            lon = self.rad_to_deg(struct.unpack_from("<d", p, 0)[0])
-            lat = self.rad_to_deg(struct.unpack_from("<d", p, 8)[0])
-            # Range guard: until home is recorded the FC pushes an uninitialised sentinel
-            # (f64 ~800000.0 -> ~4.6e7 deg, rejected here). Gate the HUD on home_recorded.
-            if -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0 and (lat or lon):
-                self.state.home_lon = lon
-                self.state.home_lat = lat
+        """DataOsdGetPushHome (FLYC 0x03/0x44 or OSD 0x09/0x02). We only read the "home
+        recorded" flag (u16 @0x14 bit0) — the home lat/lon readback was never trustworthy on
+        WM160 hardware (it sat at 0/None or a sentinel), so we DON'T parse coordinates here.
+        Setting home still works via drone.set_home_*; this is just the "home set: yes/no"
+        indicator. Home-coordinate READBACK is dropped until a live capture proves the frame."""
         if len(p) >= 0x16:                       # flags u16 @0x14, bit0 = home recorded
             self.state.home_recorded = bool(struct.unpack_from("<H", p, 0x14)[0] & 1)
             self.state.home_set = self.state.home_recorded

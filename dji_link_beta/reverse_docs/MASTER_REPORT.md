@@ -190,14 +190,17 @@ UNLOCK** (`fc_dark_need_gps_0=0`).
   the FC clamps this param to ~20°, so Cine↔Normal differ but Sport currently caps at Normal — raising
   the true top speed needs more reversing. (FLIGHT_MODE_SPEED_RESEARCH_2026.md)
 * **Home point** — SET `DataFlycSetHomePoint 0x03/0x31` 18B: [0]type(APP=2 explicit / AIRCRAFT=0 current),
-  [1..8] **LAT** f64 rad, [9..16] **LON** f64 rad, [17] interval(=0). READ home = `DataOsdGetPushHome`
-  (FLYC `0x03/0x44` OR OSD `0x09/0x02`): **LON@0x00, LAT@0x08** f64 rad, flags u16@0x14 (bit0=isHomeRecord),
-  goHomeHeight u16@0x16 (note: read push is lon-first, SET is lat-first). The old "0x44 isn't home" note was
-  wrong — the 800000.0 was a home-not-recorded sentinel. **RTH altitude** = param `go_home.fixed_go_home_altitude_0`
-  (hash 0x38cc63dc, u16 metres 20..500) via `0x03/0xF9`; echoed back at goHomeHeight@0x16.
-  (HOME_POINT_RESEARCH_2026_v2.md, RTH_ALTITUDE_RESEARCH_2026.md)
-* **Height/distance limits** — FC param write `0x03/0xF9` by hash (the app's path), read back with 0xF8.
-  (FLIGHT_LIMITS_RESEARCH_2026.md)
+  [1..8] **LAT** f64 rad, [9..16] **LON** f64 rad, [17] interval(=0). Confirmed byte-correct vs MSDK 4.18
+  (cmd 0x31, HOMETYPE AIRCRAFT=0/RC=1/APP=2/FOLLOW=3). Home-coordinate **READBACK was DROPPED in code** —
+  `DataOsdGetPushHome` (0x03/0x44) lat/lon never read reliably on WM160 (0/None or sentinel); we now keep
+  only the **home-recorded flag** (u16@0x14 bit0) → HUD shows "home: set/not set". Setting home is unaffected.
+  (HOME_POINT_RESEARCH_2026_v2.md)
+* **Flight limits (max height / max distance / RTH altitude)** — all three are u16-metre FC params
+  (`flying_limit.max_height_0`, `flying_limit.max_radius_0`, `go_home.fixed_go_home_altitude_0`), written by
+  hash via `0x03/0xF9` and **READ BACK via `0x03/0xF8`** (reply `[retcode u8][hash u32 LE][value u16]`).
+  pc_client reads all three on connect + after each write and shows them in the HUD (`alt≤ · dist≤ · RTH`).
+  This replaces the old OSD low-freq push for max_height, which this drone does NOT emit. **max-height
+  readback confirmed working on HW.** (RTH_ALTITUDE_RESEARCH_2026.md, FLIGHT_LIMITS_RESEARCH_2026.md)
 * **Camera ISO / exposure / recording** — ISO needs Manual exposure first (`SetExposureMode 0x02/0x1E`
   is **2 bytes** `[mode,scene]`, mode M=4); recording needs VIDEO work mode (`0x02/0x10 [1]`) before
   `0x02/0x02`. **RECORD ROOT-CAUSE (2026):** the mode switch is async, so firing set-mode then START

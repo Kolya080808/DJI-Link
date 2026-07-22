@@ -12,14 +12,15 @@ These supersede earlier guesses where they disagree — the jar is DJI's own un-
 - **`VIRTUAL_STICK_RESEARCH_2026.md`** — controlled flight SOLVED: `0x03/0x8E` DataFlycJoystick (17-byte
   float payload, flag byte, WM160 pitch/roll + yaw/throttle swaps), authority via `0x03/0x80` (open=1/close=2).
 - **`FLIGHT_MODE_SPEED_RESEARCH_2026.md`** — Cine/Normal/Sport + speed via `mode_normal_cfg.tilt_atti_range_0`.
-- **`HOME_POINT_RESEARCH_2026_v2.md`** — ★ latest. READ home = `DataOsdGetPushHome` (FLYC `0x03/0x44` or OSD
-  `0x09/0x02`): LON f64@0x00, LAT f64@0x08 (radians), flags u16@0x14 (bit0=isHomeRecord), goHomeHeight u16@0x16.
-  SET home = `0x03/0x31` 18B, type+LAT+LON (lat-first, opposite of the read push). Resolves the old "0x44 isn't
-  home" mistake (the 800000.0 was a home-not-recorded sentinel). Supersedes `HOME_POINT_RESEARCH_2026.md`.
+- **`HOME_POINT_RESEARCH_2026_v2.md`** — ★ latest. SET home = `0x03/0x31` 18B, type+LAT+LON (HOMETYPE
+  APP=2/AIRCRAFT=0, MSDK-confirmed). NOTE: home-coordinate READBACK (`DataOsdGetPushHome` 0x44 lat/lon) was
+  DROPPED in code — never read reliably on WM160; only the home-recorded flag (u16@0x14 bit0) is kept → HUD
+  "home: set/not set". Supersedes `HOME_POINT_RESEARCH_2026.md`.
 - **`RECORD_PHOTO_RESEARCH_2026.md`** — ★ why recording didn't start: set-mode→START race (async mode switch drops
   START). Fix = wait + re-send START. Photo type SINGLE=1 (was HDR=2). Verify push `0x02/0x80` (recordState, videoRecordTime@0x1D).
 - **`RTH_ALTITUDE_RESEARCH_2026.md`** — ★ RTH/go-home altitude = param `g_config.go_home.fixed_go_home_altitude_0`
-  (hash 0x38cc63dc, u16 LE metres, 20..500) via `0x03/0xF9`; no dedicated command. Read back `0x03/0xF8`; telemetry echo goHomeHeight@0x16.
+  (hash 0x38cc63dc, u16 LE metres, 20..500) via `0x03/0xF9`; no dedicated command. Read back via `0x03/0xF8`
+  (same as max height / max distance) — pc_client reads all three on connect + after write, shown in the HUD.
 - **`MEDIA_0XE0_RESEARCH_2026.md`** — ★★ AUTHORITATIVE media reverse (HW-confirmed). `0xE0 = INVALID_CMD`
   (app Ccode enum) → WM160 does NOT implement cmd_id `0x20`/`0x1F`. Correct path = **`0x00/0x22`
   RequestSendFiles [CURRENT] → list PUSHED back as `0x00/0x24` GetPushFiles**; file via `0x26`→`0x27`;

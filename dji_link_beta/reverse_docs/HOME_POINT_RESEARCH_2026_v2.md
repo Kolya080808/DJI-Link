@@ -1,5 +1,11 @@
 # Home Point — v2 reverse (fresh pass from DJI's own MSDK bytecode)
 
+> **CODE STATUS (2026-07-22):** the SET-home path below is implemented and MSDK-confirmed
+> (0x03/0x31, HOMETYPE APP=2/AIRCRAFT=0). The home-coordinate **READBACK** (0x03/0x44 lat/lon)
+> documented here was **removed from the code** — on WM160 hardware it never read a usable
+> coordinate (0/None or the 800000 sentinel), so telemetry now keeps only the home-recorded
+> flag (u16@0x14 bit0). The byte layout below is still accurate; we just don't parse coords.
+
 Source of truth this pass: baksmali of the shipped app DEX
 (`unpacked_app_dex/classes_0451d00c.dex`, `classes_016b200c.dex`), i.e. DJI's
 own serializers/getters — not prior notes. Confirmed byte-for-byte.

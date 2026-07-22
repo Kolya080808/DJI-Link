@@ -182,6 +182,21 @@ class Client:
         self._tail = b""
         import media
         self.media = media.MediaClient(self.d, receiver=0x01)
+        # Limit params we read back via 0xF8 and show on the HUD (the OSD low-freq push that
+        # used to carry them isn't emitted by this drone). Map: param hash -> OsdState field.
+        # All three are u16 metres, RW+EE, from the verified WM160 param table.
+        self._limit_params = [
+            ("g_config.flying_limit.max_height_0", "max_height_m"),
+            ("g_config.flying_limit.max_radius_0", "max_distance_m"),
+            ("g_config.go_home.fixed_go_home_altitude_0", "rth_altitude_m"),
+        ]
+        self._limit_hash_to_field = {}
+        try:
+            from param_hash import param_hash as _ph
+            for _name, _field in self._limit_params:
+                self._limit_hash_to_field[_ph(_name)] = _field
+        except Exception:
+            pass
         # Spectator mouse-look: X drives yaw rate, Y drives an absolute gimbal pitch.
         self.playback = False           # liveview (flight) vs playback (media) mode
         self.mouse_look = True          # off while the settings panel is open
@@ -347,6 +362,17 @@ class Client:
                         self._ptable_f.flush()
                     except Exception:
                         pass
+                # A read-param reply (0xF8) = [retcode u8][hash u32 LE][value]. When it's one of
+                # our limit params (max height / max distance / RTH altitude) surface it on the
+                # HUD — the OSD low-freq push that used to carry these isn't emitted by this
+                # drone, so we read them via the param channel (on connect / after a write).
+                if p.cmd_id == 0xF8 and len(p.payload) >= 7:
+                    import struct as _st
+                    rhash = _st.unpack_from("<I", p.payload, 1)[0]
+                    field = self._limit_hash_to_field.get(rhash)
+                    if field:                       # value = u16 metres (typeId 1, size 2) @0x05
+                        setattr(self.tele.state, field,
+                                float(_st.unpack_from("<H", p.payload, 5)[0]))
                 if p.cmd_id in (0xF0, 0xF7) and len(p.payload) > 20:
                     name = p.payload[19:].split(b"\x00", 1)[0].decode("ascii", "replace")
                     if name.strip():
@@ -364,6 +390,17 @@ class Client:
 
     def start_rx(self):
         threading.Thread(target=self._rx_loop, daemon=True).start()
+        # Read the flight limits (max height / distance / RTH altitude) once shortly after RX
+        # is up, so the HUD shows the real enforced values (no OSD push carries them here).
+        def _read_limits():
+            import time as _t
+            _t.sleep(1.5)
+            for _name, _field in self._limit_params:
+                try:
+                    self.d.read_param(_name); _t.sleep(0.1)
+                except Exception:
+                    pass
+        threading.Thread(target=_read_limits, daemon=True).start()
 
     def _rx_loop(self):
         n = 0
@@ -671,13 +708,13 @@ class SettingsPanel:
         self.w = [
             _W("choice", "Flight mode", lambda v: self._try(lambda: d.set_flight_mode(v), f"mode {v}"),
                opts=["normal", "cinema", "sport"]),
-            _W("slider", "Max altitude (m)", lambda v: self._try(lambda: d.set_max_altitude(v), f"max alt {v} m"),
+            _W("slider", "Max altitude (m)", lambda v: self._try(lambda: (d.set_max_altitude(v), d.read_param("g_config.flying_limit.max_height_0")), f"max alt {v} m"),
                lo=15, hi=500, step=5, val=120),
-            _W("slider", "Max distance (m)", lambda v: self._try(lambda: d.set_max_distance(v), f"max dist {v} m"),
+            _W("slider", "Max distance (m)", lambda v: self._try(lambda: (d.set_max_distance(v), d.read_param("g_config.flying_limit.max_radius_0")), f"max dist {v} m"),
                lo=15, hi=5000, step=50, val=500),
-            _W("slider", "RTH altitude (m)", lambda v: self._try(lambda: d.set_rth_altitude(v), f"RTH alt {v} m"),
+            _W("slider", "RTH altitude (m)", lambda v: self._try(lambda: (d.set_rth_altitude(v), d.read_param("g_config.go_home.fixed_go_home_altitude_0")), f"RTH alt {v} m"),
                lo=20, hi=500, step=5, val=30,
-               note="height the drone climbs to before returning home (verify: HUD home push)"),
+               note="height the drone climbs to before returning home (shown in HUD after readback)"),
             _W("slider", "Brightness (EV)", lambda v: self._try(lambda: d.set_ev(v), f"EV {v:+d}"),
                lo=-3, hi=3, step=1, val=0, note="main brighten/darken lever (auto exposure)"),
             _W("choice", "ISO", lambda v: self._try(
@@ -1165,17 +1202,15 @@ def _draw_flight_hud(screen, cli):
     cell(c0, "SATS · GPS", f"{st.satellites if st.satellites is not None else '—'} · {st.gps_level if st.gps_level is not None else '—'}")
     cell(c1, "MODE", st.flight_mode_name or "—")
     y += 40
-    # GPS position (drone_lat/lon from OSD 0x43) + home point (from 0x44, only when recorded)
-    def _fmt_coord(lat, lon):
-        if lat is None: return "no GPS"
-        return f"{lat:.5f},{lon:.5f}"
-    _gps  = _fmt_coord(st.drone_lat, st.drone_lon)
-    _home = (_fmt_coord(st.home_lat, st.home_lon)
-             if (st.home_recorded and st.home_lat is not None)
-             else "not recorded")
-    _maxa = f"{st.max_height_m:g} m" if st.max_height_m is not None else "—"
-    left(F["small"], f"GPS {_gps}  ·  home {_home}  ·  max alt {_maxa}", _g.MUTED, lx, y + 6)
-    left(F["small"], "F1 help · Esc settings · F3 hide", (110, 116, 130), lx, y + 24)
+    # Aircraft GPS position (drone_lat/lon from OSD 0x43) + home-set flag (coordinate
+    # readback for home was dropped — never worked on WM160; only "recorded yes/no" is shown).
+    _gps = "no GPS" if st.drone_lat is None else f"{st.drone_lat:.5f},{st.drone_lon:.5f}"
+    _home = "set" if st.home_recorded else "not set"
+    _g_ = lambda v: f"{v:g}m" if v is not None else "—"       # limit values, read via param 0xF8
+    left(F["small"], f"GPS {_gps}  ·  home {_home}", _g.MUTED, lx, y + 6)
+    left(F["small"], f"alt≤{_g_(st.max_height_m)}  ·  dist≤{_g_(st.max_distance_m)}  ·  RTH {_g_(st.rth_altitude_m)}",
+         _g.MUTED, lx, y + 24)
+    left(F["small"], "F1 help · Esc settings · F3 hide", (110, 116, 130), lx, y + 42)
 
     # motor-start failure (only when relevant) — a red banner under the card
     if st.motor_fail_code:
