@@ -56,6 +56,18 @@ def serve(dev: AoaDevice, host: str, port: int):
         print(f"[bridge] connected {addr}")
         conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
+        # Drain stale RC data from the previous session so the new laptop client
+        # doesn't receive stale frames and immediately disconnect.
+        drained = 0
+        while not dev.rx_queue.empty():
+            try:
+                dev.rx_queue.get_nowait()
+                drained += 1
+            except Exception:
+                break
+        if drained:
+            print(f"[bridge] drained {drained} stale RC frames from queue")
+
         stop = threading.Event()
 
         # remote controller -> TCP

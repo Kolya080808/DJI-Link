@@ -36,6 +36,26 @@ Assembled from 5 parallel agents. WM160 = **device ID 59 (UAV59)** in the app's 
 
 ---
 
+## 1b. Media — SD card list / download / delete (confirmed ≥2 sources: MSDK v4 jar + app smali + dft lua)
+
+All on cmd_set **0x00** (non-encrypted), sender **0x02** (APP), receiver **0x01** (CAMERA).
+`0x00/0x20` (File List) and `0x00/0x1F` (File Data) are **NOT implemented on WM160** → hardware returns `0xE0 INVALID_CMD`.
+
+| step | cmd | payload | notes |
+|---|---|---|---|
+| 1. Enter playback | `0x02/0x10` | `[0x02]` | PLAYBACK mode; liveview freezes |
+| 2. Wait gate | — | — | poll `0x02/0x80` push byte[4]==2, OR `0x02/0x82` push arrival |
+| 3. Request list | `0x00/0x22` | `[0x00]` CURRENT / `[0x01]` NEXT | list does NOT come in ACK |
+| 4. List push | `0x00/0x24` ← | `[seq i32][records…]` | strip 4B prefix; ACK with `0x23[0x00]` |
+| 5. Request file | `0x00/0x26` | `[idx u32][subIdx u16=0][grade u8][count u8=1][off u32][size u32]` | grade: ORIGIN=0 THUMB=1 SCREEN=2 |
+| 6. Data push | `0x00/0x27` ← | `[hdr u32][dataLen u32][idx u32][nameLen u8][name][data]` | ACK each with `0x23[0x00]` |
+| 7. Delete | `0x00/0x28` | `[count u16 LE][idx u32 LE …]` | count width capture-pending (watch 0xD6) |
+| 8. Exit playback | `0x02/0x10` | `[0x01]` | restores liveview |
+
+**ACK** (`0x00/0x23`) payload is always `[0x00]` (1 byte) — required after each 0x24 and 0x27 push or camera stalls.
+
+---
+
 ## 2. Full DUML map (29 sets, 436 commands)
 | set | purpose | set | purpose |
 |---|---|---|---|

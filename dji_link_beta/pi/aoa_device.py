@@ -19,6 +19,7 @@ from __future__ import annotations
 import errno
 import os
 import struct
+import sys
 import threading
 import queue
 import time
@@ -27,7 +28,7 @@ import traceback
 from raw_gadget import (
     RawGadget, UsbCtrlRequest,
     USB_RAW_EVENT_CONNECT, USB_RAW_EVENT_CONTROL, USB_RAW_EVENT_RESET,
-    USB_RAW_EVENT_DISCONNECT, USB_SPEED_HIGH,
+    USB_RAW_EVENT_DISCONNECT, USB_RAW_EVENT_SUSPEND, USB_SPEED_HIGH,
 )
 
 # Verbose USB tracing. On by default: this stack is bring-up code and the usual
@@ -46,6 +47,7 @@ _EVENT_NAMES = {
     USB_RAW_EVENT_CONTROL: "CONTROL",
     USB_RAW_EVENT_RESET: "RESET",
     USB_RAW_EVENT_DISCONNECT: "DISCONNECT",
+    USB_RAW_EVENT_SUSPEND: "SUSPEND",
 }
 
 # Standard requests, for readable traces
@@ -219,23 +221,30 @@ class AoaDevice:
                 time.sleep(0.25)
         raise last   # type: ignore[misc]
 
-    def _teardown_eps(self, g: RawGadget):
+    def _teardown_eps(self, g: RawGadget) -> bool:
         """Release the bulk endpoints after a bus reset/disconnect.
 
         Clearing _configured also stops the IO threads (it is their loop condition);
         whichever one is parked in a blocking transfer wakes up with ESHUTDOWN.
+
+        Returns True if all endpoints were disabled cleanly, False if ep_disable
+        returned EBUSY (meaning the UDC already tore them down itself — the gadget
+        fd is in a dirty state and the caller should restart the phase).
         """
         if not self._configured and self._ep_in is None and self._ep_out is None:
-            return
+            return True
         self._configured = False
+        clean = True
         for h in (self._ep_in, self._ep_out):
             if h is not None:
                 try:
                     g.ep_disable(h)
                 except OSError as e:
                     log(f"  ep_disable failed (harmless after disconnect): {e}")
+                    clean = False
         self._ep_in = self._ep_out = None
         log("bus reset/disconnect: endpoints disabled, bulk threads stopping")
+        return clean
 
     def _run_phase(self) -> bool:
         self._configured = False
@@ -261,11 +270,31 @@ class AoaDevice:
                 log(f"event: {_EVENT_NAMES.get(etype, etype)}")
                 if etype == USB_RAW_EVENT_CONNECT:
                     continue
+                if etype == USB_RAW_EVENT_SUSPEND:
+                    # Physical RC disconnect: SUSPEND fires before DISCONNECT.
+                    # Restart the whole process — the UDC will be in a dirty state
+                    # by the time DISCONNECT arrives, so recover immediately.
+                    log("SUSPEND — RC physically disconnected, restarting bridge process")
+                    try:
+                        g.close()
+                    except Exception:
+                        pass
+                    os.execv(sys.executable, [sys.executable] + sys.argv)
                 if etype in (USB_RAW_EVENT_RESET, USB_RAW_EVENT_DISCONNECT):
                     # dwc2 reports DISCONNECT where other UDCs report RESET; either way the
                     # UDC has disabled our endpoints, so tear them down and let the next
                     # SET_CONFIGURATION re-enable them and respawn the IO threads.
-                    self._teardown_eps(g)
+                    clean = self._teardown_eps(g)
+                    if not clean:
+                        # ep_disable failed with EBUSY — UDC is in a dirty state.
+                        # Trying to re-configure endpoints will also hang/fail.
+                        # Full process restart is the only reliable recovery.
+                        log("dirty disconnect — restarting bridge process now")
+                        try:
+                            g.close()
+                        except Exception:
+                            pass
+                        os.execv(sys.executable, [sys.executable] + sys.argv)
                     continue
                 if etype != USB_RAW_EVENT_CONTROL or ctrl is None:
                     continue

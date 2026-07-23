@@ -238,11 +238,18 @@ class Drone:
     # --- camera working mode: liveview (flight) vs playback (media) ---
     # The camera can't do both; media list/download only answer in playback mode.
     def enter_playback(self) -> None:
-        # WM160 is a LEGACY camera: media is served in PLAYBACK = wire mode 2 (via
-        # PlaybackManager). Mode 3 = TRANSCODE — sending 3 was the whole cause of the 0xe0
-        # NAK on the file family. Send 2, then wait for the 0x02/0x82 PlayBackParams push.
-        # (CAMERA_MEDIA_RESEARCH_2026.md)
-        self._cmd(0x02, 0x10, bytes([2]), receiver=DEV_CAMERA)   # working_mode = PLAYBACK
+        # 1. Switch camera to PLAYBACK mode (CameraWorkMode=2).
+        self._cmd(0x02, 0x10, bytes([2]), receiver=DEV_CAMERA)
+        # 2. Subscribe to PLAYBACK_PARAMETER (msgID 0x1772) so the camera starts
+        #    pushing 0x02/0x82 with total_num + current mode.
+        #    Without this subscribe the camera never sends 0x82 (confirmed hardware).
+        #    Format (DataCameraSubscribeMsg.doPack, MSDK jar):
+        #      [operation=CREATE=1 u8][subscribeID=0xFF u8][flags=0x03 u8 (msgID+combine)]
+        #      [key=0 u16 LE][count=1 u16 LE][msgID=0x1772 u16 LE]
+        #    Fallback: if 0xEB returns 0xE0 INVALID_CMD the WM160 firmware is too old;
+        #    probe 0x02/0x98 (GetFileParams) with empty payload instead.
+        sub = struct.pack("<BBHHHH", 0x01, 0xFF, 0x03, 0x0000, 1, 0x1772)
+        self._cmd(0x02, 0xEB, sub, receiver=DEV_CAMERA)
 
     def exit_playback(self) -> None:
         self._cmd(0x02, 0x10, bytes([1]), receiver=DEV_CAMERA)   # back to RECORD/liveview

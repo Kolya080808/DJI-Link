@@ -31,6 +31,7 @@ Console (Tab): takeoff/land/rth · home here|<lat> <lon> · setalt <m>/setdist <
 
 from __future__ import annotations
 import argparse
+import struct
 import subprocess
 import sys
 import threading
@@ -182,6 +183,8 @@ class Client:
         self._tail = b""
         import media
         self.media = media.MediaClient(self.d, receiver=0x01)
+        self.media_sel = 0              # index into self.media.files (selection for GUI ops)
+        self._raw_dump = False          # True while raw DUML dump is running (logs every frame from drone)
         # Limit params we read back via 0xF8 and show on the HUD (the OSD low-freq push that
         # used to carry them isn't emitted by this drone). Map: param hash -> OsdState field.
         # All three are u16 metres, RW+EE, from the verified WM160 param table.
@@ -302,55 +305,43 @@ class Client:
             vlog(f"[duml] rx sender=0x{p.sender:02x} recv=0x{p.receiver:02x} "
                  f"set=0x{p.cmd_set:02x} id=0x{p.cmd_id:02x} len={len(p.payload)} "
                  f"{p.payload[:24].hex()}")
-            # Camera-state pushes feed the media readiness gate (0x02/0x80 getMode==PLAYBACK,
-            # or the 0x02/0x82 playback-params push). Without this wait_playback_ready() never
-            # unblocks and the list request races ahead of the mode switch → 0xe0.
-            if self.media and p.cmd_set == 0x02 and p.sender != 0x02:
-                if p.cmd_id == 0x80:
-                    self.media.note_camera_state(p.payload)
-                elif p.cmd_id == 0x82:
-                    self.media.note_playback_params(p.payload)
-            # Media responses (general cmd_set 0x00). WM160 uses the RequestSendFiles handshake:
-            # 0x22 request → the file list arrives as a separate 0x24 (GetPushFiles) PUSH, and
-            # file bytes as 0x27 (GetPushFile). cmd_id 0x20 is NOT implemented (0xE0 INVALID_CMD).
+            # Raw dump: log EVERY frame from the drone (skip our own echoes and the
+            # noisy video/OSD floods) so we can see exactly what a media op triggers.
+            if self._raw_dump and p.sender != 0x02 and not (p.cmd_set == 0x02 and p.cmd_id in (0x80, 0x81, 0x87)):
+                log(f"[raw] src=0x{p.sender:02x} set=0x{p.cmd_set:02x} id=0x{p.cmd_id:02x} "
+                    f"len={len(p.payload)} {p.payload[:32].hex()}")
+            # Camera work-mode push (0x02/0x80) → playback gate.
+            if self.media and p.cmd_set == 0x02 and p.cmd_id == 0x80 and p.sender != 0x02:
+                prev = self.media._cam_mode
+                self.media.note_camera_state(p.payload)
+                if self.media._cam_mode != prev:
+                    log(f"[media] cam mode {prev}→{self.media._cam_mode} "
+                        f"({'PLAYBACK' if self.media._cam_mode==2 else 'other'})")
+            # DEEP MEDIA LOG: every cmd_set 0x00 frame FROM the drone (not our echoes).
+            # LIST reply should be 0x27, but log all so we catch it on any cmd_id.
             if self.media and p.cmd_set == 0x00 and p.sender != 0x02:
-                if p.cmd_id == 0x24:                       # GetPushFiles = the file list
-                    n = len(self.media.on_list_response(p.payload))
-                    self.msg(f"media: {n} file(s) — {self.media.last_note}")
-                elif p.cmd_id == 0x22 and len(p.payload) == 1:
-                    # 1-byte ACK to our RequestSendFiles — decode the Ccode so 0xE0/0xE4/0xE8
-                    # are legible instead of silent.
-                    cc = p.payload[0]
-                    names = {0x00: "OK", 0xE0: "INVALID_CMD", 0xE3: "INVALID_PARAM",
-                             0xE4: "WRONG_STATE", 0xE8: "NO_SDCARD"}
-                    self.msg(f"media: RequestSendFiles ack = 0x{cc:02x} {names.get(cc,'?')}")
-                elif p.cmd_id == 0x27:                     # GetPushFile = file data chunk
-                    self._media_raw = getattr(self, "_media_raw", 0) + len(p.payload)
-                    # Always dump the raw chunk so the exact native header can be pinned from a
-                    # real capture (the litchis template below is a best-guess).
-                    try:
-                        with open("media_chunk_dump.bin", "ab") as cf:
-                            cf.write(p.payload)
-                    except OSError:
-                        pass
-                    # Best-guess header (litchis FileData template): [hdr u32][dataLen u32]
-                    # [fileIndex u32][nameLen u8][name][bytes]. Strip it, feed the file bytes to
-                    # the reassembler at a running offset. If the header guess is wrong the dump
-                    # still preserves the truth for offline finalisation.
-                    pl = p.payload
-                    try:
-                        if len(pl) >= 13:
-                            name_len = pl[12]
-                            body = pl[13 + name_len:]
-                        else:
-                            body = b""
-                        off = getattr(self, "_media_off", 0)
-                        self.media.on_data_chunk(off, body)
-                        self._media_off = off + len(body)
-                    except Exception:
-                        pass
-                    log(f"[media] data chunk {len(p.payload)}B (total {self._media_raw}B) — "
-                        "raw dumped to media_chunk_dump.bin for offline finalisation")
+                log(f"[media] rx 0x00/0x{p.cmd_id:02x} src=0x{p.sender:02x} "
+                    f"len={len(p.payload)} {p.payload[:32].hex()}")
+            # FileChannel replies (0x00/0x27 GetPushFile) — LIST records & FILE data.
+            if self.media and p.cmd_set == 0x00 and p.cmd_id == 0x27 and p.sender != 0x02:
+                files = self.media.on_push(p.payload)
+                if files is not None:
+                    self.media_sel = 0
+                    if not files:
+                        self.msg(f"media: 0 files — {self.media.last_note}")
+                    else:
+                        self.msg(f"media: {len(files)} file(s) — {self.media.last_note}")
+                        for i, f in enumerate(files):
+                            kind = "🎬" if f.is_video else "📷"
+                            marker = " ◀" if i == 0 else ""
+                            self.msg(f"  [{i}] {kind} {f.file_name}{marker}")
+            # Decode the 1-byte ACK to our 0x26/0x28 requests (0x00 = OK).
+            if self.media and p.cmd_set == 0x00 and p.cmd_id in (0x26, 0x28) \
+                    and p.sender != 0x02 and len(p.payload) == 1:
+                cc = p.payload[0]
+                _n = {0x00:"OK",0xD6:"PARAM_ERR",0xE0:"INVALID_CMD",0xE3:"INVALID_PARAM",
+                      0xE4:"WRONG_STATE",0xE8:"NO_SDCARD"}
+                log(f"[media] 0x{p.cmd_id:02x} ack=0x{cc:02x} {_n.get(cc,'?')}")
             # FC param-info response (0x03/0xF0): pull the ASCII name so we learn the real
             # param names straight from the drone.
             if p.cmd_set == 0x03 and p.cmd_id in (0xF0, 0xF7, 0xF8, 0xF9) and p.sender != 0x02:
@@ -731,11 +722,12 @@ class SettingsPanel:
                 lambda: d.set_camera_mode(0 if v == "photo" else 1), v), opts=["photo", "video"]),
             _W("button", "Recenter gimbal", lambda v: self._try(lambda: d.gimbal_recenter(), "recenter")),
             _W("button", "Set home to here", lambda v: self._try(lambda: d.set_home_to_current_location(), "home set")),
-            _W("button", "Media: list SD card", lambda v: self._list_media()),
-            _W("button", "Media: thumbnail first", lambda v: self._thumbnail_first()),
-            _W("button", "Media: download first", lambda v: self._download_first()),
-            _W("button", "Media: delete first", lambda v: self._delete_first()),
-            _W("button", "Exit to main menu", lambda v: self._exit_to_menu()),
+            _W("button", "Media: list SD card",    lambda v: self._list_media()),
+            _W("button", "Media: download selected", lambda v: self._download_selected()),
+            _W("button", "Media: delete selected",   lambda v: self._delete_selected()),
+            _W("button", "Media: diagnose",          lambda v: self._diagnose_media()),
+            _W("button", "Return to liveview",       lambda v: self._restore_liveview()),
+            _W("button", "Exit to main menu",        lambda v: self._exit_to_menu()),
         ]
 
     def _close(self):
@@ -750,13 +742,8 @@ class SettingsPanel:
         self.cli.return_to_menu = True
         self.cli.running = False
 
-    # ---- media (SD card) ----
-    # The request encoders are proven; the list-response record stride and download chunk
-    # framing are native, so the first real capture from the drone finalises them. Every
-    # response is dumped for that. Download-by-index works once we have a file from a list.
+    # ---- media helpers ----
     def _ensure_playback(self):
-        # Media commands only work in PLAYBACK mode. Enter it automatically (was the manual
-        # B key) — we drop back to liveview when the panel closes (_restore_liveview).
         if not self.cli.playback:
             try:
                 self.cli.d.enter_playback(); self.cli.playback = True
@@ -764,66 +751,106 @@ class SettingsPanel:
                 self.cli.msg(f"media: couldn't enter playback: {e}")
 
     def _restore_liveview(self):
-        # Called when the settings panel closes: if we switched to playback for a media op,
-        # return to the live video feed so flight view is back.
-        if self.cli.playback:
+        """Exit playback (RECORD_VIDEO) and restart the video stream + keyframe.
+        Skips restore while a download is still streaming (would kill the 0x27 flow).
+        """
+        if self.cli.media and self.cli.media.has_active_download():
+            self.cli.msg("media: download in progress — not exiting playback yet")
+            return
+        # Exit if the flag says playback OR the camera actually reports PLAYBACK mode.
+        in_playback = self.cli.playback or (self.cli.media and self.cli.media._cam_mode == 2)
+        if in_playback:
             try:
-                self.cli.d.exit_playback(); self.cli.d.start_liveview()
-            except Exception:
-                pass
+                log("[media] restore: exit_playback → start_liveview → i-frame")
+                self.cli.d.exit_playback()      # RECORD_VIDEO (mode 1) — resumes video stream
+                self.cli.d.start_liveview()
+                self.cli.d.request_i_frame()    # kick a fresh keyframe so the picture restarts
+            except Exception as e:
+                log(f"[media] restore error: {e}")
             self.cli.playback = False
+        self.cli.msg("liveview restored")
 
     def _list_media(self):
-        self._ensure_playback()
+        # request_list(playback_first=True) enters playback itself. Mark cli.playback
+        # so _restore_liveview knows to switch back — else the camera stays stuck in
+        # PLAYBACK and video freezes.
+        self.cli.playback = True
         try:
-            self.cli.media.request_list(0, 50)
-            self.cli.msg("media: list requested (result appears when the drone replies)")
+            self.cli.media.request_list()
+            self.cli.msg("media: list requested — files appear when drone replies")
         except Exception as e:
             self.cli.msg(f"media list error: {e}")
-            self._restore_liveview()   # don't leave drone stuck in playback on error
-
-    def _thumbnail_first(self):
-        self._ensure_playback()
-        files = self.cli.media.files
-        if not files:
-            self.cli.msg("media: list first (no files known yet)")
-            return
-        f = files[0]
-        self.cli._media_off = 0        # reset the reassembly offset for a new transfer
-        try:
-            self.cli.media.fetch_thumbnail(f, (f.file_name or "file") + ".thumb.jpg")
-            self.cli.msg(f"media: thumbnail {f.file_name} (grade 1; arrives on 0x27 push)")
-        except Exception as e:
-            self.cli.msg(f"media thumbnail error: {e}")
             self._restore_liveview()
 
-    def _download_first(self):
-        self._ensure_playback()
+    def _nav_file(self, delta: int):
+        """Move selection cursor through the known file list."""
         files = self.cli.media.files
         if not files:
-            self.cli.msg("media: list first (no files known yet)")
-            return
-        f = files[0]
-        self.cli._media_off = 0        # reset the reassembly offset for a new transfer
+            self.cli.msg("media: list first (no files known yet)"); return
+        self.cli.media_sel = (self.cli.media_sel + delta) % len(files)
+        idx = self.cli.media_sel
+        f = files[idx]
+        kind = "🎬" if f.is_video else "📷"
+        sz = f"{f.file_size/1_000_000:.1f}MB" if f.file_size else "?"
+        self.cli.msg(f"media: selected [{idx}/{len(files)-1}] {kind} {f.file_name}  {sz}")
+
+    def _selected_file(self):
+        """Return the currently selected MediaFile, or None with an error msg."""
+        files = self.cli.media.files
+        if not files:
+            self.cli.msg("media: list first (no files known yet)"); return None
+        idx = min(self.cli.media_sel, len(files) - 1)
+        return files[idx]
+
+    def _media_dest(self, name: str) -> str:
+        """Absolute path under ./media_downloads/, created on demand."""
+        import os
+        d = os.path.join(os.getcwd(), "media_downloads")
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, name)
+
+    def _download_selected(self):
+        """Download the full-resolution file for the selected entry."""
+        self._ensure_playback()
+        f = self._selected_file()
+        if not f: return
+        dest = self._media_dest(f.file_name or f"download_{f.file_index}.bin")
         try:
-            self.cli.media.download(f, f.file_name or "download.bin")
-            self.cli.msg(f"media: downloading {f.file_name}")
+            self.cli.media.download(f, dest)
+            self.cli.msg(f"media: downloading {f.file_name} → media_downloads/ (arrives on 0x27)")
         except Exception as e:
             self.cli.msg(f"media download error: {e}")
-            self._restore_liveview()
 
-    def _delete_first(self):
+    def _delete_selected(self):
+        """Delete the selected file from the SD card."""
         self._ensure_playback()
-        files = self.cli.media.files
-        if not files:
-            self.cli.msg("media: list first (no files known yet)")
-            return
+        f = self._selected_file()
+        if not f: return
         try:
-            self.cli.media.delete(files[0])
-            self.cli.msg(f"media: delete {files[0].file_name} requested")
+            self.cli.media.delete(f)
+            self.cli.msg(f"media: delete [{self.cli.media_sel}] {f.file_name} sent (ACK confirms)")
         except Exception as e:
             self.cli.msg(f"media delete error: {e}")
-            self._restore_liveview()
+
+    def _diagnose_media(self):
+        """Param sweep: LIST format is smali-confirmed correct but returns count=0,
+        so sweep storage×subType to find the combo the camera answers with count>0.
+        Watch the log for 'LIST PUSH: count=N' — any NON-ZERO marks the right params."""
+        import threading
+        self.cli.playback = True   # sweep enters playback; mark so liveview restores
+        self.cli.msg("diag: sweeping LIST params (storage×subType) — watch 'LIST PUSH: count='")
+
+        def run():
+            try:
+                self.cli.media.enter_playback()
+                self.cli.media.wait_playback_ready()
+                self.cli.media.sweep_list_params()
+                time.sleep(8.0)
+                self.cli.msg("diag: sweep done — check 'LIST PUSH: count=' lines for NON-ZERO")
+            except Exception as e:
+                self.cli.msg(f"diag error: {e}")
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _try(self, fn, msg):
         try:
@@ -1378,6 +1405,10 @@ def run_ui(cli: Client):
         surf.blit(f.render(text, True, col), (10, y))
 
     while cli.running:
+        # Close any media downloads that finished (no chunk for ~2s) and report them.
+        if cli.media:
+            for path, nbytes in cli.media.reap_finished_downloads():
+                cli.msg(f"media: saved {path} ({nbytes} bytes)")
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
                 cli.running = False
