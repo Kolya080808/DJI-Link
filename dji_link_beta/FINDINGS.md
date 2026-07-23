@@ -39,20 +39,38 @@ Assembled from 5 parallel agents. WM160 = **device ID 59 (UAV59)** in the app's 
 ## 1b. Media — SD card list / download / delete (confirmed ≥2 sources: MSDK v4 jar + app smali + dft lua)
 
 All on cmd_set **0x00** (non-encrypted), sender **0x02** (APP), receiver **0x01** (CAMERA).
-`0x00/0x20` (File List) and `0x00/0x1F` (File Data) are **NOT implemented on WM160** → hardware returns `0xE0 INVALID_CMD`.
+WM160 media rides the **litchis FileChannel**: outbound requests on `0x00/0x26` (RequestFile),
+camera replies on `0x00/0x27` (GetPushFile), deletes on `0x00/0x28`. The *operation* (List /
+File / Stream) is selected by the **inner FileChannel header**, not the outer cmd_id.
+Confirmed 2026-07 from app smali (`DataRequestList/File/Ack.doPack`, `FileSendPack.b`,
+`FileRecvPack`) cross-checked against hardware. `media.py` is the authoritative implementation.
 
-| step | cmd | payload | notes |
+**FileChannel header (10B, little-endian)** — same layout out and in:
+`[0]=0x4A ver1|hdrLen10` · `[1]=(cmdId<<5)|cmdType` · `[2:4]=len u16 (only low 12 bits; top nibble=flags)` · `[4:6]=sessionId u16` · `[6:10]=offset u32`
+- **cmdId** (inner): List=0 · File=1 · Stream=2 · Num=3
+- **cmdType**: REQUEST=0 · DATA=1 · ACK=2 · PUSH=3 · ABORT=4 · DEL=5 · PAUSE=6 · RESUME=7
+
+| step | cmd | inner payload | notes |
 |---|---|---|---|
 | 1. Enter playback | `0x02/0x10` | `[0x02]` | PLAYBACK mode; liveview freezes |
 | 2. Wait gate | — | — | poll `0x02/0x80` push byte[4]==2, OR `0x02/0x82` push arrival |
-| 3. Request list | `0x00/0x22` | `[0x00]` CURRENT / `[0x01]` NEXT | list does NOT come in ACK |
-| 4. List push | `0x00/0x24` ← | `[seq i32][records…]` | strip 4B prefix; ACK with `0x23[0x00]` |
-| 5. Request file | `0x00/0x26` | `[idx u32][subIdx u16=0][grade u8][count u8=1][off u32][size u32]` | grade: ORIGIN=0 THUMB=1 SCREEN=2 |
-| 6. Data push | `0x00/0x27` ← | `[hdr u32][dataLen u32][idx u32][nameLen u8][name][data]` | ACK each with `0x23[0x00]` |
+| 3. LIST req | `0x00/0x26` | hdr(List,REQ) + `[startIdx u32 (storage=top2 bits of byte3)][count u16][subType u8]` | subType ORG=0 THM=1 SCR=2 |
+| 4. LIST reply | `0x00/0x27` ← | hdr(List,PUSH) `inner[0:4]=result count`, then hdr(List,DATA) record chunks | records reassembled by header offset |
+| 5. FILE req | `0x00/0x26` | hdr(File,REQ) + file index + subType (ORG/THM/SCR) | download original or thumbnail |
+| 6. FILE data | `0x00/0x27` ← | hdr(File,DATA) chunks at header offset; first chunk has 13B meta prefix | strip meta on offset-0 chunk |
 | 7. Delete | `0x00/0x28` | `[count u16 LE][idx u32 LE …]` | count width capture-pending (watch 0xD6) |
-| 8. Exit playback | `0x02/0x10` | `[0x01]` | restores liveview |
+| 8. Exit playback | `0x02/0x10` | `[0x01]` | restores liveview + i-frame |
 
-**ACK** (`0x00/0x23`) payload is always `[0x00]` (1 byte) — required after each 0x24 and 0x27 push or camera stalls.
+**ACK** = a FileChannel frame with cmdType=ACK(2): inner `z(seek u32) + count(1B) + [offset u32 + len u32]×count`
+(from `DataRequestAck.doPack`). Whole-transfer pull = seek 0, one range `[0, 0xFFFFFFFF]`.
+
+> **OPEN (2026-07): LIST returns count=0.** Frame is byte-perfect against smali, camera ACKs and
+> replies with PUSH count=0 + ABORT for `storage=1/subType=0` — yet the drone holds **385 files**.
+> `0x00/0x26` reaches a live handler but enumerates empty; the right storage/subType combo (or a
+> required precondition) is unresolved. Next: `sweep_list_params()` sweeps storage×subType looking
+> for count>0. The litchis `DataRequest*` classes are **dead code in the app** (never called), but
+> the camera *firmware* implements FileChannel — so it's viable, we just build the frames ourselves.
+> P3 `DataCameraRequestSendFiles` (cmd_id `CmdIdCommon.l`) is an unexplored alternate download path.
 
 ---
 

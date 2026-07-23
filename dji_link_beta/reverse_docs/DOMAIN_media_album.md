@@ -1,12 +1,15 @@
 # DOMAIN: media_album — gallery, thumbnails, in-drone playback engine, in-app editor (WM160 / Mavic Mini 1)
 
-> **⚠ WM160 CORRECTION (2026-07-23, confirmed ≥2 sources: MSDK v4 jar + app smali + dft lua + hardware):**
+> **⚠ WM160 CORRECTION (updated 2026-07, confirmed: app smali `DataRequest*.doPack`/`FileSendPack`/`FileRecvPack` + hardware):**
 > `MEDIA_TRANSFER.md` and this doc's §1–2 table reference `0x00/0x20` (File List) and `0x00/0x1F` (File Data)
 > as the primary path. **These cmd_ids are NOT implemented on WM160 — hardware returns `0xE0 = INVALID_CMD`.**
-> The correct WM160 media sequence is:
-> `0x02/0x10 [0x02]` → wait `0x02/0x80` push byte[4]==2 → `0x00/0x22 [0x00]` → receive `0x00/0x24` push →
-> `0x00/0x26` (16B) → receive `0x00/0x27` chunks → ACK each with `0x00/0x23 [0x00]` → `0x00/0x28` delete.
-> See `media.py` for the authoritative implementation and `MEDIA_0XE0_RESEARCH_2026.md` for the root-cause.
+> WM160 media rides the **litchis FileChannel**: `0x00/0x26` (RequestFile) out, `0x00/0x27` (GetPushFile) in,
+> `0x00/0x28` delete. The operation (List/File/Stream) is chosen by the **inner FileChannel header**
+> `[0x4A][cmdId<<5|cmdType][len u16 (low 12 bits)][session u16][offset u32]`, not the outer cmd_id.
+> Sequence: `0x02/0x10 [0x02]` → wait `0x02/0x80` byte[4]==2 → LIST req `0x00/0x26` hdr(List,REQ) →
+> reply `0x00/0x27` hdr(List,PUSH count)+DATA → FILE req `0x00/0x26` hdr(File,REQ) → `0x00/0x27` data chunks.
+> **OPEN:** LIST currently returns count=0 for storage=1/subType=0 though the drone holds 385 files —
+> see `FINDINGS.md §1b` and `media.py sweep_list_params()`. `media.py` is the authoritative implementation.
 
 This document **extends** `MEDIA_TRANSFER.md`. It does **not** re-derive the wire protocol for
 LIST / DOWNLOAD / THUMBNAIL / DELETE / STORAGE — that is fully nailed there (the `ByteStream` serializer,

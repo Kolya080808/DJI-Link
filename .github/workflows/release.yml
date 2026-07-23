@@ -2,8 +2,10 @@ name: Release
 
 # A release runs ONLY on a git tag like v1.2.3 (or v1.2.3-rc1).
 # How to cut a release:
-#   1. Edit UPDATE.md (version / title / prerelease / changelog).
+#   1. Create/edit UPDATE.md (version / title / prerelease / changelog).
 #   2. git tag v1.2.3 && git push origin v1.2.3
+# If UPDATE.md is ABSENT the run skips gracefully (green, no release) — nothing to
+# publish. Adding UPDATE.md and pushing the tag again then releases normally.
 # The workflow then:
 #   - reads UPDATE.md and verifies its "version" matches the tag;
 #   - builds binaries/installers for every platform (Linux/macOS/Windows, 64- and 32-bit);
@@ -32,14 +34,31 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
+      skip:       ${{ steps.gate.outputs.skip }}
       version:    ${{ steps.parse.outputs.version }}
       title:      ${{ steps.parse.outputs.title }}
       prerelease: ${{ steps.parse.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
 
+      # No UPDATE.md at the repo root => nothing to release. Skip the whole run
+      # gracefully (green, not failed): the downstream jobs are gated on this. When
+      # UPDATE.md is later added, the next tag push releases normally.
+      - name: Gate on UPDATE.md presence
+        id: gate
+        run: |
+          set -euo pipefail
+          if [ -f UPDATE.md ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "UPDATE.md present — proceeding with release."
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::UPDATE.md not found — skipping release (add it, then push the tag again)."
+          fi
+
       - name: Parse UPDATE.md
         id: parse
+        if: steps.gate.outputs.skip != 'true'
         run: |
           python3 - <<'PY'
           import os, re
@@ -68,6 +87,7 @@ jobs:
           PY
 
       - name: Verify tag matches UPDATE.md version
+        if: steps.gate.outputs.skip != 'true'
         run: |
           set -euo pipefail
           tag_version="${GITHUB_REF_NAME#v}"
@@ -80,6 +100,7 @@ jobs:
           echo "OK: tag $GITHUB_REF_NAME matches UPDATE.md version $file_version"
 
       - name: Upload release notes
+        if: steps.gate.outputs.skip != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: release-notes
@@ -91,6 +112,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build:
     needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
     name: ${{ matrix.slug }}
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental || false }}
@@ -201,6 +223,7 @@ jobs:
   # ---------------------------------------------------------------------------
   pi-installer:
     needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -240,6 +263,7 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     needs: [prepare, build, pi-installer]
+    if: needs.prepare.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Download packages

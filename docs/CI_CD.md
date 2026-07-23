@@ -10,13 +10,16 @@ beta; CI ignores it).
 |------|------|--------------|
 | **CI** — compile-check + tests | `.github/workflows/ci.yml` | push to `main` / PR, **only when C++/CMake changed** |
 | **Lint** — formatting (clang-format) | `.github/workflows/lint.yml` | same, C++ only |
-| **Release** — binaries/installers + checksums | `.github/workflows/release.yml` | **only on a git tag `vX.Y.Z`** |
+| **Release** — binaries/installers + checksums | `.github/workflows/release.yml` | **only on a git tag `vX.Y.Z`**, and only if `UPDATE.md` exists |
 
 Small edits, feature experiments, and changes to the Python beta do **not** trigger heavy builds.
 
 ## How to cut a release
 
-1. Edit **`UPDATE.md`** at the repo root: `title`, `version`, `prerelease`, and the changelog.
+1. Create/edit **`UPDATE.md`** at the repo root: `title`, `version`, `prerelease`, and the changelog.
+   (Start from `UPDATE.md.template`.) **No `UPDATE.md` = no release:** if the file is absent when
+   the tag is pushed, the workflow skips gracefully (a green run, nothing published). Add `UPDATE.md`
+   and push the tag again to release.
 2. Commit it.
 3. Tag with the same version and push:
    ```bash
