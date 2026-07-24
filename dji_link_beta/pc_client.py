@@ -378,6 +378,15 @@ class Client:
                     except Exception:
                         pass
             self.tele.feed_packet(p)
+            # SAT debug: green LED means GPS-locked, but HUD shows SAT=0 → the sat-count
+            # offset (0x24, reverse-guessed) is likely wrong. Log the raw OSD-common push
+            # + the parsed values once per second so the true offset can be found offline.
+            if (p.cmd_set == 0x03 and p.cmd_id == 0x43 and p.sender != 0x02
+                    and time.time() - getattr(self, "_sat_dbg_t", 0) > 1.0):
+                self._sat_dbg_t = time.time()
+                st = self.tele.state
+                log(f"[sat] OSD 0x43 len={len(p.payload)} sats={st.satellites} "
+                    f"gps_lvl={st.gps_level} raw@0x20..0x2c={p.payload[0x20:0x2c].hex()}")
 
     def start_rx(self):
         threading.Thread(target=self._rx_loop, daemon=True).start()
@@ -650,8 +659,39 @@ def run_console_cmd(cli: Client, line: str):
             pl = bytes.fromhex(args[2]) if len(args) > 2 and args[2] != "-" else b""
             recv = int(args[3], 0) if len(args) > 3 else DEV_FC
             d.send_raw(cs, cid, pl, receiver=recv); cli.msg(f"raw {cs:#x}/{cid:#x} -> {recv:#x}")
+        elif c in ("fetchmedia", "fm"):
+            # Brute-fetch files by RAW index over the FileChannel (0x00/0x26 File), bypassing
+            # the broken LIST. Sweep indices [from..to] with a delay, dump whatever the camera
+            # sends to media_downloads/, then return to liveview.
+            #   fetchmedia <from> <to> [delay_s]
+            import threading as _t, os as _os
+            lo = int(args[0]) if args else 0
+            hi = int(args[1]) if len(args) > 1 else lo
+            delay = float(args[2]) if len(args) > 2 else 1.0
+            if not cli.media:
+                cli.msg("fetchmedia: no media client"); return
+            ddir = _os.path.join(_os.getcwd(), "media_downloads"); _os.makedirs(ddir, exist_ok=True)
+            def _sweep():
+                cli.media.enter_playback()
+                cli.media.wait_playback_ready()
+                cli.msg(f"fetchmedia: sweeping index {lo}..{hi} (delay {delay}s) → media_downloads/")
+                for idx in range(lo, hi + 1):
+                    dest = _os.path.join(ddir, f"DJI_{idx:04d}.bin")
+                    cli.media.fetch_index(idx, dest)
+                    cli.msg(f"fetchmedia: requested index {idx}")
+                    time.sleep(delay)
+                time.sleep(2.0)                       # let last chunks / reaper settle
+                cli.media.close_file()                # flush any open transfers
+                # Return to liveview: exit playback + restart stream.
+                try:
+                    d.exit_playback(); d.start_liveview(); d.request_i_frame()
+                except Exception:
+                    pass
+                cli.playback = False
+                cli.msg("fetchmedia: done — liveview restored, check media_downloads/ + [media] log")
+            _t.Thread(target=_sweep, daemon=True).start()
         elif c == "help":
-            cli.msg("takeoff land rth control on|off gs on|off home here|<lat> <lon> setalt <m> setdist <m> rthalt <m> rp height|radius gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> raw <set> <id> <hex> [recv]")
+            cli.msg("takeoff land rth control on|off gs on|off home here|<lat> <lon> setalt <m> setdist <m> rthalt <m> rp height|radius gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> fetchmedia <from> <to> [delay] raw <set> <id> <hex> [recv]")
         else:
             cli.msg(f"unknown command: {c} (help)")
     except Exception as e:
@@ -1643,6 +1683,7 @@ def main() -> int:
     base_live = not args.dry     # --dry blocks flight; --sim forces it off below
     first = True                 # CLI flags pin the connection on the FIRST run only;
                                  # "Exit to main menu" then drops to the graphical menu.
+    last_pi_host = None          # remember the Pi we connected to → fast re-connect (no rescan)
     while True:
       # ---- choose a connection (flags first run, else the graphical menu) ----
       if first and args.sim:
@@ -1657,8 +1698,11 @@ def main() -> int:
             pygame.init()
         surf = pygame.display.get_surface() or pygame.display.set_mode((900, 600), pygame.RESIZABLE)
         pygame.display.set_caption("DJI Mavic Mini 1 — PC control")
-        spec = gui.preflight(surf, pygame.time.Clock(), netfind, applog.tail, default_serial="")
+        spec = gui.preflight(surf, pygame.time.Clock(), netfind, applog.tail,
+                             default_serial="", saved_host=last_pi_host)
       first = False
+      if spec.get("mode") == "pi":
+          last_pi_host = spec.get("host")   # reuse on the next menu re-entry
 
       if spec["mode"] == "quit":
         log("[menu] quit")

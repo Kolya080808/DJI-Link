@@ -1,7 +1,7 @@
 ---
-title: DJI Link v1.0.0 — Initial Release
-version: 1.0.0
-prerelease: false
+title: DJI Link v0.5.0 — pre-release with all functions availible in DJI Link beta
+version: 0.5.0
+prerelease: true
 ---
 
 ## Highlights
@@ -10,15 +10,21 @@ prerelease: false
 
 ## Added
 
-- ...
+- All funcs from beta:
+    - Camera:
+        - rec, photo, mode
+        - some small changes to Playback mode
+    - Flying
+    - RTH
+    - Land and takeoff.
 
 ## Changed
 
-- ...
+0 changes.
 
 ## Fixed
 
-- ...
+0 fixes.
 
 <!--
 How to cut a release:

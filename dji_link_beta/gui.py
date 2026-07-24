@@ -300,10 +300,11 @@ class DiscoveryScreen(Screen):
 
     result: (host, port) on success, None on back, 'quit' on window close.
     """
-    def __init__(self, surf, clock, netfind, log_lines):
+    def __init__(self, surf, clock, netfind, log_lines, saved_host=None):
         super().__init__(surf, clock, "Finding the Raspberry Pi")
         self.nf = netfind
         self.log_lines = log_lines          # callable -> list[str] (shared app log tail)
+        self.saved_host = saved_host        # Pi address from earlier this session (fast re-connect)
         self.state = "scanning"             # scanning | wifi | ready | done | failed
         self.host = None
         self.port = netfind.BRIDGE_PORT
@@ -329,7 +330,9 @@ class DiscoveryScreen(Screen):
         self.state = "scanning"
         def work():
             try:
-                self.disc = self.nf.discover()
+                # saved_host makes find_on_lan() try the known Pi first (one quick port
+                # check) before any LAN sweep / AP-join — instant on a re-connect.
+                self.disc = self.nf.discover(saved_host=self.saved_host)
             except Exception as e:      # noqa: BLE001 — surface any netfind failure on screen
                 self._err = str(e)
         self._worker = threading.Thread(target=work, daemon=True)
@@ -455,13 +458,17 @@ class SerialScreen(Screen):
 
 # ============================================================ orchestrator
 
-def preflight(surf, clock, netfind, log_tail, default_serial=""):
+def preflight(surf, clock, netfind, log_tail, default_serial="", saved_host=None):
     """Run menu -> (discovery | serial | sim) and return a connection spec dict:
         {"mode": "pi",     "host": h, "port": p}
         {"mode": "serial", "port": "COM3"}
         {"mode": "sim"}
         {"mode": "quit"}
     Loops back to the menu on Back, so the user can change their mind.
+
+    saved_host: the Pi address used earlier this session. Passed to discovery so a
+    re-connect tries the known host first (one port-check) instead of a full LAN
+    sweep + AP-join dance every time.
     """
     while True:
         choice = MenuScreen(surf, clock).run()
@@ -477,7 +484,7 @@ def preflight(surf, clock, netfind, log_tail, default_serial=""):
                 return {"mode": "serial", "port": port}
             continue     # back to menu
         if choice == "connect":
-            res = DiscoveryScreen(surf, clock, netfind, log_tail).run()
+            res = DiscoveryScreen(surf, clock, netfind, log_tail, saved_host=saved_host).run()
             if res == "quit":
                 return {"mode": "quit"}
             if isinstance(res, tuple):

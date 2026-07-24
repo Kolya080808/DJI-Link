@@ -289,6 +289,11 @@ class MediaClient:
         """Larger preview (subType=SCR)."""
         self._start_file(mf, dest, SUB_SCR)
 
+    def fetch_index(self, index: int, dest: str, sub_type: int = SUB_ORG) -> None:
+        """Request a file by RAW index (no MediaFile object needed) — for the brute
+        probe that bypasses the broken LIST. Data streams back as 0x00/0x27 FILE frames."""
+        self._start_file(MediaFile(file_index=index, file_name=dest), dest, sub_type)
+
     def _start_file(self, mf: MediaFile, dest: str, sub_type: int) -> None:
         sess = self._new_session()
         inner = bytearray(16)
