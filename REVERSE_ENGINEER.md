@@ -22,8 +22,10 @@ DUML frames have a fixed shape:
 
 The two CRCs use non-standard seeds (CRC-8 seed `0x77`, CRC-16 seed `0x3692`), recovered
 from `libsdk_jni.so` and confirmed byte-for-byte against real frames (the `GetVersion`
-frame `55 0d 04 33 …`). Every device has an address: PC `0x0a`, remote `0x06`, flight
-controller `0x03`, gimbal `0x04`, camera `0x01`, battery `0x0d`.
+frame `55 0d 04 33 …`). Every device has an address: mobile app `0x02`, flight
+controller `0x03`, gimbal `0x04`, camera `0x01`, battery `0x0d`. The C++ client
+intentionally speaks as the mobile app (`0x02`), not as DJI Assistant/PC (`0x0a`), because
+the latter path can trigger assistant-protected motor locking on WM160.
 
 ## Step 2 — the command table
 
@@ -92,13 +94,26 @@ fly the drone:
   4.13; the app has three candidate stick encodings, and which the WM160 firmware accepts
   is settled on real hardware.
 
-## Step 7 — diagnostics
+## Step 7 — C++ desktop client
+
+The current production client is the C++ rewrite under `src/`: protocol core, composite
+demux, telemetry, flight control, camera/gimbal commands, transports, logging, Pi discovery,
+auto-updater, and the SDL2 GUI. The historical Python app remains in `dji_link_beta/` as
+the research/beta reference; media handling and GPS parsing are deliberately not ported yet
+because those Python paths are still unfinished.
+
+Release packages are native for Windows/macOS/Linux and bundle the `ffmpeg` video runtime.
+The Raspberry Pi jump-host is installed from GitHub Releases by `install-pi.sh`, which
+sets up `dwc2`, `raw_gadget`, Wi-Fi/AP control, the AOA bridge service, and a Pi
+auto-update timer.
+
+## Step 8 — diagnostics
 
 The app shows human-readable reasons for failures (e.g. "unable to take off — no
 satellite positioning"). Those texts turned out to be **fully local**, not fetched from a
 server: an alarm-id maps through a bundled config to a diagnostic code, and the code maps
-to a string resource. Recovering that chain yielded **743 diagnostic codes with English
-text** — so the PC app can explain exactly why the motors won't start, just like the phone.
+to a string resource. Recovering that chain yielded the diagnostic tables used by the
+desktop app — so the PC app can explain why the motors won't start, just like the phone.
 
 ## What can't be done offline
 
@@ -106,6 +121,8 @@ text** — so the PC app can explain exactly why the motors won't start, just li
   requires a runtime capture.
 - DJI's server walls — no-fly-zone/geo unlock, first activation of a factory-reset unit,
   anti-theft binding — need DJI's servers and can't be replicated offline.
+- Media list/download/delete and GPS-coordinate parsing remain intentionally outside the
+  current C++ port until the Python beta implementations are verified.
 - The Mini 1 has no obstacle sensors, so any automated flight is blind.
 
 ---

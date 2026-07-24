@@ -1,69 +1,92 @@
-# Pi Zero 2 W — USB-gadget bridge to the DJI remote controller
+# Pi Zero 2 W — release bridge to the DJI remote controller
 
-The Pi pretends to be a phone in front of the Mavic Mini 1 remote controller (passes AOA as
-`DJI/com.dji.logiclink`), while the laptop sends commands over Wi-Fi. The remote controller remains the radio bridge
-to the drone.
+The Pi pretends to be the DJI Fly phone accessory in front of the Mavic Mini 1 remote
+controller (`DJI/com.dji.logiclink`). The native C++ desktop app sends commands and
+receives telemetry/video over Wi-Fi; the Pi only forwards bytes.
 
 ```
-[Laptop: dji_accessory.py --keyboard --pi PI_IP] --TCP/Wi-Fi--> [Pi: bridge.py] --USB(AOA)--> [Remote controller] ))) [Drone]
+[PC: dji-link C++ app] --TCP/Wi-Fi--> [Pi: dji-bridge.service] --USB(AOA)--> [Remote controller] ))) [Drone]
 ```
 
 ## Files
-| file | what |
+
+| File | What |
 |------|------|
-| `raw_gadget.py` | wrapper over `/dev/raw-gadget` (ioctls checked against the UAPI) |
-| `aoa_device.py` | AOA device emulator: 51/52/53 handshake + re-enumeration into accessory + bulk |
-| `bridge.py` | AOA ↔ TCP bridge for the laptop |
-| `setup_gadget.sh` | enables dwc2/raw_gadget, finds the UDC |
+| `install.sh` | stamped GitHub Release bootstrap published as `install-pi.sh` |
+| `setup_pi.sh` | full Pi bring-up: packages, `dwc2`, `raw_gadget`, services |
+| `update_pi.sh` | non-interactive updater run by `dji-update.timer` when internet is available |
+| `netctl.py` | Wi-Fi/AP HTTP API on `:9911` used by the C++ discovery screen |
+| `bridge.py` | AOA ↔ TCP bridge on `:9910` |
+| `aoa_device.py` | AOA device emulator: 51/52/53 handshake, re-enumeration, bulk endpoints |
+| `raw_gadget.py` | wrapper over `/dev/raw-gadget` |
+| `build_raw_gadget.sh` / `setup_gadget.sh` | low-level gadget helpers used by setup/debugging |
 
-## One-line install (recommended, from a release)
+## One-line install from the latest release
 
-On a clean Pi this does everything — dwc2, the `raw_gadget` module, and a boot service
-that auto-starts the bridge on every power-up:
+On a clean Pi this installs everything in one pass: `dwc2`, the `raw_gadget` module,
+NetworkManager Wi-Fi/AP support, the AOA bridge service, and the auto-update timer.
 
 ```bash
 curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh | sudo bash
 ```
 
-After it finishes (and one first-time reboot if asked), the `dji-bridge` service comes up by
-itself whenever the Pi is powered — nothing to launch by hand. See `docs/CI_CD.md`.
+Direct latest links:
+- `https://github.com/Kolya080808/DJI-Link/releases/latest`
+- `https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh`
+- `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-pi.tar.gz`
+
+After install, `dji-netctl.service`, `dji-bridge.service`, and `dji-update.timer` are
+enabled. A first-time `dwc2` change requires one reboot; after that the Pi is ready on
+every power-up without manual commands.
 
 ## Manual installation on the Pi
-```bash
-sudo bash setup_pi.sh --service    # full bring-up + boot service (the first time asks for a reboot)
-# or the minimal gadget-only path:
-sudo bash setup_gadget.sh          # the first time it will ask for a reboot
-sudo bash setup_gadget.sh          # after the reboot: shows the UDC name (e.g. 20980000.usb)
-```
-Important: plug the Pi Zero into the remote controller **via the middle port (USB), not PWR** — only that one carries data.
 
-## Running
-On the Pi:
-```bash
-sudo python3 bridge.py --udc 20980000.usb
-```
-On the laptop:
-```bash
-python3 ../dji_accessory.py --keyboard --pi 192.168.x.x
-```
-Press WASD/Space/Shift — frames go through the Pi to the remote controller.
+Use this only while developing the Pi bundle locally:
 
-## How to test step by step (important — a USB gadget is always finalized on hardware)
-1. **Without the remote controller, against an ordinary PC/phone host.** Plug the Pi into your laptop/PC.
-   On the PC: `lsusb` should first show `18d1:4ee1`, and after the AOA handshake —
-   `18d1:2d01`. You can run the handshake with our laptop-side `aoa.py`
-   (`python3 ../dji_accessory.py --scan`). This proves the gadget works,
-   without any risk to the drone.
-2. **Watch `dmesg -w` on the Pi and on the host** — there you can see enumeration, reset, EP errors.
-3. **Then the remote controller.** If after `START` the bridge log shows
-   `Remote controller identified itself: {0:'DJI',1:'com.dji.logiclink'...}` — the remote controller has accepted the
-   Pi as a phone. Next we check DUML.
+```bash
+sudo bash setup_pi.sh --service
+sudo systemctl status dji-netctl dji-bridge dji-update.timer
+```
 
-## What is still NOT finished (honestly)
-- **Exact WM160 stick DUML commands** — stubs in `../drone.py`/`../control.py`.
-  This is exactly the rig for capturing them: we log what the remote controller sends when the
-  real sticks move (if we temporarily leave a real phone in place and sniff), or we
-  correlate the responses.
-- `aoa_device.py` — a working beta, but the specific UDC (dwc2) may require tweaks
-  (timings, ZLP, max packet). That is the normal process for gadget code.
-- Video stream (H.264) — a separate layer, we are not touching it yet.
+For gadget-only debugging:
+
+```bash
+sudo bash setup_gadget.sh
+sudo reboot          # only if setup reports that dwc2 changed
+sudo bash setup_gadget.sh
+```
+
+Plug the Pi Zero into the remote controller through the **USB** port, not **PWR**. Only
+the USB port carries data.
+
+## Services
+
+- `dji-netctl.service` runs `netctl.py serve` and exposes Pi Wi-Fi/AP control on `:9911`.
+- `dji-bridge.service` runs `bridge.py` and exposes the AOA byte stream on `:9910`.
+- `dji-update.timer` runs every 6 hours, checks GitHub Releases when internet is
+  available, and re-runs `install-pi.sh` only when the latest tag changed.
+
+Useful logs:
+
+```bash
+journalctl -u dji-netctl -f
+journalctl -u dji-bridge -f
+journalctl -u dji-update -f
+```
+
+## Hardware test
+
+1. Without the remote controller, plug the Pi into a normal PC/phone host and watch
+   `dmesg -w` on both sides. The host should first see `18d1:4ee1`, then `18d1:2d01`
+   after the AOA handshake.
+2. Then plug the Pi into the remote controller. If the bridge log prints
+   `Remote controller identified itself: {0:'DJI',1:'com.dji.logiclink'...}`, the remote
+   accepted the Pi as the phone accessory.
+3. Launch the installed desktop app (`dji-link`) on the PC. The discovery screen should
+   find the Pi and connect through `:9910` / `:9911`.
+
+## Scope
+
+The Pi bundle intentionally does not parse DUML, telemetry, video, GPS, or media. Those
+belong to the native C++ app on the PC. The Pi is a jump-host: USB accessory emulation,
+Wi-Fi/AP control, AOA↔TCP forwarding, boot services, and release auto-update.

@@ -126,9 +126,11 @@ jobs:
           - { slug: linux-x86,       os: ubuntu-22.04,     generators: 'TGZ',
               cmake_extra: '-DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32',
               experimental: true }
-          # ---- macOS: universal2 (Intel + Apple Silicon) in .dmg + .tar.gz ----
-          - { slug: macos-universal, os: macos-14,         generators: 'TGZ;DragNDrop',
-              osx_archs: 'arm64;x86_64' }
+          # ---- macOS: per-arch DMGs, each bundling a matching ffmpeg binary ----
+          - { slug: macos-arm64,      os: macos-14,         generators: 'TGZ;DragNDrop',
+              osx_archs: 'arm64' }
+          - { slug: macos-x86_64,     os: macos-13,         generators: 'TGZ;DragNDrop',
+              osx_archs: 'x86_64' }
           # ---- Windows: MSI installer (WiX) + portable .zip ----
           - { slug: windows-x64,     os: windows-latest,   generators: 'WIX;ZIP',
               msvc_arch: x64,   cpack_extra: '-D CPACK_WIX_ARCHITECTURE=x64' }
@@ -163,15 +165,118 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rpm
 
+      - name: Bundle ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $chocoArgs = @("install", "ffmpeg", "-y", "--no-progress")
+          if ("${{ matrix.msvc_arch }}" -eq "x86") { $chocoArgs += "--x86" }
+          choco @chocoArgs
+          $ffmpeg = Get-ChildItem "$env:ChocolateyInstall\lib\ffmpeg" -Recurse -Filter ffmpeg.exe |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $ffmpeg) { $ffmpeg = (Get-Command ffmpeg.exe).Source }
+          New-Item -ItemType Directory -Force third_party/ffmpeg/bin | Out-Null
+          Copy-Item (Join-Path (Split-Path $ffmpeg -Parent) "*") third_party/ffmpeg/bin -Recurse -Force
+          $bundled = ((Resolve-Path third_party/ffmpeg/bin/ffmpeg.exe).Path).Replace('\', '/')
+          $bundleDir = ((Resolve-Path third_party/ffmpeg/bin).Path).Replace('\', '/')
+          "DJI_LINK_BUNDLED_FFMPEG=$bundled" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
+          "DJI_LINK_BUNDLED_FFMPEG_DIR=$bundleDir" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Bundled ffmpeg: $ffmpeg"
+
+      - name: Bundle ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install ffmpeg
+          mkdir -p third_party/ffmpeg/bin third_party/ffmpeg/lib
+          cp "$(command -v ffmpeg)" third_party/ffmpeg/bin/ffmpeg
+          chmod +x third_party/ffmpeg/bin/ffmpeg
+
+          copy_deps() {
+            local target="$1"
+            otool -L "$target" | tail -n +2 | awk '{print $1}' | while read -r lib; do
+              case "$lib" in
+                /usr/lib/*|/System/*|@rpath/*|@loader_path/*|@executable_path/*) continue ;;
+              esac
+              local base
+              base="$(basename "$lib")"
+              if [ ! -f "third_party/ffmpeg/lib/$base" ]; then
+                cp "$lib" "third_party/ffmpeg/lib/$base"
+                chmod u+w "third_party/ffmpeg/lib/$base"
+                copy_deps "third_party/ffmpeg/lib/$base"
+              fi
+            done
+          }
+          copy_deps third_party/ffmpeg/bin/ffmpeg
+
+          patch_refs() {
+            local target="$1"
+            otool -L "$target" | tail -n +2 | awk '{print $1}' | while read -r lib; do
+              case "$lib" in
+                /usr/lib/*|/System/*) continue ;;
+              esac
+              local base
+              base="$(basename "$lib")"
+              install_name_tool -change "$lib" "@loader_path/../lib/$base" "$target" || true
+            done
+          }
+          patch_refs third_party/ffmpeg/bin/ffmpeg
+          for dylib in third_party/ffmpeg/lib/*.dylib; do
+            [ -e "$dylib" ] || continue
+            install_name_tool -id "@loader_path/../lib/$(basename "$dylib")" "$dylib" || true
+            patch_refs "$dylib"
+          done
+
+          {
+            echo "DJI_LINK_BUNDLED_FFMPEG=$PWD/third_party/ffmpeg/bin/ffmpeg"
+            echo "DJI_LINK_BUNDLED_FFMPEG_LIB_DIR=$PWD/third_party/ffmpeg/lib"
+          } >> "$GITHUB_ENV"
+          echo "Bundled ffmpeg:"
+          find third_party/ffmpeg -maxdepth 2 -type f | sort
+
+      - name: Bundle ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.slug }}" in
+            linux-x86_64) ffarch=amd64 ;;
+            linux-arm64)  ffarch=arm64 ;;
+            linux-x86)    ffarch=i686 ;;
+            *) echo "::error::unknown Linux ffmpeg arch for ${{ matrix.slug }}"; exit 1 ;;
+          esac
+          mkdir -p third_party/ffmpeg/bin
+          curl -fL "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${ffarch}-static.tar.xz" \
+            -o /tmp/ffmpeg-static.tar.xz
+          tar -xJf /tmp/ffmpeg-static.tar.xz -C /tmp
+          cp /tmp/ffmpeg-*-static/ffmpeg third_party/ffmpeg/bin/ffmpeg
+          chmod +x third_party/ffmpeg/bin/ffmpeg
+          third_party/ffmpeg/bin/ffmpeg -version
+          echo "DJI_LINK_BUNDLED_FFMPEG=$PWD/third_party/ffmpeg/bin/ffmpeg" >> "$GITHUB_ENV"
+
       - name: Configure
         shell: bash
         run: |
           set -euo pipefail
+          ffmpeg_args=()
+          if [ -n "${DJI_LINK_BUNDLED_FFMPEG:-}" ]; then
+            ffmpeg_args+=("-DDJI_LINK_BUNDLED_FFMPEG=${DJI_LINK_BUNDLED_FFMPEG}")
+          fi
+          if [ -n "${DJI_LINK_BUNDLED_FFMPEG_DIR:-}" ]; then
+            ffmpeg_args+=("-DDJI_LINK_BUNDLED_FFMPEG_DIR=${DJI_LINK_BUNDLED_FFMPEG_DIR}")
+          fi
+          if [ -n "${DJI_LINK_BUNDLED_FFMPEG_LIB_DIR:-}" ]; then
+            ffmpeg_args+=("-DDJI_LINK_BUNDLED_FFMPEG_LIB_DIR=${DJI_LINK_BUNDLED_FFMPEG_LIB_DIR}")
+          fi
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DDJI_LINK_VERSION="${{ needs.prepare.outputs.version }}" \
             ${{ matrix.osx_archs && format('-DCMAKE_OSX_ARCHITECTURES="{0}" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0', matrix.osx_archs) || '' }} \
-            ${{ matrix.cmake_extra || '' }}
+            ${{ matrix.cmake_extra || '' }} \
+            "${ffmpeg_args[@]}"
 
       - name: Build
         shell: bash
@@ -208,6 +313,47 @@ jobs:
           echo "Packaged artifacts:"
           ls -la dist
 
+      - name: Create stable latest-download aliases
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.prepare.outputs.version }}"
+          base="${PROJECT}-${version}-${{ matrix.slug }}"
+          shopt -s nullglob
+          for path in dist/"$base".*; do
+            name="$(basename "$path")"
+            ext="${name#${base}.}"
+            alias="dist/${PROJECT}-${{ matrix.slug }}.${ext}"
+            cp "$path" "$alias"
+            echo "alias: $(basename "$path") -> $(basename "$alias")"
+          done
+          echo "Release artifacts including stable aliases:"
+          ls -la dist
+
+      - name: Verify install tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf verify-install
+          cmake --install build --config Release --prefix "$PWD/verify-install"
+          case "$RUNNER_OS" in
+            Windows)
+              test -f verify-install/bin/dji-link.exe
+              test -f verify-install/bin/ffmpeg.exe
+              ;;
+            macOS)
+              test -x verify-install/dji-link.app/Contents/MacOS/dji-link
+              test -x verify-install/dji-link.app/Contents/Resources/bin/ffmpeg
+              verify-install/dji-link.app/Contents/Resources/bin/ffmpeg -version >/dev/null
+              otool -L verify-install/dji-link.app/Contents/Resources/bin/ffmpeg
+              ;;
+            Linux)
+              test -x verify-install/bin/dji-link
+              test -x verify-install/bin/ffmpeg
+              verify-install/bin/ffmpeg -version >/dev/null
+              ;;
+          esac
+
       - name: Upload packages
         uses: actions/upload-artifact@v7
         with:
@@ -235,6 +381,8 @@ jobs:
           # Everything the Pi needs at runtime (transparent AOA<->TCP bridge + setup).
           cp dji_link_beta/pi/*.py dji_link_beta/pi/*.sh stage/pi/
           cp dji_link_beta/pi/README.md stage/pi/ 2>/dev/null || true
+          bash -n stage/pi/*.sh
+          python3 -m py_compile stage/pi/*.py
           tar -czf dist/dji-link-pi.tar.gz -C stage pi
           echo "Bundle contents:"
           tar -tzf dist/dji-link-pi.tar.gz
@@ -247,6 +395,7 @@ jobs:
               -e "s|@@ASSET@@|dji-link-pi.tar.gz|g" \
               dji_link_beta/pi/install.sh > dist/install-pi.sh
           chmod +x dist/install-pi.sh
+          bash -n dist/install-pi.sh
           echo "----- stamped install-pi.sh header -----"
           head -n 20 dist/install-pi.sh
 
@@ -278,6 +427,30 @@ jobs:
         with:
           name: release-notes
           path: notes
+
+      - name: Verify stable latest-download aliases
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          required=(
+            dji-link-linux-x86_64.tar.gz
+            dji-link-linux-x86_64.deb
+            dji-link-linux-x86_64.rpm
+            dji-link-linux-arm64.tar.gz
+            dji-link-linux-arm64.deb
+            dji-link-linux-arm64.rpm
+            dji-link-macos-arm64.dmg
+            dji-link-macos-arm64.tar.gz
+            dji-link-macos-x86_64.dmg
+            dji-link-macos-x86_64.tar.gz
+            dji-link-windows-x64.msi
+            dji-link-windows-x64.zip
+            install-pi.sh
+            dji-link-pi.tar.gz
+          )
+          for f in "${required[@]}"; do
+            test -f "$f" || { echo "::error::missing stable latest asset: $f"; exit 1; }
+          done
 
       - name: Generate SHA256 checksums
         working-directory: dist

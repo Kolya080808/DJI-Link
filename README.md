@@ -1,8 +1,8 @@
 # DJI Link
 
 **Fly a DJI Mavic Mini 1 (WM160) from your computer** — live video, telemetry, and full
-flight control from the keyboard and mouse, without the phone app. A Raspberry Pi acts as
-a small bridge to the remote controller; the PC does everything else.
+flight control from a native Windows/Linux/macOS app, without the phone app. A Raspberry
+Pi acts as a small bridge to the remote controller; the PC does everything else.
 
 There is no official desktop SDK for the Mini 1, so DJI Link is built directly on the
 drone's own **DUML** protocol, reverse-engineered from the DJI Fly app.
@@ -18,25 +18,26 @@ drone's own **DUML** protocol, reverse-engineered from the DJI Fly app.
 ## Features
 
 - **Live video** from the drone (H.265/HEVC), decoded into the app window.
-- **Telemetry** — attitude, altitude, speed, battery, GPS/satellites, flight mode, and
-  plain-language reasons when the motors refuse to start (743 decoded diagnostic codes).
+- **Telemetry** — attitude, altitude, speed, battery, flight mode, home flag, and
+  plain-language reasons when the motors refuse to start (decoded diagnostic tables).
 - **Flight control** — takeoff, land, return-to-home, arm/disarm, and continuous **virtual-stick
   flight** (hardware-verified: `0x03/0x8E` DataFlycJoystick; spectator-style — mouse to look/turn,
   WASD to move, Space/Shift for throttle). Control auto-enables once the takeoff settles, and hands
   back to the remote on release. Flight modes Cine/Normal/Sport.
 - **Gimbal & camera** — tilt with the mouse, photo, record (R toggles), zoom, ISO/shutter/EV.
 - **Settings panel** (Esc) — max altitude and distance (up to the drone's 500 m ceiling,
-  no unlock needed), home point (current or explicit GPS), exposure, camera mode.
-- **Console** — send any raw DUML command; the entire reversed command surface is reachable.
-- **Zero-config launch** — `python pc_client.py` finds the Pi, connects, and walks you
-  through powering on the link.
+  no unlock needed), RTH altitude, home-to-current, exposure, camera mode.
+- **Console** — run native flight/gimbal/camera/raw DUML commands from the GUI or
+  `--console`, with media commands intentionally left out until that path is finished.
+- **Zero-config launch** — the installed `dji-link` app finds the Pi, connects, and walks
+  you through powering on the link.
 
 ---
 
 ## How it works
 
 ```
-[ PC — the brain, Python ]  --Wi-Fi-->  [ Pi — dumb bridge ]  --USB-->  [ remote ]  )))  [ drone ]
+[ PC — the brain, C++ app ] --Wi-Fi-->  [ Pi — dumb bridge ]  --USB-->  [ remote ]  )))  [ drone ]
    video · telemetry · control                (forwards bytes)
 ```
 
@@ -60,7 +61,7 @@ Full protocol write-up: **[`dji_link_beta/reverse_docs/`](dji_link_beta/reverse_
 | Bridge | Raspberry Pi **Zero 2 W** (any Pi with USB OTG / `dwc2` peripheral mode works) |
 | SD card | ≥ 8 GB (16 GB recommended), Raspberry Pi OS (Bookworm, 64-bit) |
 | Cables | A **data** USB cable from the Pi's USB port to the remote (the phone cable); separate power for the Pi |
-| PC | Windows/Linux/macOS with Python 3.9+ and ffmpeg |
+| PC | Windows 10/11, Linux, or macOS |
 
 The Pi only forwards bytes, so 512 MB RAM (the Zero 2 W) is plenty.
 
@@ -69,35 +70,65 @@ The Pi only forwards bytes, so 512 MB RAM (the Zero 2 W) is plenty.
 ## Install
 
 ### PC
-```bash
-pip install pyserial pygame          # or: py -m pip install pyserial pygame
-# ffmpeg (for video):
-#   Windows:  winget install ffmpeg
-#   macOS:    brew install ffmpeg
-#   Linux:    sudo apt install ffmpeg
-```
+Download the native installer for your OS from GitHub Releases:
+
+Latest release page:
+`https://github.com/Kolya080808/DJI-Link/releases/latest`
+
+Direct latest installers:
+
+| Platform | Installer |
+|----------|-----------|
+| Windows x64 | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x64.msi` |
+| Windows x86 | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x86.msi` |
+| Windows arm64 | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-arm64.msi` |
+| macOS Apple Silicon | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-arm64.dmg` |
+| macOS Intel | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-x86_64.dmg` |
+| Linux x86_64 `.deb` | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-x86_64.deb` |
+| Linux arm64 `.deb` | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-arm64.deb` |
+| Linux x86_64 `.rpm` | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-x86_64.rpm` |
+| Linux arm64 `.rpm` | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-arm64.rpm` |
+
+Portable latest archives:
+- Windows x64: https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x64.zip
+- macOS Apple Silicon: https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-arm64.tar.gz
+- macOS Intel: https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-x86_64.tar.gz
+- Linux x86_64: https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-x86_64.tar.gz
+- Linux arm64: https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-arm64.tar.gz
+
+Live video needs `ffmpeg`, and release packages bundle it at package time:
+
+- Windows `.msi` includes `ffmpeg.exe` in the installed app directory.
+- macOS `.dmg` includes an architecture-matching `ffmpeg` inside the `.app` bundle.
+- Linux `.deb` / `.rpm` / `.tar.gz` include a static `ffmpeg` binary in `bin/`.
+
+The app itself never installs dependencies at runtime. Portable release archives include
+the same bundled `ffmpeg`; local developer builds can also use `ffmpeg` from `PATH`.
 
 ### Raspberry Pi
-Flash Raspberry Pi OS, enable SSH, then on the Pi:
+Flash Raspberry Pi OS, enable SSH, then run the latest release installer on the Pi:
 ```bash
-git clone https://github.com/Kolya080808/DJI-Link.git
-cd DJI-Link/dji_link_beta/pi
-sudo bash setup_pi.sh https://github.com/Kolya080808/DJI-Link.git --service
-sudo reboot
+curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh | sudo bash
 ```
-`setup_pi.sh` installs the build tools, enables the USB gadget (`dwc2`), builds the
-`raw_gadget` kernel module (the Pi kernel ships it disabled), and installs a service so
-the bridge starts on boot. It must be re-run after a kernel upgrade.
+The installer downloads `dji-link-pi.tar.gz` from the same latest release, installs
+`dwc2`, `raw_gadget`, `dji-netctl.service`, `dji-bridge.service`, and
+`dji-update.timer`. If the Pi has internet, the timer checks GitHub Releases and updates
+the Pi bundle automatically. A first-time install may require one reboot, then services
+start by themselves on every power-up.
+
+Direct latest assets:
+- `https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh`
+- `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-pi.tar.gz`
 
 ---
 
 ## Usage
 
-On the PC, with the Pi powered and the drone + remote on:
+On the PC, with the Pi powered and the drone + remote on, launch the installed app:
 ```bash
-python pc_client.py           # finds the Pi, connects, starts video + control
-python pc_client.py -v        # same, with verbose logging
-python pc_client.py --sim     # no hardware — try the interface
+dji-link              # GUI: menu -> discovery -> flight window
+dji-link --sim        # no hardware — try the interface
+dji-link --console    # headless console client
 ```
 
 ### Controls
@@ -109,7 +140,11 @@ python pc_client.py --sim     # no hardware — try the interface
 | Enter | Arm / disarm |
 | T / L / H | Takeoff / land / return-to-home |
 | P / R | Photo / record |
+| K / U | Request keyframe / send no-GPS takeoff unlock |
 | Esc | Settings panel |
+| F1 | Help overlay |
+| F3 | Hide / show HUD |
+| F11 | Fullscreen toggle |
 | Tab | Console (any DUML command) |
 
 Motors will not start until you **arm** (Enter). Keep the propellers off until you trust
@@ -119,10 +154,15 @@ the setup.
 
 ## Project layout
 
-- **`dji_link_beta/`** — the PC application and tools
-  - `pc_client.py` — the app (video, telemetry, control, settings, console)
+- **`src/`** — the native C++ application
+  - `core/` — DUML, composite mux, telemetry, control, drone API, transports, logging,
+    Pi discovery, auto-updater, bundled ffmpeg lookup
+  - `gui/` — SDL2 app window, preflight menu, video/HUD, settings, in-flight console
+- **`dji_link_beta/`** — the old Python beta plus current Pi jump-host tooling
+  - `pc_client.py` — historical desktop prototype (video, telemetry, control, settings, console)
   - `drone.py` · `duml.py` · `composite.py` · `telemetry.py` · `diag_codes.py` · `control.py` · `transport.py`
-  - `pi/` — code that runs on the Raspberry Pi (`bridge.py`, `aoa_device.py`, `raw_gadget.py`, `netctl.py`, `setup_pi.sh`)
+  - `pi/` — release-packaged Raspberry Pi bridge/update tooling (`bridge.py`,
+    `netctl.py`, `install.sh`, `setup_pi.sh`, `update_pi.sh`)
   - `reverse_docs/` — the reverse-engineering documentation
 - **`decompiled/`** — the DJI Fly app, unpacked (source material for the research)
 
@@ -130,6 +170,9 @@ the setup.
 
 ## Limitations
 
+- The current C++ port intentionally does **not** include media list/download/delete or
+  GPS parsing yet. Those Python paths are unfinished and will be ported only after the
+  Python implementation is verified.
 - **Speed and other flight-controller parameters** are addressed by a hash of the
   parameter name, computed inside the app's packer and not recoverable from static
   analysis — so setting max speed needs a one-time runtime capture of the hash. Max

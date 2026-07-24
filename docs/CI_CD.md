@@ -17,7 +17,7 @@ Small edits, feature experiments, and changes to the Python beta do **not** trig
 ## How to cut a release
 
 1. Create/edit **`UPDATE.md`** at the repo root: `title`, `version`, `prerelease`, and the changelog.
-   (Start from `UPDATE.md.template`.) **No `UPDATE.md` = no release:** if the file is absent when
+   **No `UPDATE.md` = no release:** if the file is absent when
    the tag is pushed, the workflow skips gracefully (a green run, nothing published). Add `UPDATE.md`
    and push the tag again to release.
 2. Commit it.
@@ -32,6 +32,7 @@ Small edits, feature experiments, and changes to the Python beta do **not** trig
 - reads `UPDATE.md` and **verifies its `version` matches the tag** (otherwise the release
   fails — this guards against a version / changelog mismatch);
 - builds and packages every platform (see the matrix below);
+- packages the SDL2 GUI by default and bundles the `ffmpeg` video runtime;
 - computes `SHA256SUMS.txt`;
 - publishes a GitHub Release with the title and body from `UPDATE.md`
   (`prerelease: true` marks it as a pre-release).
@@ -45,14 +46,38 @@ A tag like `v1.2.0-rc1` + `prerelease: true` produces a release candidate.
 | Linux x86_64 | `ubuntu-22.04` | `.tar.gz`, `.deb`, `.rpm` |
 | Linux arm64 | `ubuntu-24.04-arm` | `.tar.gz`, `.deb`, `.rpm` |
 | Linux x86 (32-bit) | `ubuntu-22.04` | `.tar.gz` — *best-effort*¹ |
-| macOS universal2 (Intel + Apple Silicon) | `macos-14` | `.dmg`, `.tar.gz` |
+| macOS arm64 | `macos-14` | `.dmg`, `.tar.gz` |
+| macOS x86_64 | `macos-13` | `.dmg`, `.tar.gz` |
 | Windows x64 | `windows-latest` | `.msi` (WiX installer), `.zip` |
 | Windows arm64 | `windows-11-arm` | `.msi`, `.zip` — *best-effort*¹ |
 | Windows x86 (32-bit) | `windows-latest` | `.msi`, `.zip` — *best-effort*¹ |
 
 `.deb` covers Debian/Ubuntu, `.rpm` covers Fedora/RHEL/openSUSE, `.tar.gz` is the generic
 fallback for any distro. Windows ships a native **MSI** installer (WiX) plus a portable ZIP.
-macOS `universal2` runs on both Intel and Apple Silicon from a single binary.
+macOS ships separate Intel and Apple Silicon DMGs so each bundle carries a matching
+`ffmpeg` binary.
+
+For README/direct-download stability, the release workflow publishes both versioned assets
+(`dji-link-<version>-<slug>.<ext>`) and stable aliases
+(`dji-link-<slug>.<ext>`). The stable aliases make permanent latest links possible:
+
+| Platform | Stable latest asset |
+|----------|---------------------|
+| Windows x64 MSI | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x64.msi` |
+| Windows x64 ZIP | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x64.zip` |
+| Windows x86 MSI | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x86.msi` |
+| Windows arm64 MSI | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-arm64.msi` |
+| macOS arm64 DMG | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-arm64.dmg` |
+| macOS arm64 TGZ | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-arm64.tar.gz` |
+| macOS x86_64 DMG | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-x86_64.dmg` |
+| macOS x86_64 TGZ | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-x86_64.tar.gz` |
+| Linux x86_64 DEB | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-x86_64.deb` |
+| Linux arm64 DEB | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-arm64.deb` |
+| Linux x86_64 RPM | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-x86_64.rpm` |
+| Linux arm64 RPM | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-arm64.rpm` |
+| Linux x86_64 TGZ | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-x86_64.tar.gz` |
+| Linux arm64 TGZ | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-arm64.tar.gz` |
+| Pi installer | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh` |
 
 ¹ Marked `experimental` (`continue-on-error`): if that toolchain/runner fails, the release
 still ships from the other platforms. The 32-bit and Windows-arm64 jobs are the likeliest to
@@ -69,12 +94,25 @@ ctest --test-dir build --no-tests=ignore     # tests; having none is not an erro
 cpack --config build/CPackConfig.cmake        # packaging (see below)
 ```
 
-To get **native installers** (`.msi`, `.dmg`, `.deb`, `.rpm`, not just archives), your
-`CMakeLists.txt` must contain `include(CPack)`. Until it does, the release workflow falls
-back to `cmake --install` + `.tar.gz`/`.zip`, so the Linux binary and archives ship anyway,
-and installers appear as soon as you add CPack.
+Native installers (`.msi`, `.dmg`, `.deb`, `.rpm`, not just archives) are produced through
+CPack from the repository `CMakeLists.txt`. The release workflow also runs a staged
+`cmake --install` check and fails if the installed app or bundled `ffmpeg` is missing.
 
-Minimal working snippet for `CMakeLists.txt`:
+The current app builds the GUI by default (`DJI_LINK_GUI=ON`). SDL2 is fetched by CMake
+with `FetchContent`, so CI runners do not need system GUI packages. Set
+`-DDJI_LINK_GUI=OFF` only for a headless/console-only build.
+
+Live video is decoded through an `ffmpeg` process. The app does **not** install ffmpeg at
+runtime; release packaging handles it before the user launches the app:
+
+| Platform | ffmpeg handling |
+|----------|-----------------|
+| Linux `.deb` / `.rpm` / `.tar.gz` | release workflow downloads a static ffmpeg build for the target arch and installs it into `bin/` |
+| Windows `.msi` | release workflow installs Chocolatey ffmpeg on the runner and bundles the real `ffmpeg.exe` folder into `bin/` |
+| macOS `.dmg` | release workflow installs Homebrew ffmpeg on the matching-arch runner, copies `ffmpeg` plus its dylibs into the `.app`, and patches install names |
+| Portable `.zip` / `.tar.gz` | bundled ffmpeg is included in release artifacts; local developer builds fall back to `PATH` |
+
+Minimal CPack shape for a future stripped-down `CMakeLists.txt`:
 
 ```cmake
 cmake_minimum_required(VERSION 3.21)
@@ -128,22 +166,32 @@ job in `release.yml`). It publishes two assets:
 On a **clean** Raspberry Pi (Zero 2 W), bring it up in one line:
 
 ```bash
-curl -fsSL https://github.com/OWNER/REPO/releases/latest/download/install-pi.sh | sudo bash
+curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh | sudo bash
 ```
+
+Latest release links:
+- `https://github.com/Kolya080808/DJI-Link/releases/latest`
+- `https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh`
+- `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-pi.tar.gz`
 
 The installer downloads the matching `dji-link-pi.tar.gz`, unpacks it to `/opt/dji-link`,
 then runs `setup_pi.sh` which:
 
 - enables `dwc2` in peripheral mode and builds the `raw_gadget` kernel module (the Pi kernel
   ships it disabled);
-- installs a **systemd service** (`dji-bridge.service`) and `enable`s it, so the AOA↔TCP
-  bridge **starts automatically on every boot / power-up** — after the install finishes you
-  can unplug power, and on the next power-up the service is running with nothing to launch by
-  hand;
+- installs and enables **systemd services**:
+  - `dji-netctl.service` — Pi Wi-Fi/AP HTTP API on `:9911` for the PC discovery screen;
+  - `dji-bridge.service` — AOA↔TCP bridge on `:9910`;
+  - `dji-update.timer` / `dji-update.service` — checks the latest GitHub Release every 6
+    hours when internet is available and re-runs the Pi installer only when the tag changed;
+  both **start automatically on every boot / power-up** — after the install finishes you can
+  unplug power, and on the next power-up the Pi is ready with nothing to launch by hand;
 - starts the service immediately if no reboot is pending (a first-time `dwc2` change needs one
   reboot, after which it comes up on its own).
 
-Check it with `systemctl status dji-bridge` and `journalctl -u dji-bridge -f`.
+Check it with `systemctl status dji-netctl dji-bridge dji-update.timer` and
+`journalctl -u dji-netctl -f` / `journalctl -u dji-bridge -f` /
+`journalctl -u dji-update -f`.
 
 > `raw_gadget` is an out-of-tree module, so it must be rebuilt after a kernel upgrade —
 > re-run the installer (or `sudo bash /opt/dji-link/pi/setup_pi.sh --dir /opt/dji-link/pi --service`).
