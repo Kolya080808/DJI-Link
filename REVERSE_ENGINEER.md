@@ -99,8 +99,8 @@ fly the drone:
 The current production client is the C++ rewrite under `src/`: protocol core, composite
 demux, telemetry, flight control, camera/gimbal commands, transports, logging, Pi discovery,
 auto-updater, and the SDL2 GUI. The historical Python app remains in `dji_link_beta/` as
-the research/reference branch; media handling and GPS parsing are deliberately not part of
-the C++ client yet.
+the research/beta reference; media handling and GPS parsing are deliberately not ported yet
+because those Python paths are still unfinished.
 
 Release packages are native for Windows/macOS/Linux and bundle the `ffmpeg` video runtime.
 The Raspberry Pi jump-host is installed from GitHub Releases by `install-pi.sh`, which
@@ -122,7 +122,7 @@ desktop app — so the PC app can explain why the motors won't start, just like 
 - DJI's server walls — no-fly-zone/geo unlock, first activation of a factory-reset unit,
   anti-theft binding — need DJI's servers and can't be replicated offline.
 - Media list/download/delete and GPS-coordinate parsing remain intentionally outside the
-  current C++ client for now.
+  current C++ port until the Python beta implementations are verified.
 - The Mini 1 has no obstacle sensors, so any automated flight is blind.
 
 ---

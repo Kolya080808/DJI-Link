@@ -21,6 +21,7 @@ add_library(djilink_gui STATIC
     gui.cpp
 )
 target_include_directories(djilink_gui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_compile_definitions(djilink_gui PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(djilink_gui PUBLIC djilink_core)
 
 # Link the static SDL targets (names differ slightly across SDL versions).
