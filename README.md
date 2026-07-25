@@ -158,7 +158,7 @@ the setup.
   - `core/` — DUML, composite mux, telemetry, control, drone API, transports, logging,
     Pi discovery, auto-updater, bundled ffmpeg lookup
   - `gui/` — SDL2 app window, preflight menu, video/HUD, settings, in-flight console
-- **`dji_link_beta/`** — the old Python beta plus current Pi jump-host tooling
+- **`dji_link_beta/`** — the historical Python reference branch plus current Pi jump-host tooling
   - `pc_client.py` — historical desktop prototype (video, telemetry, control, settings, console)
   - `drone.py` · `duml.py` · `composite.py` · `telemetry.py` · `diag_codes.py` · `control.py` · `transport.py`
   - `pi/` — release-packaged Raspberry Pi bridge/update tooling (`bridge.py`,
@@ -171,8 +171,8 @@ the setup.
 ## Limitations
 
 - The current C++ port intentionally does **not** include media list/download/delete or
-  GPS parsing yet. Those Python paths are unfinished and will be ported only after the
-  Python implementation is verified.
+  GPS parsing yet. Those flows still live in the historical Python reference branch and will be
+  ported over separately.
 - **Speed and other flight-controller parameters** are addressed by a hash of the
   parameter name, computed inside the app's packer and not recoverable from static
   analysis — so setting max speed needs a one-time runtime capture of the hash. Max

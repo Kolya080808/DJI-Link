@@ -1,8 +1,8 @@
 # CI/CD
 
 Automated build, checks, and releases for the C++ version of DJI Link on GitHub Actions.
-All C++ code lives at the repository root (the `dji_link_beta/` folder is the old Python
-beta; CI ignores it).
+All C++ code lives at the repository root. The `dji_link_beta/` folder is the historical
+Python/reference branch plus Pi tooling; CI mostly ignores it.
 
 ## TL;DR
 
@@ -12,7 +12,8 @@ beta; CI ignores it).
 | **Lint** — formatting (clang-format) | `.github/workflows/lint.yml` | same, C++ only |
 | **Release** — binaries/installers + checksums | `.github/workflows/release.yml` | **only on a git tag `vX.Y.Z`**, and only if `UPDATE.md` exists |
 
-Small edits, feature experiments, and changes to the Python beta do **not** trigger heavy builds.
+Small edits, feature experiments, and changes under the historical Python/reference tree do
+**not** trigger heavy builds.
 
 ## How to cut a release
 
