@@ -160,8 +160,7 @@ int main(int argc, char** argv) {
     return run_console(args);
 }
 
-
-#if defined(_WIN32) && defined(DJI_LINK_GUI)
+#if defined(_WIN32) && DJI_LINK_HAVE_GUI
 extern "C" int __argc;
 extern "C" char** __argv;
 
