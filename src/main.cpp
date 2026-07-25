@@ -161,9 +161,7 @@ int main(int argc, char** argv) {
 }
 
 
-#if defined(_WIN32) && defined(DJI_LINK_HAVE_GUI)
-// Windows GUI subsystem expects WinMain; forward it to the normal main() entry
-// point so argv handling stays identical across platforms.
+#if defined(_WIN32) && defined(DJI_LINK_GUI)
 extern "C" int __argc;
 extern "C" char** __argv;
 
