@@ -159,3 +159,15 @@ int main(int argc, char** argv) {
 #endif
     return run_console(args);
 }
+
+
+#if defined(_WIN32) && defined(DJI_LINK_HAVE_GUI)
+// Windows GUI subsystem expects WinMain; forward it to the normal main() entry
+// point so argv handling stays identical across platforms.
+extern "C" int __argc;
+extern "C" char** __argv;
+
+extern "C" int __stdcall WinMain(void*, void*, char*, int) {
+    return main(__argc, __argv);
+}
+#endif
