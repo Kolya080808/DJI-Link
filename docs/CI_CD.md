@@ -8,11 +8,18 @@ beta; CI ignores it).
 
 | What | File | When it runs |
 |------|------|--------------|
-| **CI** — compile-check + tests | `.github/workflows/ci.yml` | push to `main` / PR, **only when C++/CMake changed** |
+| **CI** — compile-check + tests on **every release platform** | `.github/workflows/ci.yml` | push to `main` / PR, **only when C++/CMake changed** |
 | **Lint** — formatting (clang-format) | `.github/workflows/lint.yml` | same, C++ only |
 | **Release** — binaries/installers + checksums | `.github/workflows/release.yml` | **only on a git tag `vX.Y.Z`**, and only if `UPDATE.md` exists |
 
 Small edits, feature experiments, and changes to the Python beta do **not** trigger heavy builds.
+
+CI's build matrix **mirrors the release matrix 1:1** (same runners and architectures —
+Linux x86_64/arm64/x86, macOS arm64/x86_64, Windows x64/arm64/x86), so a platform can
+never build for the first time only during a tagged release. CI stops at build + `ctest`;
+packaging, ffmpeg bundling and installers stay in `release.yml`. The best-effort targets
+(32-bit and Windows-arm64) are `continue-on-error` in both, exactly like the release
+`experimental` jobs. **Keep the two matrices in sync when you add or drop a platform.**
 
 ## How to cut a release
 
@@ -47,7 +54,7 @@ A tag like `v1.2.0-rc1` + `prerelease: true` produces a release candidate.
 | Linux arm64 | `ubuntu-24.04-arm` | `.tar.gz`, `.deb`, `.rpm` |
 | Linux x86 (32-bit) | `ubuntu-22.04` | `.tar.gz` — *best-effort*¹ |
 | macOS arm64 | `macos-14` | `.dmg`, `.tar.gz` |
-| macOS x86_64 | `macos-13` | `.dmg`, `.tar.gz` |
+| macOS x86_64 | `macos-15-intel` | `.dmg`, `.tar.gz` |
 | Windows x64 | `windows-latest` | `.msi` (WiX installer), `.zip` |
 | Windows arm64 | `windows-11-arm` | `.msi`, `.zip` — *best-effort*¹ |
 | Windows x86 (32-bit) | `windows-latest` | `.msi`, `.zip` — *best-effort*¹ |

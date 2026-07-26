@@ -129,7 +129,10 @@ jobs:
           # ---- macOS: per-arch DMGs, each bundling a matching ffmpeg binary ----
           - { slug: macos-arm64,      os: macos-14,         generators: 'TGZ;DragNDrop',
               osx_archs: 'arm64' }
-          - { slug: macos-x86_64,     os: macos-13,         generators: 'TGZ;DragNDrop',
+          # macos-13 was the last Intel image and was RETIRED (Dec 2025). macos-15-intel
+          # is GitHub's replacement x86_64 runner (native Intel, available until ~Aug 2027),
+          # so brew still yields a matching x86_64 ffmpeg — no cross-compile needed.
+          - { slug: macos-x86_64,     os: macos-15-intel,   generators: 'TGZ;DragNDrop',
               osx_archs: 'x86_64' }
           # ---- Windows: MSI installer (WiX) + portable .zip ----
           - { slug: windows-x64,     os: windows-latest,   generators: 'WIX;ZIP',

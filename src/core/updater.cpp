@@ -13,6 +13,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #elif defined(__APPLE__)
+#include <limits.h> // PATH_MAX (not guaranteed to come in via <mach-o/dyld.h>)
 #include <mach-o/dyld.h>
 #else
 #include <limits.h>

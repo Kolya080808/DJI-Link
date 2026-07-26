@@ -1497,6 +1497,9 @@ int flight_screen(SDL_Window* win, SDL_Renderer* r, const ConnectionSpec& spec,
 } // namespace
 
 int run_app(const AppOptions& opt) {
+    // We link without SDL2main and define SDL_MAIN_HANDLED, so SDL's own entry-point
+    // shim never runs — announce that main() is ready before touching any SDL API.
+    SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_TIMER) != 0) {
         std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 2;

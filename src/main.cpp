@@ -161,9 +161,12 @@ int main(int argc, char** argv) {
 }
 
 #if defined(_WIN32) && DJI_LINK_HAVE_GUI
-extern "C" int __argc;
-extern "C" char** __argv;
-
+// The GUI build is linked as a Windows-subsystem app (WIN32_EXECUTABLE), so the CRT
+// entry point is WinMain rather than main. Forward to the real main() using the
+// CRT-provided argc/argv globals from <cstdlib>. NEVER redeclare __argc/__argv: on
+// MSVC they are function-like macros ((*__p___argc())), so an `extern "C" int __argc;`
+// redeclaration is a hard compile error that breaks the entire Windows build.
+#include <cstdlib>
 extern "C" int __stdcall WinMain(void*, void*, char*, int) {
     return main(__argc, __argv);
 }

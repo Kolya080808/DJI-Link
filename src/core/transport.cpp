@@ -6,9 +6,13 @@
 #include <stdexcept>
 
 #ifdef _WIN32
+// WIN32_LEAN_AND_MEAN keeps <windows.h> from pulling in the old <winsock.h> (v1),
+// so including <winsock2.h> afterwards is safe. clang-format sorts these includes
+// alphabetically, which puts <windows.h> first — that ordering only works because
+// of WIN32_LEAN_AND_MEAN, so do not remove it.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <winsock2.h> // must precede windows.h
+#include <winsock2.h>
 #include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>

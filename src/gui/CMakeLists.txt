@@ -20,7 +20,12 @@ FetchContent_MakeAvailable(SDL2)
 add_library(djilink_gui STATIC
     gui.cpp
 )
+# SDL_MAIN_HANDLED: we provide our own entry point (main / WinMain in src/main.cpp)
+# and do NOT link SDL2main, so tell <SDL.h> not to redefine main to SDL_main. run_app()
+# calls SDL_SetMainReady() before SDL_Init(), which is the supported way to bypass
+# SDL's own main shim on every platform (Windows/macOS included).
 target_include_directories(djilink_gui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_compile_definitions(djilink_gui PUBLIC SDL_MAIN_HANDLED)
 target_compile_definitions(djilink_gui PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(djilink_gui PUBLIC djilink_core)
 
