@@ -506,7 +506,11 @@ jobs:
           PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
         run: |
           set -euo pipefail
-          args=(--title "$TITLE" --notes-file notes/release-notes.md)
+          # This job has no checkout (no .git), so gh can't infer the repo from a git
+          # remote — pass it explicitly with --repo, otherwise `gh release create` fails
+          # with "fatal: not a git repository". The tag already exists on the remote (it
+          # triggered this workflow), so gh just creates the release against it.
+          args=(--repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes-file notes/release-notes.md)
           if [ "$PRERELEASE" = "true" ]; then
             args+=(--prerelease)
           fi
