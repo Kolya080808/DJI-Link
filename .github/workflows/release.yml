@@ -115,6 +115,9 @@ jobs:
     if: needs.prepare.outputs.skip != 'true'
     name: ${{ matrix.slug }}
     runs-on: ${{ matrix.os }}
+    # Safety net: a hung step (e.g. a slow/stuck upload or hdiutil) fails within a bounded
+    # time with logs, instead of running to the 6-hour default and blocking the release job.
+    timeout-minutes: 90
     continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
@@ -370,9 +373,24 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: packages-${{ matrix.slug }}
-          path: dist/*
+          # Upload ONLY the finished packages — never `dist/*`. `cpack -B dist` also drops a
+          # `dist/_CPack_Packages/` staging tree there, and on macOS the DragNDrop generator
+          # puts an `/Applications` symlink inside it. `dist/*` would make upload-artifact's
+          # globber follow that symlink into the runner's /Applications (Xcode, gigabytes),
+          # hanging the step with no output right after "Run actions/upload-artifact". These
+          # top-level extension globs skip the staging dir entirely (and shrink the upload).
+          path: |
+            dist/*.tar.gz
+            dist/*.dmg
+            dist/*.deb
+            dist/*.rpm
+            dist/*.zip
+            dist/*.msi
           if-no-files-found: error
           retention-days: 7
+          # dist/ already holds compressed packages; re-zipping them (upload-artifact's
+          # default level 6) is wasted CPU — store instead of recompressing.
+          compression-level: 0
 
   # ---------------------------------------------------------------------------
   # Raspberry Pi installer: a self-contained `curl | bash` script + the pi/ bundle
