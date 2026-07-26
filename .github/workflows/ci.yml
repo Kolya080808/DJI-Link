@@ -52,10 +52,14 @@ jobs:
     continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
-      # This matrix mirrors release.yml's build matrix 1:1 (same runners / arches), so
-      # CI compile-checks EVERY platform a release ships — nothing gets built for the
-      # first time only during a tagged release. CI stops at build + test; packaging,
-      # ffmpeg bundling and installers stay in release.yml. Keep the two matrices in sync.
+      # This matrix mirrors release.yml's build matrix (same runners / arches), so CI
+      # compile-checks EVERY platform a release ships — nothing gets built for the first
+      # time only during a tagged release. CI stops at build + test; packaging, ffmpeg
+      # bundling and installers stay in release.yml. Keep the two matrices in sync.
+      # One deliberate exception: windows-arm64. CI builds it NATIVELY on windows-11-arm
+      # (best compile-check, and native tests can run there later). release instead
+      # cross-builds arm64 on windows-latest because only that runner has WiX for the MSI.
+      # Same arm64 MSVC target either way, so a compile error still surfaces in CI.
       matrix:
         include:
           # ---- Linux ----

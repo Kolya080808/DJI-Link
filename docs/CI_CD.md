@@ -56,7 +56,7 @@ A tag like `v1.2.0-rc1` + `prerelease: true` produces a release candidate.
 | macOS arm64 | `macos-14` | `.dmg`, `.tar.gz` |
 | macOS x86_64 | `macos-15-intel` | `.dmg`, `.tar.gz` |
 | Windows x64 | `windows-latest` | `.msi` (WiX installer), `.zip` |
-| Windows arm64 | `windows-11-arm` | `.msi`, `.zip` — *best-effort*¹ |
+| Windows arm64 | `windows-latest` (cross-compiled) | `.msi`, `.zip` — *best-effort*¹ (built via the MSVC `amd64_arm64` toolchain because only the x64 runner has WiX) |
 | Windows x86 (32-bit) | `windows-latest` | `.msi`, `.zip` — *best-effort*¹ |
 
 `.deb` covers Debian/Ubuntu, `.rpm` covers Fedora/RHEL/openSUSE, `.tar.gz` is the generic
@@ -81,6 +81,7 @@ For README/direct-download stability, the release workflow publishes both versio
 | Windows x64 ZIP | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x64.zip` |
 | Windows x86 MSI | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x86.msi` |
 | Windows arm64 MSI | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-arm64.msi` |
+| Windows arm64 ZIP | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-arm64.zip` |
 | macOS arm64 DMG | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-arm64.dmg` |
 | macOS arm64 TGZ | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-arm64.tar.gz` |
 | macOS x86_64 DMG | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-x86_64.dmg` |
@@ -122,7 +123,7 @@ runtime; release packaging handles it before the user launches the app:
 | Platform | ffmpeg handling |
 |----------|-----------------|
 | Linux `.deb` / `.rpm` / `.tar.gz` | release workflow downloads a static ffmpeg build for the target arch and installs it into `bin/` |
-| Windows `.msi` | release workflow installs Chocolatey ffmpeg on the runner and bundles the real `ffmpeg.exe` folder into `bin/` |
+| Windows `.msi` / `.zip` | release workflow installs Chocolatey ffmpeg (x64 — the only build the package ships) and bundles the real `ffmpeg.exe` folder into `bin/`. ffmpeg runs as a separate process, so the x64 binary works for the x86 and arm64 apps too on any x64 Windows host |
 | macOS `.dmg` | release workflow installs Homebrew ffmpeg on the matching-arch runner, copies `ffmpeg` plus its dylibs into the `.app`, and patches install names |
 | Portable `.zip` / `.tar.gz` | bundled ffmpeg is included in release artifacts; local developer builds fall back to `PATH` |
 
