@@ -112,12 +112,36 @@ def ensure_ap_profile() -> None:
           "connection.autoconnect-priority", "10", check=True)
 
 
+def ensure_forwarding() -> None:
+    """Make the AP actually route to the uplink.
+
+    ipv4.method=shared is supposed to set up ip_forward + NAT itself, but it does that
+    through iptables/nftables and dnsmasq — on a Lite image where those are missing NM
+    still brings the AP up, so a laptop associates, gets an address and has no way out.
+    Re-asserting the two pieces here is idempotent and costs nothing when NM did its job.
+    """
+    run("sysctl", "-w", "net.ipv4.ip_forward=1")
+    rc, out = run("iptables", "-t", "nat", "-S", "POSTROUTING")
+    if rc != 0:
+        print("[netctl] iptables unavailable; cannot verify NAT for the AP")
+        return
+    if "MASQUERADE" in out:
+        return                              # NM (or a previous run) already set it up
+    print(f"[netctl] no NAT rule found; adding masquerade {AP_IFACE} -> {STA_IFACE}")
+    run("iptables", "-t", "nat", "-A", "POSTROUTING", "-o", STA_IFACE, "-j", "MASQUERADE")
+    run("iptables", "-A", "FORWARD", "-i", STA_IFACE, "-o", AP_IFACE,
+        "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT")
+    run("iptables", "-A", "FORWARD", "-i", AP_IFACE, "-o", STA_IFACE, "-j", "ACCEPT")
+
+
 def hotspot(on: bool) -> dict:
     if on:
         if not ensure_ap_iface():
             return {"ok": False, "error": "no AP-capable interface (uap0 could not be created)"}
         ensure_ap_profile()
         rc, out = nmcli("con", "up", AP_CON)
+        if rc == 0:
+            ensure_forwarding()
         return {"ok": rc == 0, "output": out}
     rc, out = nmcli("con", "down", AP_CON)
     return {"ok": rc == 0, "output": out}
@@ -181,6 +205,7 @@ def connect(ssid: str, psk: str | None) -> dict:
     # The radio just retuned to the uplink's channel; the AP follows and drops clients.
     if ok:
         nmcli("con", "up", AP_CON)
+        ensure_forwarding()             # the uplink is new — make sure it is NATed
     return {"ok": ok, "output": out, "note":
             "AP retunes to the uplink channel — reconnect the laptop if it dropped"}
 

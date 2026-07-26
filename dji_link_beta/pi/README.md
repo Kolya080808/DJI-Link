@@ -39,6 +39,16 @@ After install, `dji-netctl.service`, `dji-bridge.service`, and `dji-update.timer
 enabled. A first-time `dwc2` change requires one reboot; after that the Pi is ready on
 every power-up without manual commands.
 
+Running the same command again upgrades in place — that is exactly what `dji-update.timer`
+does. The services are stopped, the previous bundle is kept as `/opt/dji-link/pi.old`, the
+new one is unpacked, and both services are restarted on the new code and their state is
+printed. `/opt/dji-link/VERSION` holds the installed tag. To roll back:
+
+```bash
+sudo rm -rf /opt/dji-link/pi && sudo mv /opt/dji-link/pi.old /opt/dji-link/pi
+sudo systemctl restart dji-netctl dji-bridge
+```
+
 ## Manual installation on the Pi
 
 Use this only while developing the Pi bundle locally:

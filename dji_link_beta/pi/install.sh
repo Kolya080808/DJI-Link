@@ -9,6 +9,10 @@
 # timer). After it finishes and you unplug/replug power, the Pi services come back
 # by themselves — nothing to launch by hand.
 #
+# Re-running it is the upgrade path (dji-update.timer does exactly that): the
+# services are stopped, the previous pi/ is kept as pi.old for rollback, the new
+# bundle is unpacked, and both services are restarted on the new code and checked.
+#
 # The @@REPO@@ / @@TAG@@ / @@ASSET@@ markers are filled in by release.yml when the
 # asset is published. Running the in-repo copy directly falls back to sane defaults
 # and can be overridden with env vars:
@@ -39,11 +43,15 @@ else
     URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
 fi
 
+OLD_VERSION=""
+[ -f "$PREFIX/VERSION" ] && OLD_VERSION="$(cat "$PREFIX/VERSION")"
+
 echo "=== DJI-Link Pi installer ==="
 echo "    repo   : $REPO"
 echo "    tag    : $TAG"
 echo "    bundle : $URL"
 echo "    prefix : $PREFIX"
+echo "    version: ${OLD_VERSION:-none} -> $TAG"
 echo
 
 command -v curl >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y curl; }
@@ -59,15 +67,41 @@ curl -fSL "$URL" -o "$TMP/bundle.tar.gz" || {
     exit 1
 }
 
+# Verify the archive before touching a working install — a truncated download must
+# not take the Pi down.
+tar -tzf "$TMP/bundle.tar.gz" | grep -q 'pi/setup_pi\.sh$' || {
+    echo "!! downloaded bundle does not contain pi/setup_pi.sh; keeping the current install"
+    exit 1
+}
+
+# Stop first: a running bridge.py holds the old code in memory, so restarting the
+# services afterwards is what actually makes an upgrade take effect.
+if [ -d "$PREFIX/pi" ]; then
+    echo "[install] stopping services for the upgrade"
+    systemctl stop dji-bridge.service 2>/dev/null || true
+    systemctl stop dji-netctl.service 2>/dev/null || true
+fi
+
 echo "[install] unpacking to $PREFIX"
 mkdir -p "$PREFIX"
-rm -rf "$PREFIX/pi"
-tar -xzf "$TMP/bundle.tar.gz" -C "$PREFIX"
+if [ -d "$PREFIX/pi" ]; then
+    rm -rf "$PREFIX/pi.old"
+    mv "$PREFIX/pi" "$PREFIX/pi.old"
+    echo "     previous install kept at $PREFIX/pi.old"
+fi
+if ! tar -xzf "$TMP/bundle.tar.gz" -C "$PREFIX"; then
+    echo "!! unpacking failed; restoring the previous install"
+    rm -rf "$PREFIX/pi"
+    [ -d "$PREFIX/pi.old" ] && mv "$PREFIX/pi.old" "$PREFIX/pi"
+    systemctl start dji-netctl.service 2>/dev/null || true
+    systemctl start dji-bridge.service 2>/dev/null || true
+    exit 1
+fi
 printf '%s\n' "$REPO" > "$PREFIX/REPO"
 
 # The bundle contains a top-level pi/ directory with setup_pi.sh + the bridge scripts.
 PI_DIR="$PREFIX/pi"
-[ -d "$PI_DIR" ] || PI_DIR="$(dirname "$(find "$PREFIX" -name setup_pi.sh -print -quit)")"
+[ -f "$PI_DIR/setup_pi.sh" ] || PI_DIR="$(dirname "$(find "$PREFIX" -path "$PREFIX/pi.old" -prune -o -name setup_pi.sh -print -quit)")"
 [ -n "$PI_DIR" ] && [ -f "$PI_DIR/setup_pi.sh" ] || {
     echo "!! setup_pi.sh not found in the downloaded bundle"
     exit 1
@@ -77,10 +111,31 @@ echo "[install] running setup (raw_gadget + dwc2 + bridge/netctl boot services)"
 bash "$PI_DIR/setup_pi.sh" --dir "$PI_DIR" --service
 printf '%s\n' "$TAG" > "$PREFIX/VERSION"
 
+# setup_pi.sh only restarts the bridge when it believes no reboot is pending; on an
+# upgrade of an already-working Pi do it unconditionally, then report what came up.
+echo "[install] restarting services on the new code"
+systemctl daemon-reload
+systemctl restart dji-netctl.service 2>/dev/null || true
+if [ -e /dev/raw-gadget ]; then
+    systemctl restart dji-bridge.service 2>/dev/null || true
+else
+    echo "     /dev/raw-gadget missing — dji-bridge starts after the reboot"
+fi
+sleep 2
+for svc in dji-netctl dji-bridge; do
+    state="$(systemctl is-active "$svc" 2>/dev/null || true)"
+    echo "     $svc: ${state:-unknown}"
+    if [ "$state" != "active" ]; then
+        journalctl -u "$svc" -n 5 --no-pager 2>/dev/null | sed 's/^/       /' || true
+    fi
+done
+
 echo
 echo "=== installer finished ==="
+echo ">>> installed version: $TAG  (was: ${OLD_VERSION:-none})"
 echo ">>> If a reboot was requested above, run: sudo reboot"
 echo ">>> After that dji-netctl and dji-bridge start automatically on every power-up."
 echo ">>> Status:  systemctl status dji-netctl dji-bridge dji-update.timer"
 echo ">>> Logs:    journalctl -u dji-netctl -f   |   journalctl -u dji-bridge -f"
 echo ">>> Updates: journalctl -u dji-update -f"
+echo ">>> Rollback: rm -rf $PREFIX/pi && mv $PREFIX/pi.old $PREFIX/pi && systemctl restart dji-netctl dji-bridge"

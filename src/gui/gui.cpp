@@ -824,17 +824,24 @@ std::optional<ConnectionSpec> discovery_screen(SDL_Window* win, SDL_Renderer* r,
         SDL_RenderClear(r);
         text(r, 40, 40, "FINDING THE RASPBERRY PI", 3, TEXT);
         if (scanning.load()) {
-            text(r, 40, 96, "Looking on LAN, mDNS, AP gateway and local /24...", 2, ACCENT);
+            text(r, 40, 96, "Looking on LAN, mDNS, every local /24, then Pi Wi-Fi APs...", 2,
+                 ACCENT);
         } else if (disc.host) {
             text(r, 40, 96, "Found Pi at " + *disc.host + " via " + disc.via + ".", 2, GOOD);
+            if (disc.joined_ap)
+                text(r, 40, 132, "Joined the Pi access point '" + *disc.joined_ap + "'.", 2, GOOD);
             if (disc.needs_internet_prompt)
-                text(r, 40, 132,
-                     "Pi AP was joined. If it needs internet, configure Wi-Fi on the Pi.", 2, WARN);
+                text(r, 40, 156,
+                     "Pi reports no uplink. If it needs internet, configure Wi-Fi on the Pi.", 2,
+                     WARN);
             text(r, 40, 180,
                  "Now turn on RC, plug RC into Pi, power the drone, wait for link, then start.", 2,
                  MUTED);
         } else {
-            text(r, 40, 96, "Pi not found. Power it on or pass --pi HOST[:PORT].", 2, WARN);
+            text(r, 40, 96,
+                 "Pi not found on the LAN and no 'PI_DJI_LINK-*' AP in range. "
+                 "Power it on or pass --pi HOST[:PORT].",
+                 2, WARN);
         }
         start.draw(r, mx, my);
         retry.draw(r, mx, my);

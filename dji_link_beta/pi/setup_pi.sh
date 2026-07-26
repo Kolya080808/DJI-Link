@@ -51,7 +51,11 @@ echo
 # ---------------------------------------------------------------- 1. packages
 echo "[1/5] installing packages"
 apt-get update -qq
-apt-get install -y build-essential curl git python3 iproute2 iw network-manager >/dev/null
+# dnsmasq-base + iptables are what NetworkManager's ipv4.method=shared uses for the
+# AP's DHCP/DNS and its NAT. A Lite image can lack both, and then the AP comes up but
+# clients get no address / no route out — the "Pi network has no internet" symptom.
+apt-get install -y build-essential curl git python3 iproute2 iw network-manager \
+    dnsmasq-base iptables >/dev/null
 if [ ! -d "/lib/modules/${KREL}/build" ]; then
     apt-get install -y "linux-headers-${KREL}" 2>/dev/null \
         || apt-get install -y linux-headers-rpi-v8 2>/dev/null \

@@ -61,7 +61,10 @@ find_package(Threads REQUIRED)
 target_link_libraries(djilink_core PUBLIC Threads::Threads)
 
 if(WIN32)
-    target_link_libraries(djilink_core PUBLIC ws2_32)
+    # iphlpapi: GetAdaptersAddresses, used by netfind to enumerate the real
+    # adapters (a PC with WSL/Hyper-V/VPN has several, and the hostname lookup
+    # it replaced picked whichever came first — rarely the Wi-Fi one).
+    target_link_libraries(djilink_core PUBLIC ws2_32 iphlpapi)
 endif()
 
 # ---------------------------------------------------------------- executable
