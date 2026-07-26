@@ -64,6 +64,13 @@ fallback for any distro. Windows ships a native **MSI** installer (WiX) plus a p
 macOS ships separate Intel and Apple Silicon DMGs so each bundle carries a matching
 `ffmpeg` binary.
 
+> **macOS is 64-bit only (arm64 + x86_64) — there is no 32-bit target, by design.**
+> Apple removed the ability to run 32-bit (i386) apps in macOS 10.15 Catalina (2019);
+> macOS 10.14 Mojave was the last version that could. No current macOS runs 32-bit code,
+> no hosted runner or modern SDK can build an i386 slice, and the deployment target
+> (11.0) has no i386 support. So `macos-arm64` + `macos-x86_64` is the maximum coverage
+> macOS can have — unlike Linux/Windows, there is no third (32-bit) macOS arch to add.
+
 For README/direct-download stability, the release workflow publishes both versioned assets
 (`dji-link-<version>-<slug>.<ext>`) and stable aliases
 (`dji-link-<slug>.<ext>`). The stable aliases make permanent latest links possible:
