@@ -257,17 +257,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # x86_64 / arm64 pull a static build from BtbN/FFmpeg-Builds (GitHub Releases).
+          # We used to use johnvansickle.com, but that server returns HTTP 415 to GitHub
+          # Actions / datacenter IPs, which broke the (required) linux-x86_64 job. GitHub's
+          # own CDN never blocks its runners. BtbN has no 32-bit build, so linux-x86 keeps
+          # johnvansickle's i686 static tarball (that job is best-effort / continue-on-error).
+          btbn="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest"
           case "${{ matrix.slug }}" in
-            linux-x86_64) ffarch=amd64 ;;
-            linux-arm64)  ffarch=arm64 ;;
-            linux-x86)    ffarch=i686 ;;
+            linux-x86_64) url="$btbn/ffmpeg-master-latest-linux64-gpl.tar.xz" ;;
+            linux-arm64)  url="$btbn/ffmpeg-master-latest-linuxarm64-gpl.tar.xz" ;;
+            linux-x86)    url="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-i686-static.tar.xz" ;;
             *) echo "::error::unknown Linux ffmpeg arch for ${{ matrix.slug }}"; exit 1 ;;
           esac
-          mkdir -p third_party/ffmpeg/bin
-          curl -fL "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${ffarch}-static.tar.xz" \
-            -o /tmp/ffmpeg-static.tar.xz
-          tar -xJf /tmp/ffmpeg-static.tar.xz -C /tmp
-          cp /tmp/ffmpeg-*-static/ffmpeg third_party/ffmpeg/bin/ffmpeg
+          mkdir -p third_party/ffmpeg/bin /tmp/ffx
+          curl -fL --retry 3 --retry-all-errors "$url" -o /tmp/ffmpeg.tar.xz
+          tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffx
+          # Layout differs per source (BtbN: <dir>/bin/ffmpeg; johnvansickle: <dir>/ffmpeg),
+          # so locate the binary instead of hard-coding the path.
+          ff="$(find /tmp/ffx -type f -name ffmpeg | head -1)"
+          test -n "$ff" || { echo "::error::ffmpeg binary not found in $url"; exit 1; }
+          cp "$ff" third_party/ffmpeg/bin/ffmpeg
           chmod +x third_party/ffmpeg/bin/ffmpeg
           third_party/ffmpeg/bin/ffmpeg -version
           echo "DJI_LINK_BUNDLED_FFMPEG=$PWD/third_party/ffmpeg/bin/ffmpeg" >> "$GITHUB_ENV"
