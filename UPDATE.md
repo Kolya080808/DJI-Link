@@ -1,6 +1,6 @@
 ---
-title: DJI Link v0.5.0 — first C++ release (all DJI Link beta features)
-version: 0.5.0
+title: DJI Link v0.6.0 — first C++ release (all DJI Link beta features)
+version: 0.6.0
 prerelease: true
 ---
 

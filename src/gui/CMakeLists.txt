@@ -25,6 +25,9 @@ add_library(djilink_gui STATIC
 # calls SDL_SetMainReady() before SDL_Init(), which is the supported way to bypass
 # SDL's own main shim on every platform (Windows/macOS included).
 target_include_directories(djilink_gui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+# Vendored single-header stb_truetype (real anti-aliased text). Header-only, no build-
+# system dependency; kept under third_party/ so lint/clang-format leave it alone.
+target_include_directories(djilink_gui PRIVATE ${CMAKE_SOURCE_DIR}/third_party)
 target_compile_definitions(djilink_gui PUBLIC SDL_MAIN_HANDLED)
 target_compile_definitions(djilink_gui PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(djilink_gui PUBLIC djilink_core)

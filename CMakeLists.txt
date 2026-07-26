@@ -113,15 +113,28 @@ endif()
 # --------------------------------------------------------------- packaging
 # Native installers (.msi / .dmg / .deb / .rpm) — generators are chosen by the
 # release workflow via `cpack -G ...`; we only supply the metadata here.
-set(CPACK_PACKAGE_NAME "dji-link")
-set(CPACK_PACKAGE_VENDOR "DJI Link")
-set(CPACK_PACKAGE_CONTACT "dji-link@users.noreply.github.com")
+# Friendly product name shown in the installers / Start menu / Add-Remove Programs and
+# the macOS DMG ("DJI Link", not "dji-link"). The Linux .deb/.rpm package name must stay a
+# lowercase, space-free identifier, so those override it below.
+set(CPACK_PACKAGE_NAME "DJI Link")
+set(CPACK_DEBIAN_PACKAGE_NAME "dji-link")
+set(CPACK_RPM_PACKAGE_NAME "dji-link")
+# Publisher / developer = the repo owner (shown as "Manufacturer" in the MSI, etc.).
+set(CPACK_PACKAGE_VENDOR "Kolya080808")
+set(CPACK_PACKAGE_CONTACT "Kolya080808 <dji-link@users.noreply.github.com>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Control a DJI Mavic Mini 1 (WM160) from your computer")
 set(CPACK_PACKAGE_VERSION "${DJI_LINK_VERSION}")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "DJI Link")
 set(CPACK_PACKAGE_EXECUTABLES "dji-link" "DJI Link")
 set(CPACK_CREATE_DESKTOP_LINKS "dji-link")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+# Show the Apache-2.0 license in the installers (WiX license page / DMG agreement).
+# WiX/DragNDrop want a file with a real extension, so stage the extension-less LICENSE
+# as LICENSE.txt in the build tree and point CPack at that.
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+               "${CMAKE_CURRENT_BINARY_DIR}/LICENSE.txt" COPYONLY)
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_BINARY_DIR}/LICENSE.txt")
 
 # WiX MSI: a STABLE upgrade GUID (generated once, never changed) is what lets a
 # new .msi upgrade an installed older version in place. Do not regenerate it.

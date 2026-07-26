@@ -44,6 +44,11 @@
 #include <unistd.h>
 #endif
 
+// Vendored single-header TrueType rasteriser (public domain). Only ever fed a trusted
+// system font. Header lives in third_party/ so lint/clang-format leave it alone.
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb/stb_truetype.h"
+
 namespace djilink::gui {
 namespace {
 
@@ -83,10 +88,46 @@ void outline(SDL_Renderer* r, const SDL_Rect& rc, Color c) {
     SDL_RenderDrawRect(r, &rc);
 }
 
-std::string upper(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-    return s;
+constexpr double kPi = 3.14159265358979323846;
+
+// Rounded-rectangle fill/outline — the beta draws every panel, button and input with
+// border_radius, so these give the C++ GUI the same soft-cornered look.
+void fill_round(SDL_Renderer* r, const SDL_Rect& rc, int rad, Color c) {
+    rad = std::max(0, std::min(rad, std::min(rc.w, rc.h) / 2));
+    if (rad == 0) {
+        fill(r, rc, c);
+        return;
+    }
+    set_color(r, c);
+    SDL_Rect mid{rc.x, rc.y + rad, rc.w, rc.h - 2 * rad};
+    SDL_RenderFillRect(r, &mid);
+    for (int i = 0; i < rad; ++i) {
+        const int inset =
+            rad - static_cast<int>(
+                      std::sqrt(static_cast<double>(rad * rad - (rad - i) * (rad - i))) + 0.5);
+        SDL_Rect top{rc.x + inset, rc.y + i, rc.w - 2 * inset, 1};
+        SDL_Rect bot{rc.x + inset, rc.y + rc.h - 1 - i, rc.w - 2 * inset, 1};
+        SDL_RenderFillRect(r, &top);
+        SDL_RenderFillRect(r, &bot);
+    }
+}
+
+void outline_round(SDL_Renderer* r, const SDL_Rect& rc, int rad, Color c) {
+    rad = std::max(0, std::min(rad, std::min(rc.w, rc.h) / 2));
+    set_color(r, c);
+    SDL_RenderDrawLine(r, rc.x + rad, rc.y, rc.x + rc.w - rad - 1, rc.y);
+    SDL_RenderDrawLine(r, rc.x + rad, rc.y + rc.h - 1, rc.x + rc.w - rad - 1, rc.y + rc.h - 1);
+    SDL_RenderDrawLine(r, rc.x, rc.y + rad, rc.x, rc.y + rc.h - rad - 1);
+    SDL_RenderDrawLine(r, rc.x + rc.w - 1, rc.y + rad, rc.x + rc.w - 1, rc.y + rc.h - rad - 1);
+    for (int i = 0; i <= 90; ++i) {
+        const double a = i * kPi / 180.0;
+        const int dx = static_cast<int>(rad - rad * std::cos(a) + 0.5);
+        const int dy = static_cast<int>(rad - rad * std::sin(a) + 0.5);
+        SDL_RenderDrawPoint(r, rc.x + dx, rc.y + dy);
+        SDL_RenderDrawPoint(r, rc.x + rc.w - 1 - dx, rc.y + dy);
+        SDL_RenderDrawPoint(r, rc.x + dx, rc.y + rc.h - 1 - dy);
+        SDL_RenderDrawPoint(r, rc.x + rc.w - 1 - dx, rc.y + rc.h - 1 - dy);
+    }
 }
 
 const char* const* glyph(char ch) {
@@ -164,7 +205,8 @@ const char* const* glyph(char ch) {
     return it->second.data();
 }
 
-void text(SDL_Renderer* r, int x, int y, const std::string& s, int scale, Color c) {
+// Fallback bitmap renderer (used only if no system TrueType font could be loaded).
+void text_bitmap(SDL_Renderer* r, int x, int y, const std::string& s, int scale, Color c) {
     set_color(r, c);
     int cx = x;
     const int char_w = 6 * scale;
@@ -187,10 +229,245 @@ void text(SDL_Renderer* r, int x, int y, const std::string& s, int scale, Color 
     }
 }
 
+// ---- real anti-aliased text via stb_truetype (a system font, like the Python beta) ----
+// One system TTF is loaded at startup; each drawn line is rasterised once into a cached
+// SDL texture (colour baked in). If no font is found, everything falls back to the bitmap
+// font above, so text always renders on every platform.
+struct Font {
+    bool ok = false;
+    std::vector<unsigned char> data;
+    stbtt_fontinfo info{};
+    int ascent = 0, descent = 0, line_gap = 0;
+    SDL_Renderer* ren = nullptr;
+    struct Item {
+        SDL_Texture* tex = nullptr;
+        int w = 0, h = 0;
+    };
+    std::map<std::string, Item> cache;
+
+    // Map the old bitmap "scale" (1 small … 3 title) to a pixel height, tuned to the
+    // Python beta's font sizes (body ~14-20, titles ~24-30).
+    static int px_for(int scale) {
+        switch (scale) {
+            case 1:
+                return 14;
+            case 2:
+                return 20;
+            default:
+                return 30; // 3 = titles
+        }
+    }
+
+    bool load(SDL_Renderer* r) {
+        ren = r;
+        static const char* const candidates[] = {
+#if defined(_WIN32)
+            "C:/Windows/Fonts/segoeui.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/tahoma.ttf",
+            "C:/Windows/Fonts/verdana.ttf",
+#elif defined(__APPLE__)
+            "/System/Library/Fonts/SFNS.ttf",   "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/Library/Fonts/Arial.ttf",         "/System/Library/Fonts/Helvetica.ttc",
+            "/System/Library/Fonts/Geneva.ttf",
+#else
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+#endif
+        };
+        for (const char* path : candidates) {
+            std::FILE* f = std::fopen(path, "rb");
+            if (!f)
+                continue;
+            std::fseek(f, 0, SEEK_END);
+            const long n = std::ftell(f);
+            std::fseek(f, 0, SEEK_SET);
+            if (n <= 0) {
+                std::fclose(f);
+                continue;
+            }
+            data.resize(static_cast<std::size_t>(n));
+            const std::size_t rd = std::fread(data.data(), 1, data.size(), f);
+            std::fclose(f);
+            if (rd != data.size()) {
+                data.clear();
+                continue;
+            }
+            const int off = stbtt_GetFontOffsetForIndex(data.data(), 0);
+            if (off < 0 || !stbtt_InitFont(&info, data.data(), off)) {
+                data.clear();
+                continue;
+            }
+            stbtt_GetFontVMetrics(&info, &ascent, &descent, &line_gap);
+            ok = true;
+            applog::info(std::string("[gui] font: ") + path);
+            return true;
+        }
+        applog::info("[gui] no system TTF found — using the built-in bitmap font");
+        return false;
+    }
+
+    void clear() {
+        for (auto& kv : cache)
+            if (kv.second.tex)
+                SDL_DestroyTexture(kv.second.tex);
+        cache.clear();
+    }
+
+    int line_advance(int px) const {
+        const float sc = stbtt_ScaleForPixelHeight(&info, static_cast<float>(px));
+        return static_cast<int>((ascent - descent + line_gap) * sc + 0.5f);
+    }
+
+    int measure_w(const std::string& s, int px) const {
+        const float sc = stbtt_ScaleForPixelHeight(&info, static_cast<float>(px));
+        float pen = 0.0f;
+        for (std::size_t i = 0; i < s.size(); ++i) {
+            int adv = 0, lsb = 0;
+            stbtt_GetCodepointHMetrics(&info, static_cast<unsigned char>(s[i]), &adv, &lsb);
+            pen += adv * sc;
+            if (i + 1 < s.size())
+                pen += stbtt_GetCodepointKernAdvance(&info, static_cast<unsigned char>(s[i]),
+                                                     static_cast<unsigned char>(s[i + 1])) *
+                       sc;
+        }
+        return static_cast<int>(pen + 0.5f);
+    }
+
+    // Rasterise ONE line (no '\n') to a cached, colour-baked texture.
+    Item* line_item(const std::string& s, int px, Color c) {
+        char head[24];
+        std::snprintf(head, sizeof(head), "%d|%02x%02x%02x|", px, c.r, c.g, c.b);
+        const std::string key = head + s;
+        auto it = cache.find(key);
+        if (it != cache.end())
+            return &it->second;
+        if (cache.size() > 2048)
+            clear(); // bound memory; rare rebuild spike
+
+        const float sc = stbtt_ScaleForPixelHeight(&info, static_cast<float>(px));
+        const int baseline = static_cast<int>(ascent * sc + 0.5f);
+        const int H = static_cast<int>((ascent - descent) * sc + 0.5f) + 2;
+        float pen = 0.0f;
+        for (std::size_t i = 0; i < s.size(); ++i) {
+            int adv = 0, lsb = 0;
+            stbtt_GetCodepointHMetrics(&info, static_cast<unsigned char>(s[i]), &adv, &lsb);
+            pen += adv * sc;
+            if (i + 1 < s.size())
+                pen += stbtt_GetCodepointKernAdvance(&info, static_cast<unsigned char>(s[i]),
+                                                     static_cast<unsigned char>(s[i + 1])) *
+                       sc;
+        }
+        const int W = std::max(1, static_cast<int>(pen + 2.0f));
+        std::vector<unsigned char> alpha(static_cast<std::size_t>(W) * H, 0);
+        pen = 0.0f;
+        for (std::size_t i = 0; i < s.size(); ++i) {
+            const unsigned char ch = static_cast<unsigned char>(s[i]);
+            int adv = 0, lsb = 0;
+            stbtt_GetCodepointHMetrics(&info, ch, &adv, &lsb);
+            const float xshift = pen - std::floor(pen);
+            int x0, y0, x1, y1;
+            stbtt_GetCodepointBitmapBoxSubpixel(&info, ch, sc, sc, xshift, 0, &x0, &y0, &x1, &y1);
+            const int gw = x1 - x0, gh = y1 - y0;
+            if (gw > 0 && gh > 0) {
+                std::vector<unsigned char> gb(static_cast<std::size_t>(gw) * gh);
+                stbtt_MakeCodepointBitmapSubpixel(&info, gb.data(), gw, gh, gw, sc, sc, xshift, 0,
+                                                  ch);
+                const int ox = static_cast<int>(pen) + x0;
+                const int oy = baseline + y0;
+                for (int yy = 0; yy < gh; ++yy) {
+                    const int dy = oy + yy;
+                    if (dy < 0 || dy >= H)
+                        continue;
+                    for (int xx = 0; xx < gw; ++xx) {
+                        const int dx = ox + xx;
+                        if (dx < 0 || dx >= W)
+                            continue;
+                        const unsigned char v = gb[static_cast<std::size_t>(yy) * gw + xx];
+                        unsigned char& d = alpha[static_cast<std::size_t>(dy) * W + dx];
+                        if (v > d)
+                            d = v;
+                    }
+                }
+            }
+            pen += adv * sc;
+            if (i + 1 < s.size())
+                pen +=
+                    stbtt_GetCodepointKernAdvance(&info, ch, static_cast<unsigned char>(s[i + 1])) *
+                    sc;
+        }
+        std::vector<std::uint32_t> pix(static_cast<std::size_t>(W) * H);
+        for (std::size_t i = 0; i < pix.size(); ++i)
+            pix[i] = (static_cast<std::uint32_t>(alpha[i]) << 24) |
+                     (static_cast<std::uint32_t>(c.b) << 16) |
+                     (static_cast<std::uint32_t>(c.g) << 8) | static_cast<std::uint32_t>(c.r);
+        Item item;
+        SDL_Texture* tex =
+            SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STATIC, W, H);
+        if (tex) {
+            SDL_UpdateTexture(tex, nullptr, pix.data(), W * 4);
+            SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+            item.tex = tex;
+            item.w = W;
+            item.h = H;
+        }
+        return &cache.emplace(key, item).first->second;
+    }
+};
+
+Font g_font;
+
+void text(SDL_Renderer* r, int x, int y, const std::string& s, int scale, Color c) {
+    if (!g_font.ok) {
+        text_bitmap(r, x, y, s, scale, c);
+        return;
+    }
+    const int px = Font::px_for(scale);
+    const int adv = g_font.line_advance(px);
+    int ly = y;
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t nl = s.find('\n', start);
+        const std::string line =
+            s.substr(start, nl == std::string::npos ? std::string::npos : nl - start);
+        if (!line.empty()) {
+            Font::Item* it = g_font.line_item(line, px, c);
+            if (it && it->tex) {
+                SDL_Rect dst{x, ly, it->w, it->h};
+                SDL_RenderCopy(r, it->tex, nullptr, &dst);
+            }
+        }
+        if (nl == std::string::npos)
+            break;
+        ly += adv;
+        start = nl + 1;
+    }
+}
+
 void text_center(SDL_Renderer* r, const SDL_Rect& rc, const std::string& s, int scale, Color c) {
-    const int w = static_cast<int>(s.size()) * 6 * scale - scale;
-    const int h = 7 * scale;
-    text(r, rc.x + (rc.w - w) / 2, rc.y + (rc.h - h) / 2, s, scale, c);
+    if (!g_font.ok) {
+        const int w = static_cast<int>(s.size()) * 6 * scale - scale;
+        const int h = 7 * scale;
+        text_bitmap(r, rc.x + (rc.w - w) / 2, rc.y + (rc.h - h) / 2, s, scale, c);
+        return;
+    }
+    Font::Item* it = g_font.line_item(s, Font::px_for(scale), c);
+    if (!it || !it->tex)
+        return;
+    SDL_Rect dst{rc.x + (rc.w - it->w) / 2, rc.y + (rc.h - it->h) / 2, it->w, it->h};
+    SDL_RenderCopy(r, it->tex, nullptr, &dst);
+}
+
+// Pixel width of a single-line string at the given scale (for chip / badge sizing).
+int text_w(const std::string& s, int scale) {
+    return g_font.ok ? g_font.measure_w(s, Font::px_for(scale))
+                     : static_cast<int>(s.size()) * 6 * scale;
 }
 
 bool inside(const SDL_Rect& r, int x, int y) {
@@ -210,9 +487,9 @@ struct Button {
             base = PANEL;
         else if (inside(rect, mx, my))
             base = primary ? ACCENT_HI : Color{52, 57, 72, 255};
-        fill(r, rect, base);
-        outline(r, rect, primary ? ACCENT_HI : Color{70, 76, 92, 255});
-        text_center(r, rect, upper(label), 2, primary ? Color{12, 16, 22, 255} : TEXT);
+        fill_round(r, rect, 8, base);
+        outline_round(r, rect, 8, primary ? ACCENT_HI : Color{70, 76, 92, 255});
+        text_center(r, rect, label, 2, primary ? Color{12, 16, 22, 255} : TEXT);
     }
 
     bool handle(const SDL_Event& e) const {
@@ -233,8 +510,8 @@ struct TextInput {
     bool focused = false;
 
     void draw(SDL_Renderer* r) const {
-        fill(r, rect, Color{14, 16, 21, 255});
-        outline(r, rect, focused ? ACCENT : PANEL_HI);
+        fill_round(r, rect, 6, Color{14, 16, 21, 255});
+        outline_round(r, rect, 6, focused ? ACCENT : PANEL_HI);
         std::string shown = value.empty() ? placeholder : value;
         if (focused && (SDL_GetTicks() / 500) % 2 == 0)
             shown += "|";
@@ -429,8 +706,8 @@ MenuResult menu_screen(SDL_Window* win, SDL_Renderer* r) {
         SDL_GetMouseState(&mx, &my);
         set_color(r, BG);
         SDL_RenderClear(r);
-        text(r, 40, 34, "DJI MAVIC MINI 1 - PC CONTROL", 3, TEXT);
-        text(r, 40, 72, "Pick how to connect. Flight GUI is the default app path.", 2, MUTED);
+        text(r, 40, 34, "DJI Mavic Mini 1 - PC control", 3, TEXT);
+        text(r, 40, 72, "Control the drone from your PC. Pick how to connect.", 2, MUTED);
         for (const auto& b : buttons)
             b.draw(r, mx, my);
         for (const auto& b : update_buttons)
@@ -440,8 +717,7 @@ MenuResult menu_screen(SDL_Window* win, SDL_Renderer* r) {
             Color c = update.state.load() == UpdateUi::State::Error ? WARN : MUTED;
             text(r, 40, h - 76, m.substr(0, 130), 2, c);
         }
-        text(r, 40, h - 40, "MEDIA AND GPS PARSING ARE INTENTIONALLY NOT IN THIS C++ PHASE.", 1,
-             MUTED);
+        text(r, 40, h - 40, "Tip: press F1 in flight for the full list of controls.", 1, MUTED);
         SDL_RenderPresent(r);
         SDL_Delay(16);
     }
@@ -871,10 +1147,10 @@ struct Settings {
     void draw(SDL_Renderer* r, Client& cli, int sw, int sh, int mx, int my) {
         SDL_Rect p{std::max(24, (sw - 700) / 2), std::max(20, (sh - 560) / 2),
                    std::min(700, sw - 48), std::min(560, sh - 40)};
-        fill(r, p, PANEL);
-        outline(r, p, PANEL_HI);
-        text(r, p.x + 24, p.y + 24, "FLIGHT SETTINGS", 3, TEXT);
-        text(r, p.x + 24, p.y + p.h - 28, "ESC CLOSES. MEDIA IS NOT PORTED YET.", 1, MUTED);
+        fill_round(r, p, 14, PANEL);
+        outline_round(r, p, 14, PANEL_HI);
+        text(r, p.x + 24, p.y + 24, "Flight settings", 3, ACCENT);
+        text(r, p.x + 24, p.y + p.h - 28, "Esc closes.", 1, MUTED);
 
         std::vector<Button> b;
         int y = p.y + 78;
@@ -1191,69 +1467,236 @@ struct Settings {
     }
 };
 
+// A rounded status chip with centred text (beta _hud_chip).
+void hud_chip(SDL_Renderer* r, const SDL_Rect& rc, const std::string& s, Color fg, Color border,
+              Color fillc) {
+    fill_round(r, rc, 7, fillc);
+    outline_round(r, rc, 7, border);
+    text_center(r, rc, s, 1, fg);
+}
+
+// A small square stick pad with a dot at (x,y) in [-1,1] and a caption (beta _hud_pad).
+void stick_pad(SDL_Renderer* r, int cx, int cy, int half, double x, double y,
+               const std::string& label) {
+    SDL_Rect rc{cx - half, cy - half, half * 2, half * 2};
+    fill_round(r, rc, 6, Color{10, 12, 16, 150});
+    outline_round(r, rc, 6, Color{70, 76, 92, 255});
+    set_color(r, Color{46, 50, 62, 255});
+    SDL_RenderDrawLine(r, rc.x + rc.w / 2, rc.y + 4, rc.x + rc.w / 2, rc.y + rc.h - 4);
+    SDL_RenderDrawLine(r, rc.x + 4, rc.y + rc.h / 2, rc.x + rc.w - 4, rc.y + rc.h / 2);
+    const double dx = std::max(-1.0, std::min(1.0, x)), dy = std::max(-1.0, std::min(1.0, y));
+    const int px = static_cast<int>(rc.x + rc.w / 2 + dx * (half - 6));
+    const int py = static_cast<int>(rc.y + rc.h / 2 - dy * (half - 6));
+    fill_round(r, SDL_Rect{px - 5, py - 5, 10, 10}, 5, ACCENT_HI);
+    text_center(r, SDL_Rect{rc.x, rc.y + rc.h + 2, rc.w, 14}, label, 1, MUTED);
+}
+
+// Faithful port of the beta's _draw_flight_hud (pc_client.py): top-left status card
+// (title + mode chip, battery bar, ARMED/CTRL/FC chips, altitude/fly-time/mode grid,
+// home + limits + hint), a top-right REC badge and twin bottom-right stick pads. The
+// satellite / GPS-position readouts from beta are intentionally left out for now.
 void draw_hud(SDL_Renderer* r, Client& cli, int sw, int sh) {
     if (!cli.show_hud.load())
         return;
     const auto& st = cli.tele().state();
-    SDL_Rect card{16, sh - 190, std::min(sw - 32, 760), 174};
-    fill(r, card, Color{18, 20, 26, 210});
-    outline(r, card, Color{48, 53, 66, 255});
-    int y = card.y + 16;
-    text(r, card.x + 16, y, "MODE " + cli.mode() + "  " + cli.stats(), 2, MUTED);
-    y += 24;
-    std::ostringstream flags;
-    flags << "ARM " << (cli.armed.load() ? "ON" : "OFF") << "  CONTROL "
-          << (cli.control.load() ? "ON" : "OFF") << "  GS " << (cli.gs.load() ? "ON" : "OFF");
-    text(r, card.x + 16, y, flags.str(), 2, cli.armed.load() ? GOOD : WARN);
-    y += 24;
-    text(r, card.x + 16, y, st.summary().substr(0, 120), 1, TEXT);
-    y += 20;
-    if (st.max_height_m || st.max_distance_m || st.rth_altitude_m) {
-        std::ostringstream os;
-        os << "LIMITS ALT="
-           << (st.max_height_m ? std::to_string(static_cast<int>(*st.max_height_m)) : "?")
-           << "M DIST="
-           << (st.max_distance_m ? std::to_string(static_cast<int>(*st.max_distance_m)) : "?")
-           << "M RTH="
-           << (st.rth_altitude_m ? std::to_string(static_cast<int>(*st.rth_altitude_m)) : "?")
-           << "M";
-        text(r, card.x + 16, y, os.str(), 1, MUTED);
-        y += 18;
+
+    const int X = 16, Y = 16, W = 300, pad = 14, card_h = 246;
+    fill_round(r, SDL_Rect{X, Y, W, card_h}, 12, Color{18, 20, 26, 205});
+    outline_round(r, SDL_Rect{X, Y, W, card_h}, 12, Color{48, 53, 66, 255});
+    const int lx = X + pad, rx = X + W - pad;
+    int y = Y + 16;
+
+    // title + mode chip
+    text(r, lx, y - 2, "DJI Mavic Mini 1", 2, TEXT);
+    {
+        std::string m = cli.mode();
+        std::transform(m.begin(), m.end(), m.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+        const std::string mode_txt = m + " - " + (cli.live() ? "LIVE" : "DRY");
+        const int cw = text_w(mode_txt, 1) + 16;
+        hud_chip(r, SDL_Rect{rx - cw, y, cw, 20}, mode_txt, ACCENT_HI, Color{60, 90, 130, 255},
+                 Color{30, 40, 56, 255});
     }
-    std::string msg = cli.msg();
-    if (!msg.empty())
-        text(r, card.x + 16, y, msg.substr(0, 120), 1, WARN);
-    text(r, card.x + 16, card.y + card.h - 20,
-         "F1 HELP  ESC SETTINGS  TAB CONSOLE  F3 HUD  F11 FULLSCREEN", 1, MUTED);
+    y += 30;
+
+    // battery bar
+    const int pct = st.battery_pct.value_or(0);
+    const Color bcol = pct > 50 ? GOOD : (pct > 20 ? WARN : BAD);
+    SDL_Rect bar{lx, y, W - 2 * pad, 20};
+    fill_round(r, bar, 6, Color{36, 40, 52, 255});
+    const int fillw = (W - 2 * pad) * std::max(0, std::min(100, pct)) / 100;
+    if (fillw > 8)
+        fill_round(r, SDL_Rect{bar.x, bar.y, fillw, bar.h}, 6, bcol);
+    text(r, lx + 8, y + 4, std::to_string(pct) + "%", 1, pct > 20 ? Color{12, 16, 20, 255} : TEXT);
+    if (st.battery_mv) {
+        char v[16];
+        std::snprintf(v, sizeof(v), "%.1fV", *st.battery_mv / 1000.0);
+        text(r, rx - 8 - text_w(v, 1), y + 4, v, 1, TEXT);
+    }
+    y += 30;
+
+    // status chips: ARMED / CONTROL / FC-owner
+    const std::string owner = st.ctrl_device ? sdk_ctrl_device_name(*st.ctrl_device) : "?";
+    struct ChipDef {
+        std::string s;
+        bool on;
+    };
+    const std::vector<ChipDef> chips = {
+        {cli.armed.load() ? "ARMED" : "DISARMED", cli.armed.load()},
+        {cli.control.load() ? "CTRL ON" : "CTRL OFF", cli.control.load()},
+        {"FC:" + owner, st.ctrl_device.value_or(-1) == 1},
+    };
+    int cxp = lx;
+    for (const auto& ch : chips) {
+        const int w = text_w(ch.s, 1) + 16;
+        const Color fg = ch.on ? GOOD : MUTED;
+        hud_chip(r, SDL_Rect{cxp, y, w, 22}, ch.s, fg,
+                 Color{static_cast<std::uint8_t>(fg.r / 3), static_cast<std::uint8_t>(fg.g / 3),
+                       static_cast<std::uint8_t>(fg.b / 3), 255},
+                 ch.on ? Color{24, 34, 26, 255} : Color{30, 32, 40, 255});
+        cxp += w + 6;
+    }
+    y += 32;
+
+    // telemetry grid — two columns of label/value
+    const int c0 = lx, c1 = lx + (W - 2 * pad) / 2 + 6;
+    auto cell = [&](int col_x, const char* label, const std::string& value) {
+        text(r, col_x, y + 4, label, 1, MUTED);
+        text(r, col_x, y + 18, value, 2, TEXT);
+    };
+    std::string alt = "-";
+    if (st.altitude_m) {
+        char b[24];
+        std::snprintf(b, sizeof(b), "%.1f m", *st.altitude_m);
+        alt = b;
+    }
+    std::string ft = "-";
+    if (st.flight_time_s) {
+        char b[16];
+        std::snprintf(b, sizeof(b), "%d:%02d", *st.flight_time_s / 60, *st.flight_time_s % 60);
+        ft = b;
+    }
+    cell(c0, "ALTITUDE", alt);
+    cell(c1, "FLY TIME", ft);
+    y += 40;
+    cell(c0, "MODE", st.flight_mode_name.value_or("-"));
+    y += 42;
+
+    // home + limits + hint
+    auto lim = [](const std::optional<double>& v) {
+        return v ? (std::to_string(static_cast<int>(*v)) + "m") : std::string("-");
+    };
+    text(r, lx, y, std::string("home ") + (st.home_recorded.value_or(false) ? "set" : "not set"), 1,
+         MUTED);
+    text(r, lx, y + 18,
+         "alt<=" + lim(st.max_height_m) + "  dist<=" + lim(st.max_distance_m) + "  RTH " +
+             lim(st.rth_altitude_m),
+         1, MUTED);
+    text(r, lx, y + 36, "F1 help    Esc settings    F3 hide", 1, Color{110, 116, 130, 255});
+
+    // motor-start failure banner (only when relevant)
+    if (st.motor_fail_code && *st.motor_fail_code != 0) {
+        SDL_Rect fb{X, Y + card_h + 6, W, 26};
+        fill_round(r, fb, 6, Color{80, 20, 24, 210});
+        text(r, fb.x + 10, fb.y + 6, "WON'T START: " + st.motor_fail_reason.value_or(""), 1, BAD);
+    }
+
+    // top-right REC badge
+    if (st.is_recording.value_or(false)) {
+        const std::string rt = "REC " + std::to_string(st.record_time_s.value_or(0)) + "s";
+        const int w = text_w(rt, 2) + 44;
+        SDL_Rect rb{sw - 16 - w, 16, w, 30};
+        fill_round(r, rb, 8, Color{20, 12, 14, 200});
+        outline_round(r, rb, 8, Color{120, 40, 44, 255});
+        fill_round(r, SDL_Rect{rb.x + 12, rb.y + rb.h / 2 - 6, 12, 12}, 6, BAD);
+        text(r, rb.x + 32, rb.y + 7, rt, 2, TEXT);
+    }
+
+    // bottom-right twin stick pads
+    const Sticks a = cli.axes();
+    const int half = 42, gap = 24;
+    const int base_y = sh - half - 34;
+    const int rpad_cx = sw - 16 - half;
+    const int lpad_cx = rpad_cx - half * 2 - gap;
+    stick_pad(r, lpad_cx, base_y, half, a.yaw, a.throttle, "yaw / thr");
+    stick_pad(r, rpad_cx, base_y, half, a.roll, a.pitch, "roll / pitch");
 }
 
+// Faithful port of the beta's _draw_help / _HELP_SECTIONS (pc_client.py): a dimmed
+// backdrop + a card titled "Controls & help", the same four grouped sections laid out
+// in two columns (FLIGHT/MOVE left, CAMERA/VIEW&SYSTEM right), key + description rows.
 void draw_help(SDL_Renderer* r, int sw, int sh) {
-    SDL_Rect p{std::max(20, (sw - 760) / 2), std::max(20, (sh - 470) / 2), std::min(760, sw - 40),
-               std::min(470, sh - 40)};
-    fill(r, p, PANEL);
-    outline(r, p, PANEL_HI);
-    text(r, p.x + 24, p.y + 24, "CONTROLS", 3, TEXT);
-    std::vector<std::string> lines = {
-        "W/S PITCH  A/D ROLL  SPACE/SHIFT THROTTLE  Q/E YAW",
-        "MOUSE X YAW  MOUSE Y GIMBAL  [ ] OR UP/DOWN GIMBAL",
-        "ENTER ARM/DISARM  T TAKEOFF  C CONTROL  L LAND  H RTH",
-        "V GROUND STATION  N RECENTER  P PHOTO  R RECORD TOGGLE",
-        "K KEYFRAME  U NO-GPS UNLOCK  M MOBILE-RC STICKS  G STICK FLAG",
-        "TAB CONSOLE COMMANDS  ESC SETTINGS  F3 HUD  F11 FULLSCREEN",
-        "MEDIA AND GPS PARSING ARE NOT PORTED IN THIS PHASE.",
-        "ESC OR F1 CLOSES THIS HELP.",
+    struct Row {
+        const char* key;
+        const char* desc;
     };
-    int y = p.y + 82;
-    for (const auto& l : lines) {
-        text(r, p.x + 24, y, l, 2, y == p.y + 82 ? ACCENT_HI : TEXT);
-        y += 34;
+    struct Section {
+        const char* title;
+        std::vector<Row> rows;
+    };
+    static const std::vector<Section> sections = {
+        {"FLIGHT - do these in order",
+         {{"Enter", "ARM / disarm motors - always first"},
+          {"T", "take off (control auto-enables once stable)"},
+          {"C", "control on/off - only AFTER takeoff"},
+          {"L", "land (auto-releases control back to RC)"},
+          {"H", "Return-to-Home - emergency recall"}}},
+        {"MOVE - hold while flying",
+         {{"W / S", "pitch forward / back"},
+          {"A / D", "roll left / right"},
+          {"Space / Shift", "throttle up / down"},
+          {"Q / E", "yaw left / right"},
+          {"Mouse", "yaw (left-right) + gimbal tilt (up-down)"}}},
+        {"CAMERA",
+         {{"P", "take a photo"},
+          {"R", "start / stop recording"},
+          {"[ ] or Up/Down", "gimbal tilt"},
+          {"N", "recenter gimbal"}}},
+        {"VIEW & SYSTEM",
+         {{"Esc", "flight settings panel"},
+          {"Tab", "console (type any command)"},
+          {"F1", "this help (Esc/F1 to close)"},
+          {"F3", "hide / show the HUD"},
+          {"F11", "fullscreen toggle"},
+          {"V", "ground-station authority toggle"},
+          {"U", "no-GPS takeoff unlock"},
+          {"K", "request a video keyframe"},
+          {"G", "cycle stick flag (debug)"}}},
+    };
+    const int pw = std::min(940, sw - 40);
+    const int ph = std::min(600, sh - 40);
+    const int px = (sw - pw) / 2, py = (sh - ph) / 2;
+    fill(r, SDL_Rect{0, 0, sw, sh}, Color{0, 0, 0, 150}); // dim the world
+    fill_round(r, SDL_Rect{px, py, pw, ph}, 14, PANEL);
+    outline_round(r, SDL_Rect{px, py, pw, ph}, 14, PANEL_HI);
+    text(r, px + 26, py + 18, "Controls & help", 3, ACCENT);
+    set_color(r, PANEL_HI);
+    SDL_RenderDrawLine(r, px + 26, py + 60, px + pw - 26, py + 60);
+
+    const int col_w = (pw - 52) / 2;
+    int col_x[2] = {px + 26, px + 26 + col_w};
+    int col_y[2] = {py + 76, py + 76};
+    const int layout[4] = {0, 0, 1, 1}; // FLIGHT+MOVE left, CAMERA+VIEW&SYSTEM right
+    for (std::size_t si = 0; si < sections.size(); ++si) {
+        const int c = layout[si];
+        int x = col_x[c], y = col_y[c];
+        text(r, x, y, sections[si].title, 1, ACCENT_HI);
+        y += 24;
+        for (const auto& row : sections[si].rows) {
+            text(r, x + 6, y, row.key, 1, TEXT);
+            text(r, x + 150, y, row.desc, 1, Color{188, 196, 208, 255});
+            y += 22;
+        }
+        y += 14;
+        col_y[c] = y;
     }
+    text_center(r, SDL_Rect{px, py + ph - 30, pw, 22}, "Esc or F1 - close", 1, MUTED);
 }
 
 void draw_console(SDL_Renderer* r, int sw, int sh, const std::string& buf) {
     SDL_Rect p{18, sh - 74, sw - 36, 56};
-    fill(r, p, Color{8, 10, 14, 235});
-    outline(r, p, ACCENT);
+    fill_round(r, p, 10, Color{8, 10, 14, 235});
+    outline_round(r, p, 10, ACCENT);
     text(r, p.x + 14, p.y + 18, "> " + buf + "_", 2, TEXT);
 }
 
@@ -1525,6 +1968,7 @@ int run_app(const AppOptions& opt) {
         return 2;
     }
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    g_font.load(r); // real system font; silently falls back to the bitmap font if none
 
     std::optional<std::string> saved_host;
     int rc = 0;
@@ -1538,6 +1982,7 @@ int run_app(const AppOptions& opt) {
         if (rc != 0)
             break;
     }
+    g_font.clear(); // destroy cached glyph textures before the renderer
     SDL_DestroyRenderer(r);
     SDL_DestroyWindow(win);
     SDL_Quit();
