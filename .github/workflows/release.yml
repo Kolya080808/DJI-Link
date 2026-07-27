@@ -263,22 +263,56 @@ jobs:
           # own CDN never blocks its runners. BtbN has no 32-bit build, so linux-x86 keeps
           # johnvansickle's i686 static tarball (that job is best-effort / continue-on-error).
           btbn="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest"
+          # 32-bit: no maintained static build is served from a host that allows datacenter
+          # IPs (johnvansickle answers 415 to Actions runners), so several candidates are
+          # tried and bundling is SKIPPED if none work — see the loop below.
           case "${{ matrix.slug }}" in
-            linux-x86_64) url="$btbn/ffmpeg-master-latest-linux64-gpl.tar.xz" ;;
-            linux-arm64)  url="$btbn/ffmpeg-master-latest-linuxarm64-gpl.tar.xz" ;;
-            linux-x86)    url="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-i686-static.tar.xz" ;;
+            linux-x86_64) urls=("$btbn/ffmpeg-master-latest-linux64-gpl.tar.xz") ;;
+            linux-arm64)  urls=("$btbn/ffmpeg-master-latest-linuxarm64-gpl.tar.xz") ;;
+            # eugeneware/ffmpeg-static publishes a BARE static i386 binary (not a tarball)
+            # on GitHub Releases, so it is never blocked for runners. johnvansickle stays
+            # as a last resort, but it answers 415 to datacenter IPs in general.
+            linux-x86)    urls=(
+                            "https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-linux-ia32"
+                            "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-i686-static.tar.xz"
+                          ) ;;
             *) echo "::error::unknown Linux ffmpeg arch for ${{ matrix.slug }}"; exit 1 ;;
           esac
           mkdir -p third_party/ffmpeg/bin /tmp/ffx
-          curl -fL --retry 3 --retry-all-errors "$url" -o /tmp/ffmpeg.tar.xz
-          tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffx
-          # Layout differs per source (BtbN: <dir>/bin/ffmpeg; johnvansickle: <dir>/ffmpeg),
-          # so locate the binary instead of hard-coding the path.
-          ff="$(find /tmp/ffx -type f -name ffmpeg | head -1)"
-          test -n "$ff" || { echo "::error::ffmpeg binary not found in $url"; exit 1; }
+          got=""
+          for url in "${urls[@]}"; do
+            echo "Trying $url"
+            if curl -fL --retry 3 --retry-all-errors --connect-timeout 20 "$url" -o /tmp/ffmpeg.dl; then
+              got="$url"; break
+            fi
+            echo "::warning::download failed: $url"
+          done
+          # Bundling ffmpeg is optional (CMake only installs it when the file exists), and
+          # ffmpeg is a separate process the user can supply themselves. A dead mirror must
+          # not fail the whole build, so give up quietly and build without it.
+          if [ -z "$got" ]; then
+            echo "::warning::no ffmpeg build could be downloaded for ${{ matrix.slug }} — packaging WITHOUT bundled ffmpeg"
+            exit 0
+          fi
+          # A source serves either a tarball or a bare executable; detect which by content
+          # rather than by file extension.
+          if file -b /tmp/ffmpeg.dl | grep -qi 'XZ compressed'; then
+            tar -xJf /tmp/ffmpeg.dl -C /tmp/ffx
+            # Layout differs per source (BtbN: <dir>/bin/ffmpeg; johnvansickle: <dir>/ffmpeg),
+            # so locate the binary instead of hard-coding the path.
+            ff="$(find /tmp/ffx -type f -name ffmpeg | head -1)"
+          else
+            ff=/tmp/ffmpeg.dl
+          fi
+          if [ -z "$ff" ] || [ ! -s "$ff" ]; then
+            echo "::warning::ffmpeg binary not found inside $got — packaging WITHOUT bundled ffmpeg"
+            exit 0
+          fi
           cp "$ff" third_party/ffmpeg/bin/ffmpeg
           chmod +x third_party/ffmpeg/bin/ffmpeg
-          third_party/ffmpeg/bin/ffmpeg -version
+          # A 32-bit binary will not execute on a runner without 32-bit libs, so a failed
+          # -version check is informational only, not a build error.
+          third_party/ffmpeg/bin/ffmpeg -version || echo "::warning::bundled ffmpeg is not runnable on this runner (expected when cross-arch)"
           echo "DJI_LINK_BUNDLED_FFMPEG=$PWD/third_party/ffmpeg/bin/ffmpeg" >> "$GITHUB_ENV"
 
       - name: Configure

@@ -42,6 +42,13 @@ prerelease: true
   acknowledged and stayed put. `L` now releases control the way the console `land`
   command already did.
 
+- **`linux-x86` CI job failed every release.** `johnvansickle.com` returns HTTP 415 to
+  GitHub Actions runner IPs, so the 32-bit ffmpeg download always failed and broke the
+  job. The step now tries `eugeneware/ffmpeg-static` first (GitHub Releases, never
+  blocked) and handles both a bare executable and a tar.xz. If every source fails,
+  bundling is skipped gracefully (`exit 0`) — ffmpeg is optional in the CMake build and
+  users can supply it themselves.
+
 ## Changed
 
 - `install.sh`, `update_pi.sh` and `setup_pi.sh` re-exec themselves through `sudo` when
