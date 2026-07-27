@@ -31,8 +31,9 @@ void Drone::stop() {
 }
 
 std::uint16_t Drone::next_seq() {
-    seq_ = static_cast<std::uint16_t>((seq_ + 1) & 0xFFFF);
-    return seq_;
+    // Atomic: several threads issue commands concurrently and a duplicated seq makes
+    // the FC discard the packet as a repeat.
+    return static_cast<std::uint16_t>(seq_.fetch_add(1, std::memory_order_relaxed) + 1);
 }
 
 void Drone::cmd(std::uint8_t cmd_set, std::uint8_t cmd_id, const Bytes& payload,
@@ -51,6 +52,8 @@ void Drone::cmd(std::uint8_t cmd_set, std::uint8_t cmd_id, const Bytes& payload,
         (cmd_id == 0xF0 || cmd_id == 0xF7 || cmd_id == 0xF8 || cmd_id == 0xF9 || cmd_id == 0xFA)) {
         frame = encrypt_frame(frame);
     }
+    // One frame per send, never interleaved with another thread's bytes.
+    std::lock_guard<std::mutex> lk(*tx_mu_);
     t_->send(frame);
 }
 
@@ -305,7 +308,8 @@ void Drone::take_photo(int ptype) {
     Transport* t = t_;
     std::uint8_t pt = static_cast<std::uint8_t>(ptype & 0xFF);
     std::uint16_t seq = next_seq();
-    std::thread([alive, t, pt, seq]() {
+    auto mu = tx_mu_;
+    std::thread([alive, t, pt, seq, mu]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
         if (!alive->load())
             return;
@@ -317,6 +321,7 @@ void Drone::take_photo(int ptype) {
         pkt.seq = seq;
         pkt.cmd_type = 0x40;
         pkt.payload = {pt};
+        std::lock_guard<std::mutex> lk(*mu);
         t->send(pkt.encode());
     }).detach();
 }
@@ -327,7 +332,8 @@ void Drone::start_record() {
     Transport* t = t_;
     std::uint16_t s0 = next_seq(), s1 = next_seq(), s2 = next_seq();
     std::uint16_t seqs[3] = {s0, s1, s2};
-    std::thread([alive, t, seqs]() {
+    auto mu = tx_mu_;
+    std::thread([alive, t, seqs, mu]() {
         for (int i = 0; i < 3; ++i) {
             std::this_thread::sleep_for(std::chrono::milliseconds(i == 0 ? 400 : 600));
             if (!alive->load())
@@ -340,7 +346,10 @@ void Drone::start_record() {
             pkt.seq = seqs[i];
             pkt.cmd_type = 0x40;
             pkt.payload = {0x01}; // 1 = START
-            t->send(pkt.encode());
+            {
+                std::lock_guard<std::mutex> lk(*mu);
+                t->send(pkt.encode());
+            }
         }
     }).detach();
 }

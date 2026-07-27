@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace djilink {
@@ -125,7 +126,15 @@ private:
 
     Transport* t_;
     FlightProfile profile_;
-    std::uint16_t seq_ = 0;
+    // The sender loop (20 Hz), telemetry/stats loop, detached param+camera threads and
+    // the GUI thread all issue commands. Without these two guards, concurrent cmd()
+    // calls interleave their bytes on one socket (the FC drops the torn frame — lost
+    // takeoff/land) and duplicate seq numbers (the FC treats the packet as a repeat).
+    // encode+send is held under one mutex so every frame reaches the wire whole. It is
+    // shared_ptr because the detached camera threads below outlive the call that spawned
+    // them and must still take the same lock.
+    std::shared_ptr<std::mutex> tx_mu_ = std::make_shared<std::mutex>();
+    std::atomic<std::uint16_t> seq_{0};
     int shutter_denom_ = -1;                   // last user-set 1/N shutter (-1 = auto)
     std::shared_ptr<std::atomic<bool>> alive_; // guards detached camera-sequence threads
 };

@@ -155,6 +155,12 @@ write_hostapd_conf() {
         echo "rsn_pairwise=CCMP"
         echo "wpa_passphrase=$AP_PSK"
         echo "wps_state=0"
+        # BCM43430 (Pi Zero 2 W) firmware resets periodically under AP+STA load,
+        # especially with power_save on. During a reset hostapd gets a burst of
+        # low-ACK events and kicks the client. disassoc_low_ack=0 prevents hostapd
+        # from kicking clients on poor ACK rate so a firmware hiccup does not drop
+        # the connection.
+        echo "disassoc_low_ack=0"
         if [ -n "$country" ]; then
             echo "country_code=$country"
             echo "ieee80211d=1"
@@ -167,6 +173,10 @@ cmd_pre() {
         echo "[ap] could not create/address $AP_IFACE" >&2
         return 1
     fi
+    # BCM43430 firmware crashes much more often with power saving enabled while running
+    # AP+STA concurrently. Turn it off before hostapd starts. The command is idempotent
+    # and benign on other chips. Failures are non-fatal (some kernels ignore the request).
+    /sbin/iw dev "$STA_IFACE" set power_save off 2>/dev/null || true
     write_hostapd_conf
     setup_nat
     start_dnsmasq

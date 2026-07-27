@@ -319,8 +319,54 @@ class Handler(BaseHTTPRequestHandler):
             self._send({"error": "not found"}, 404)
 
 
+def ap_watchdog() -> None:
+    """Restart dji-ap whenever the last client leaves.
+
+    BCM43430 (Pi Zero 2 W) firmware gets stuck after a client disassociates:
+    hostapd cannot accept new associations until the AP service is restarted.
+    This watchdog polls the DHCP lease file; when it sees clients drop to zero
+    it restarts dji-ap so the next connection attempt finds a clean AP.
+
+    Only active in hostapd mode (dji-ap.service present). In the NM-fallback
+    mode the chip does not exhibit this behaviour.
+    """
+    if not hostapd_mode():
+        return
+    LEASES = "/var/lib/misc/dnsmasq.leases"
+    CHECK_S = 10      # poll interval while clients are present
+    IDLE_S  = 20      # extra wait after last client leaves before restart
+                      # (avoids a restart during a quick reconnect)
+    had_clients = False
+    idle_since: float | None = None
+
+    while True:
+        time.sleep(CHECK_S)
+        try:
+            leases = [l for l in open(LEASES).read().splitlines() if l.strip()]
+        except OSError:
+            leases = []
+
+        if leases:
+            had_clients = True
+            idle_since = None
+        elif had_clients:
+            # Transition: had clients, now none.
+            if idle_since is None:
+                idle_since = time.monotonic()
+                print("[netctl] watchdog: all clients left — will restart AP in "
+                      f"{IDLE_S}s if no one reconnects", flush=True)
+            elif time.monotonic() - idle_since >= IDLE_S:
+                print("[netctl] watchdog: restarting dji-ap to clear BCM43430 state",
+                      flush=True)
+                systemctl("restart", AP_SERVICE)
+                had_clients = False
+                idle_since = None
+
+
 def serve():
     hotspot(True)          # the AP is the whole point — bring it up on start
+    import threading
+    threading.Thread(target=ap_watchdog, daemon=True).start()
     srv = HTTPServer(("0.0.0.0", PORT), Handler)
     print(f"[netctl] API on :{PORT}  (AP '{AP_SSID}' at {AP_ADDR})", flush=True)
     srv.serve_forever()

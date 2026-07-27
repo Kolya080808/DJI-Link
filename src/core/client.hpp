@@ -15,7 +15,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
+#include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -83,6 +86,18 @@ public:
     void set_msg(const std::string& s);
     std::string msg() const;
 
+    // Command queue. The GUI render thread must NEVER touch the socket: a blocking
+    // ::send() into a full TCP buffer freezes the whole UI mid-flight. post() hands the
+    // work to cmd_loop() and returns immediately; the HUD message is set by the worker
+    // once the frame is actually on the wire. Commands run strictly in submission order
+    // with a small inter-command gap so the FC is not flooded by a burst of key presses.
+    // An empty msg posts silently — used for the 10 Hz gimbal stream, which would
+    // otherwise overwrite every other HUD message.
+    void post(std::function<void()> fn, std::string msg = {});
+
+    // Drain any queued commands (used on shutdown so a final land/disarm still goes out).
+    void flush_commands();
+
     void start();
     void start_video();
     void close();
@@ -111,6 +126,7 @@ public:
     std::string stats() const;
 
 private:
+    void cmd_loop();
     void on_unit(std::uint16_t typ, const Bytes& payload);
     void on_video_payload(const Bytes& pl);
     void on_duml_payload(const Bytes& payload);
@@ -130,7 +146,16 @@ private:
     VideoOut* video_out_ = nullptr;
 
     std::atomic<bool> running_{false};
-    std::thread rx_, sender_, stats_;
+    std::thread rx_, sender_, stats_, cmd_;
+
+    // Queued UI commands, drained by cmd_loop() in FIFO order.
+    struct QueuedCmd {
+        std::function<void()> fn;
+        std::string msg;
+    };
+    std::mutex cmd_mu_;
+    std::condition_variable cmd_cv_;
+    std::deque<QueuedCmd> cmd_q_;
     std::size_t n_duml_ = 0, n_video_ = 0, video_bytes_ = 0;
     std::atomic<int> decoded_frames_{0};
 

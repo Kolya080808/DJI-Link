@@ -91,6 +91,65 @@ double Client::take_mouse_dx() {
     mouse_dx_ = 0.0;
     return d;
 }
+void Client::post(std::function<void()> fn, std::string msg) {
+    {
+        std::lock_guard<std::mutex> lk(cmd_mu_);
+        // Silent posts are the periodic gimbal stream: only the newest target matters, so
+        // drop a pending one instead of queueing a backlog of stale angles behind it.
+        // Named commands (takeoff, land, RTH) are never coalesced or dropped.
+        if (msg.empty() && !cmd_q_.empty() && cmd_q_.back().msg.empty())
+            cmd_q_.pop_back();
+        cmd_q_.push_back({std::move(fn), std::move(msg)});
+    }
+    cmd_cv_.notify_one();
+}
+
+void Client::cmd_loop() {
+    while (running_.load()) {
+        QueuedCmd c;
+        {
+            std::unique_lock<std::mutex> lk(cmd_mu_);
+            cmd_cv_.wait_for(lk, std::chrono::milliseconds(100),
+                             [this] { return !cmd_q_.empty() || !running_.load(); });
+            if (cmd_q_.empty())
+                continue;
+            c = std::move(cmd_q_.front());
+            cmd_q_.pop_front();
+        }
+        try {
+            c.fn();
+            if (!c.msg.empty())
+                set_msg(c.msg);
+        } catch (const std::exception& e) {
+            set_msg(std::string("cmd failed: ") + e.what());
+        } catch (...) {
+            set_msg("cmd failed");
+        }
+        // Gap between consecutive commands: the FC drops back-to-back frames sent within
+        // a few ms of each other, which is what made takeoff/land look flaky when a key
+        // press landed while telemetry polling was mid-write.
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    }
+}
+
+void Client::flush_commands() {
+    for (;;) {
+        QueuedCmd c;
+        {
+            std::lock_guard<std::mutex> lk(cmd_mu_);
+            if (cmd_q_.empty())
+                return;
+            c = std::move(cmd_q_.front());
+            cmd_q_.pop_front();
+        }
+        try {
+            c.fn();
+        } catch (...) {
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    }
+}
+
 void Client::set_msg(const std::string& s) {
     {
         std::lock_guard<std::mutex> lk(msg_mu_);
@@ -110,6 +169,7 @@ void Client::start() {
     rx_ = std::thread([this] { rx_loop(); });
     sender_ = std::thread([this] { sender_loop(); });
     stats_ = std::thread([this] { stats_loop(); });
+    cmd_ = std::thread([this] { cmd_loop(); });
     std::thread([this] {
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
         static const char* names[] = {"g_config.flying_limit.max_height_0",
@@ -173,8 +233,11 @@ void Client::cancel_auto_c() {
 }
 
 void Client::close() {
+    // Run whatever the UI queued last (e.g. a land) while the socket is still open.
+    flush_commands();
     if (!running_.exchange(false))
         return;
+    cmd_cv_.notify_all();
     try {
         if (live_ && control.load()) {
             drone_.enable_virtual_stick(false);
@@ -189,6 +252,8 @@ void Client::close() {
         sender_.join();
     if (stats_.joinable())
         stats_.join();
+    if (cmd_.joinable())
+        cmd_.join();
     transport_->close();
 }
 

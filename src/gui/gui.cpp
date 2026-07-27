@@ -1141,13 +1141,12 @@ struct Settings {
     std::vector<int> isos{0, 100, 200, 400, 800, 1600, 3200};
     std::vector<int> shutters{0, 1000, 500, 250, 125, 60, 30, 15, 8, 4};
 
-    void call(Client& cli, const std::function<void()>& fn, const std::string& msg) {
-        try {
-            fn();
-            cli.set_msg(msg);
-        } catch (const std::exception& e) {
-            cli.set_msg(msg + ": " + e.what());
-        }
+    // Hand the command to the client's worker thread instead of running it here: this is
+    // the render thread, and a blocking socket write would freeze the window mid-flight.
+    // The captured state is Settings/Client members, which outlive the queued item — the
+    // queue is drained in Client::close() before either is torn down.
+    void call(Client& cli, std::function<void()> fn, const std::string& msg) {
+        cli.post(std::move(fn), msg);
     }
 
     void draw(SDL_Renderer* r, Client& cli, int sw, int sh, int mx, int my) {
@@ -1172,13 +1171,13 @@ struct Settings {
             [&] {
                 max_alt = std::max(15, max_alt - 5);
                 call(
-                    cli, [&] { cli.drone().set_max_altitude(max_alt); },
+                    cli, [&cli, v = max_alt] { cli.drone().set_max_altitude(v); },
                     "max alt " + std::to_string(max_alt) + " m");
             },
             [&] {
                 max_alt = std::min(500, max_alt + 5);
                 call(
-                    cli, [&] { cli.drone().set_max_altitude(max_alt); },
+                    cli, [&cli, v = max_alt] { cli.drone().set_max_altitude(v); },
                     "max alt " + std::to_string(max_alt) + " m");
             });
         row(
@@ -1186,13 +1185,13 @@ struct Settings {
             [&] {
                 max_dist = std::max(15, max_dist - 50);
                 call(
-                    cli, [&] { cli.drone().set_max_distance(max_dist); },
+                    cli, [&cli, v = max_dist] { cli.drone().set_max_distance(v); },
                     "max dist " + std::to_string(max_dist) + " m");
             },
             [&] {
                 max_dist = std::min(5000, max_dist + 50);
                 call(
-                    cli, [&] { cli.drone().set_max_distance(max_dist); },
+                    cli, [&cli, v = max_dist] { cli.drone().set_max_distance(v); },
                     "max dist " + std::to_string(max_dist) + " m");
             });
         row(
@@ -1200,24 +1199,24 @@ struct Settings {
             [&] {
                 rth_alt = std::max(20, rth_alt - 5);
                 call(
-                    cli, [&] { cli.drone().set_rth_altitude(rth_alt); },
+                    cli, [&cli, v = rth_alt] { cli.drone().set_rth_altitude(v); },
                     "RTH alt " + std::to_string(rth_alt) + " m");
             },
             [&] {
                 rth_alt = std::min(500, rth_alt + 5);
                 call(
-                    cli, [&] { cli.drone().set_rth_altitude(rth_alt); },
+                    cli, [&cli, v = rth_alt] { cli.drone().set_rth_altitude(v); },
                     "RTH alt " + std::to_string(rth_alt) + " m");
             });
         row(
             "EV", (ev > 0 ? "+" : "") + std::to_string(ev),
             [&] {
                 ev = std::max(-3, ev - 1);
-                call(cli, [&] { cli.drone().set_ev(ev); }, "EV " + std::to_string(ev));
+                call(cli, [&cli, v = ev] { cli.drone().set_ev(v); }, "EV " + std::to_string(ev));
             },
             [&] {
                 ev = std::min(3, ev + 1);
-                call(cli, [&] { cli.drone().set_ev(ev); }, "EV " + std::to_string(ev));
+                call(cli, [&cli, v = ev] { cli.drone().set_ev(v); }, "EV " + std::to_string(ev));
             });
         row(
             "ISO", isos[iso_i] == 0 ? "AUTO" : std::to_string(isos[iso_i]),
@@ -1225,11 +1224,11 @@ struct Settings {
                 iso_i = (iso_i + static_cast<int>(isos.size()) - 1) % static_cast<int>(isos.size());
                 call(
                     cli,
-                    [&] {
-                        if (isos[iso_i] == 0)
+                    [&cli, v = isos[iso_i]] {
+                        if (v == 0)
                             cli.drone().set_iso_auto();
                         else
-                            cli.drone().set_iso(isos[iso_i]);
+                            cli.drone().set_iso(v);
                     },
                     isos[iso_i] == 0 ? "ISO auto" : "ISO " + std::to_string(isos[iso_i]));
             },
@@ -1237,11 +1236,11 @@ struct Settings {
                 iso_i = (iso_i + 1) % static_cast<int>(isos.size());
                 call(
                     cli,
-                    [&] {
-                        if (isos[iso_i] == 0)
+                    [&cli, v = isos[iso_i]] {
+                        if (v == 0)
                             cli.drone().set_iso_auto();
                         else
-                            cli.drone().set_iso(isos[iso_i]);
+                            cli.drone().set_iso(v);
                     },
                     isos[iso_i] == 0 ? "ISO auto" : "ISO " + std::to_string(isos[iso_i]));
             });
@@ -1253,11 +1252,11 @@ struct Settings {
                             static_cast<int>(shutters.size());
                 call(
                     cli,
-                    [&] {
-                        if (shutters[shutter_i] == 0)
+                    [&cli, v = shutters[shutter_i]] {
+                        if (v == 0)
                             cli.drone().set_shutter_auto();
                         else
-                            cli.drone().set_shutter(shutters[shutter_i]);
+                            cli.drone().set_shutter(v);
                     },
                     shutters[shutter_i] == 0 ? "shutter AUTO"
                                              : "shutter 1/" + std::to_string(shutters[shutter_i]));
@@ -1266,11 +1265,11 @@ struct Settings {
                 shutter_i = (shutter_i + 1) % static_cast<int>(shutters.size());
                 call(
                     cli,
-                    [&] {
-                        if (shutters[shutter_i] == 0)
+                    [&cli, v = shutters[shutter_i]] {
+                        if (v == 0)
                             cli.drone().set_shutter_auto();
                         else
-                            cli.drone().set_shutter(shutters[shutter_i]);
+                            cli.drone().set_shutter(v);
                     },
                     shutters[shutter_i] == 0 ? "shutter AUTO"
                                              : "shutter 1/" + std::to_string(shutters[shutter_i]));
@@ -1336,52 +1335,58 @@ struct Settings {
                 0,
                 [&] {
                     max_alt = std::max(15, max_alt - 5);
-                    cli.drone().set_max_altitude(max_alt);
-                    cli.set_msg("max alt " + std::to_string(max_alt) + " m");
+                    call(
+                        cli, [&cli, v = max_alt] { cli.drone().set_max_altitude(v); },
+                        "max alt " + std::to_string(max_alt) + " m");
                 },
                 [&] {
                     max_alt = std::min(500, max_alt + 5);
-                    cli.drone().set_max_altitude(max_alt);
-                    cli.set_msg("max alt " + std::to_string(max_alt) + " m");
+                    call(
+                        cli, [&cli, v = max_alt] { cli.drone().set_max_altitude(v); },
+                        "max alt " + std::to_string(max_alt) + " m");
                 }))
             return true;
         if (row_action(
                 1,
                 [&] {
                     max_dist = std::max(15, max_dist - 50);
-                    cli.drone().set_max_distance(max_dist);
-                    cli.set_msg("max dist " + std::to_string(max_dist) + " m");
+                    call(
+                        cli, [&cli, v = max_dist] { cli.drone().set_max_distance(v); },
+                        "max dist " + std::to_string(max_dist) + " m");
                 },
                 [&] {
                     max_dist = std::min(5000, max_dist + 50);
-                    cli.drone().set_max_distance(max_dist);
-                    cli.set_msg("max dist " + std::to_string(max_dist) + " m");
+                    call(
+                        cli, [&cli, v = max_dist] { cli.drone().set_max_distance(v); },
+                        "max dist " + std::to_string(max_dist) + " m");
                 }))
             return true;
         if (row_action(
                 2,
                 [&] {
                     rth_alt = std::max(20, rth_alt - 5);
-                    cli.drone().set_rth_altitude(rth_alt);
-                    cli.set_msg("RTH alt " + std::to_string(rth_alt) + " m");
+                    call(
+                        cli, [&cli, v = rth_alt] { cli.drone().set_rth_altitude(v); },
+                        "RTH alt " + std::to_string(rth_alt) + " m");
                 },
                 [&] {
                     rth_alt = std::min(500, rth_alt + 5);
-                    cli.drone().set_rth_altitude(rth_alt);
-                    cli.set_msg("RTH alt " + std::to_string(rth_alt) + " m");
+                    call(
+                        cli, [&cli, v = rth_alt] { cli.drone().set_rth_altitude(v); },
+                        "RTH alt " + std::to_string(rth_alt) + " m");
                 }))
             return true;
         if (row_action(
                 3,
                 [&] {
                     ev = std::max(-3, ev - 1);
-                    cli.drone().set_ev(ev);
-                    cli.set_msg("EV " + std::to_string(ev));
+                    call(
+                        cli, [&cli, v = ev] { cli.drone().set_ev(v); }, "EV " + std::to_string(ev));
                 },
                 [&] {
                     ev = std::min(3, ev + 1);
-                    cli.drone().set_ev(ev);
-                    cli.set_msg("EV " + std::to_string(ev));
+                    call(
+                        cli, [&cli, v = ev] { cli.drone().set_ev(v); }, "EV " + std::to_string(ev));
                 }))
             return true;
         if (row_action(
@@ -1389,21 +1394,27 @@ struct Settings {
                 [&] {
                     iso_i =
                         (iso_i + static_cast<int>(isos.size()) - 1) % static_cast<int>(isos.size());
-                    if (isos[iso_i] == 0)
-                        cli.drone().set_iso_auto();
-                    else
-                        cli.drone().set_iso(isos[iso_i]);
-                    cli.set_msg(isos[iso_i] == 0 ? "ISO auto"
-                                                 : "ISO " + std::to_string(isos[iso_i]));
+                    call(
+                        cli,
+                        [&cli, v = isos[iso_i]] {
+                            if (v == 0)
+                                cli.drone().set_iso_auto();
+                            else
+                                cli.drone().set_iso(v);
+                        },
+                        isos[iso_i] == 0 ? "ISO auto" : "ISO " + std::to_string(isos[iso_i]));
                 },
                 [&] {
                     iso_i = (iso_i + 1) % static_cast<int>(isos.size());
-                    if (isos[iso_i] == 0)
-                        cli.drone().set_iso_auto();
-                    else
-                        cli.drone().set_iso(isos[iso_i]);
-                    cli.set_msg(isos[iso_i] == 0 ? "ISO auto"
-                                                 : "ISO " + std::to_string(isos[iso_i]));
+                    call(
+                        cli,
+                        [&cli, v = isos[iso_i]] {
+                            if (v == 0)
+                                cli.drone().set_iso_auto();
+                            else
+                                cli.drone().set_iso(v);
+                        },
+                        isos[iso_i] == 0 ? "ISO auto" : "ISO " + std::to_string(isos[iso_i]));
                 }))
             return true;
         if (row_action(
@@ -1411,23 +1422,31 @@ struct Settings {
                 [&] {
                     shutter_i = (shutter_i + static_cast<int>(shutters.size()) - 1) %
                                 static_cast<int>(shutters.size());
-                    if (shutters[shutter_i] == 0)
-                        cli.drone().set_shutter_auto();
-                    else
-                        cli.drone().set_shutter(shutters[shutter_i]);
-                    cli.set_msg(shutters[shutter_i] == 0
-                                    ? "shutter AUTO"
-                                    : "shutter 1/" + std::to_string(shutters[shutter_i]));
+                    call(
+                        cli,
+                        [&cli, v = shutters[shutter_i]] {
+                            if (v == 0)
+                                cli.drone().set_shutter_auto();
+                            else
+                                cli.drone().set_shutter(v);
+                        },
+                        shutters[shutter_i] == 0
+                            ? "shutter AUTO"
+                            : "shutter 1/" + std::to_string(shutters[shutter_i]));
                 },
                 [&] {
                     shutter_i = (shutter_i + 1) % static_cast<int>(shutters.size());
-                    if (shutters[shutter_i] == 0)
-                        cli.drone().set_shutter_auto();
-                    else
-                        cli.drone().set_shutter(shutters[shutter_i]);
-                    cli.set_msg(shutters[shutter_i] == 0
-                                    ? "shutter AUTO"
-                                    : "shutter 1/" + std::to_string(shutters[shutter_i]));
+                    call(
+                        cli,
+                        [&cli, v = shutters[shutter_i]] {
+                            if (v == 0)
+                                cli.drone().set_shutter_auto();
+                            else
+                                cli.drone().set_shutter(v);
+                        },
+                        shutters[shutter_i] == 0
+                            ? "shutter AUTO"
+                            : "shutter 1/" + std::to_string(shutters[shutter_i]));
                 }))
             return true;
         y += 6 * 48 + 8;
@@ -1437,29 +1456,16 @@ struct Settings {
         };
         std::vector<Click> clicks = {
             {{p.x + 26, y, 190, 42},
-             [&] {
-                 cli.drone().set_flight_mode("normal");
-                 cli.set_msg("mode normal");
-             }},
+             [&] { call(cli, [&cli] { cli.drone().set_flight_mode("normal"); }, "mode normal"); }},
             {{p.x + 226, y, 190, 42},
-             [&] {
-                 cli.drone().set_flight_mode("cinema");
-                 cli.set_msg("mode cinema");
-             }},
+             [&] { call(cli, [&cli] { cli.drone().set_flight_mode("cinema"); }, "mode cinema"); }},
             {{p.x + 426, y, 190, 42},
-             [&] {
-                 cli.drone().set_flight_mode("sport");
-                 cli.set_msg("mode sport");
-             }},
+             [&] { call(cli, [&cli] { cli.drone().set_flight_mode("sport"); }, "mode sport"); }},
             {{p.x + 26, y + 58, 190, 42},
-             [&] {
-                 cli.drone().gimbal_recenter();
-                 cli.set_msg("gimbal recenter");
-             }},
+             [&] { call(cli, [&cli] { cli.drone().gimbal_recenter(); }, "gimbal recenter"); }},
             {{p.x + 226, y + 58, 190, 42},
              [&] {
-                 cli.drone().set_home_to_current_location();
-                 cli.set_msg("home set");
+                 call(cli, [&cli] { cli.drone().set_home_to_current_location(); }, "home set");
              }},
             {{p.x + 426, y + 58, 190, 42}, [&] { cli.return_to_menu.store(true); }},
         };
@@ -1734,6 +1740,7 @@ int flight_screen(SDL_Window* win, SDL_Renderer* r, const ConnectionSpec& spec,
         SDL_CreateTexture(r, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, kVideoW, kVideoH);
     std::set<std::string> held;
     double gimbal_pitch = 0.0;
+    auto gimbal_last = std::chrono::steady_clock::now();
     auto set_grab = [&](bool on) {
         SDL_SetWindowGrab(win, on ? SDL_TRUE : SDL_FALSE);
         SDL_SetRelativeMouseMode(on ? SDL_TRUE : SDL_FALSE);
@@ -1777,12 +1784,11 @@ int flight_screen(SDL_Window* win, SDL_Renderer* r, const ConnectionSpec& spec,
                 }
             } else if (e.type == SDL_MOUSEMOTION && SDL_GetRelativeMouseMode()) {
                 cli.add_mouse_dx(e.motion.xrel);
+                // Mouse Y only updates the absolute pitch target; the frame loop streams it
+                // at 10 Hz. Sending per motion event would flood the link with hundreds of
+                // frames a second and stall the window (pc_client.py does the same).
                 gimbal_pitch = std::max(
                     -90.0, std::min(30.0, gimbal_pitch - e.motion.yrel * kMouseGimbalSens));
-                try {
-                    cli.drone().gimbal_angle(gimbal_pitch);
-                } catch (...) {
-                }
             } else if (e.type == SDL_KEYDOWN && !e.key.repeat) {
                 const SDL_Keycode k = e.key.keysym.sym;
                 if (k == SDLK_ESCAPE) {
@@ -1805,65 +1811,77 @@ int flight_screen(SDL_Window* win, SDL_Renderer* r, const ConnectionSpec& spec,
                     cli.armed.store(!cli.armed.load());
                     cli.set_msg(cli.armed.load() ? "ARMED=1" : "ARMED=0");
                 } else if (k == SDLK_t && cli.flight_ok()) {
-                    cli.drone().takeoff();
                     cli.note_takeoff();
-                    cli.set_msg("takeoff");
+                    call(cli, [&cli] { cli.drone().takeoff(); }, "takeoff");
                 } else if (k == SDLK_l) {
                     // Land must also drop virtual-stick control: sender_loop keeps pushing
                     // stick frames at 20 Hz while control is on, and a stream of velocity
                     // setpoints overrides AUTO_LANDING the moment the FC accepts it — the
                     // drone acknowledges (blinks) and stays put. Mirrors the `land` console
                     // command, which already did this.
-                    cli.drone().land();
                     cli.cancel_auto_c();
-                    if (cli.control.load()) {
+                    // Clear `control` before queueing so sender_loop stops emitting stick
+                    // frames immediately; otherwise it could slip a setpoint in between
+                    // land and enable_virtual_stick(false) and cancel the landing.
+                    const bool had_control = cli.control.load();
+                    if (had_control) {
                         cli.control.store(false);
                         cli.gs.store(false);
-                        cli.drone().enable_virtual_stick(false);
-                        cli.set_msg("land (control auto-OFF, returned to RC)");
-                    } else {
-                        cli.set_msg("land");
                     }
+                    call(
+                        cli,
+                        [&cli, had_control] {
+                            cli.drone().land();
+                            if (had_control)
+                                cli.drone().enable_virtual_stick(false);
+                        },
+                        had_control ? "land (control auto-OFF, returned to RC)" : "land");
                 } else if (k == SDLK_h) {
-                    cli.drone().return_to_home();
-                    cli.set_msg("RTH (emergency)");
+                    call(cli, [&cli] { cli.drone().return_to_home(); }, "RTH (emergency)");
                 } else if (k == SDLK_c) {
                     bool want = !cli.control.load();
                     if (want && !cli.airborne()) {
                         cli.set_msg("control on blocked: take off first");
                     } else {
                         cli.control.store(want);
-                        if (want)
-                            cli.drone().request_control();
-                        else
-                            cli.drone().release_control();
-                        cli.set_msg(std::string("control=") + (want ? "1" : "0"));
+                        call(
+                            cli,
+                            [&cli, want] {
+                                if (want)
+                                    cli.drone().request_control();
+                                else
+                                    cli.drone().release_control();
+                            },
+                            std::string("control=") + (want ? "1" : "0"));
                     }
                 } else if (k == SDLK_v) {
                     bool on = !cli.gs.load();
                     cli.gs.store(on);
-                    cli.drone().set_ground_station_mode(on);
-                    cli.set_msg(std::string("ground_station=") + (on ? "1" : "0"));
+                    call(
+                        cli, [&cli, on] { cli.drone().set_ground_station_mode(on); },
+                        std::string("ground_station=") + (on ? "1" : "0"));
                 } else if (k == SDLK_n) {
-                    cli.drone().gimbal_recenter();
-                    cli.set_msg("gimbal recenter");
+                    call(cli, [&cli] { cli.drone().gimbal_recenter(); }, "gimbal recenter");
                 } else if (k == SDLK_p) {
-                    cli.drone().take_photo();
-                    cli.set_msg("photo");
+                    call(cli, [&cli] { cli.drone().take_photo(); }, "photo");
                 } else if (k == SDLK_r) {
                     bool rec = !cli.recording.load();
-                    if (rec)
-                        cli.drone().start_record();
-                    else
-                        cli.drone().stop_record();
                     cli.recording.store(rec);
-                    cli.set_msg(rec ? "rec start" : "rec stop");
+                    call(
+                        cli,
+                        [&cli, rec] {
+                            if (rec)
+                                cli.drone().start_record();
+                            else
+                                cli.drone().stop_record();
+                        },
+                        rec ? "rec start" : "rec stop");
                 } else if (k == SDLK_k) {
-                    cli.drone().request_i_frame();
-                    cli.set_msg("keyframe requested");
+                    call(cli, [&cli] { cli.drone().request_i_frame(); }, "keyframe requested");
                 } else if (k == SDLK_u) {
-                    cli.drone().unlock_no_gps(true);
-                    cli.set_msg("no-GPS takeoff unlock sent");
+                    call(
+                        cli, [&cli] { cli.drone().unlock_no_gps(true); },
+                        "no-GPS takeoff unlock sent");
                 } else if (k == SDLK_m) {
                     cli.stick_mobilerc.store(!cli.stick_mobilerc.load());
                     cli.set_msg(cli.stick_mobilerc.load() ? "stick mobile-RC" : "stick flyc");
@@ -1902,18 +1920,17 @@ int flight_screen(SDL_Window* win, SDL_Renderer* r, const ConnectionSpec& spec,
         // accumulator — clearing it here would throw away the frames that fall between
         // two 20 Hz sends (see Client::add_mouse_dx).
         cli.set_axes(keys_to_sticks(held));
-        if (keys[SDL_SCANCODE_RIGHTBRACKET] || keys[SDL_SCANCODE_UP]) {
+        if (keys[SDL_SCANCODE_RIGHTBRACKET] || keys[SDL_SCANCODE_UP])
             gimbal_pitch = std::min(30.0, gimbal_pitch + 1.5);
-            try {
-                cli.drone().gimbal_angle(gimbal_pitch);
-            } catch (...) {
-            }
-        }
-        if (keys[SDL_SCANCODE_LEFTBRACKET] || keys[SDL_SCANCODE_DOWN]) {
+        if (keys[SDL_SCANCODE_LEFTBRACKET] || keys[SDL_SCANCODE_DOWN])
             gimbal_pitch = std::max(-90.0, gimbal_pitch - 1.5);
-            try {
-                cli.drone().gimbal_angle(gimbal_pitch);
-            } catch (...) {
+        // One absolute-target frame per 100 ms, matching pc_client.py's gimbal_last gate.
+        // duration 0.12 s slightly overlaps the next send so motion stays continuous.
+        {
+            const auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration<double>(now - gimbal_last).count() > 0.1) {
+                gimbal_last = now;
+                cli.post([&cli, v = gimbal_pitch] { cli.drone().gimbal_angle(v, 0.0, 0.0, 0.12); });
             }
         }
 
