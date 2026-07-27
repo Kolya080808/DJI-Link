@@ -15,9 +15,16 @@ if [ -z "$REPO" ] && [ -f "$PREFIX/REPO" ]; then
 fi
 [ -n "$REPO" ] || REPO="Kolya080808/DJI-Link"
 
+# Needs root (it installs into $PREFIX). Under the systemd timer we already are root;
+# run by hand without sudo, re-exec instead of just complaining. DJI_REEXEC stops a
+# loop if sudo does not actually give us root.
 if [ "$(id -u)" -ne 0 ]; then
-    echo "!! update_pi.sh must run as root"
-    exit 1
+    if [ "${DJI_REEXEC:-0}" = "1" ] || ! command -v sudo >/dev/null 2>&1; then
+        echo "!! update_pi.sh must run as root" >&2
+        exit 1
+    fi
+    echo "[update] not root — re-running under sudo"
+    exec sudo -E DJI_REEXEC=1 bash "${BASH_SOURCE[0]}" "$@"
 fi
 
 command -v curl >/dev/null 2>&1 || {

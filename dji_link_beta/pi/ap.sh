@@ -67,8 +67,12 @@ ap_hwmode_channel() {
 }
 
 ap_country() {
-    local c
-    c="$(iw reg get 2>/dev/null | sed -n 's/^country \([A-Z0-9][A-Z0-9]\):.*/\1/p' | head -n1)"
+    # Read regulatory domain from kernel cmdline (cfg80211.ieee80211_regdom=XX), not
+    # from `iw reg get` which may return a stale/conflicting global value (e.g. DE)
+    # while the phy itself is in world mode (99). Match the kernel's actual regdomain.
+    local c cmdline
+    cmdline="$(cat /proc/cmdline 2>/dev/null || true)"
+    c="$(printf '%s' "$cmdline" | sed -n 's/.*cfg80211\.ieee80211_regdom=\([A-Z0-9][A-Z0-9]\).*/\1/p')"
     [ "$c" = "00" ] && c=""
     printf '%s' "$c"
 }

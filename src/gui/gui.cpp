@@ -56,7 +56,6 @@ constexpr int kWinW = 1100;
 constexpr int kWinH = 720;
 constexpr int kVideoW = 640;
 constexpr int kVideoH = 360;
-constexpr double kMouseYawSens = 0.030;
 constexpr double kMouseGimbalSens = 0.15;
 
 struct Color {
@@ -1735,7 +1734,6 @@ int flight_screen(SDL_Window* win, SDL_Renderer* r, const ConnectionSpec& spec,
         SDL_CreateTexture(r, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, kVideoW, kVideoH);
     std::set<std::string> held;
     double gimbal_pitch = 0.0;
-    double frame_dx = 0.0;
     auto set_grab = [&](bool on) {
         SDL_SetWindowGrab(win, on ? SDL_TRUE : SDL_FALSE);
         SDL_SetRelativeMouseMode(on ? SDL_TRUE : SDL_FALSE);
@@ -1778,7 +1776,7 @@ int flight_screen(SDL_Window* win, SDL_Renderer* r, const ConnectionSpec& spec,
                     }
                 }
             } else if (e.type == SDL_MOUSEMOTION && SDL_GetRelativeMouseMode()) {
-                frame_dx += e.motion.xrel;
+                cli.add_mouse_dx(e.motion.xrel);
                 gimbal_pitch = std::max(
                     -90.0, std::min(30.0, gimbal_pitch - e.motion.yrel * kMouseGimbalSens));
                 try {
@@ -1811,9 +1809,21 @@ int flight_screen(SDL_Window* win, SDL_Renderer* r, const ConnectionSpec& spec,
                     cli.note_takeoff();
                     cli.set_msg("takeoff");
                 } else if (k == SDLK_l) {
+                    // Land must also drop virtual-stick control: sender_loop keeps pushing
+                    // stick frames at 20 Hz while control is on, and a stream of velocity
+                    // setpoints overrides AUTO_LANDING the moment the FC accepts it — the
+                    // drone acknowledges (blinks) and stays put. Mirrors the `land` console
+                    // command, which already did this.
                     cli.drone().land();
                     cli.cancel_auto_c();
-                    cli.set_msg("land");
+                    if (cli.control.load()) {
+                        cli.control.store(false);
+                        cli.gs.store(false);
+                        cli.drone().enable_virtual_stick(false);
+                        cli.set_msg("land (control auto-OFF, returned to RC)");
+                    } else {
+                        cli.set_msg("land");
+                    }
                 } else if (k == SDLK_h) {
                     cli.drone().return_to_home();
                     cli.set_msg("RTH (emergency)");
@@ -1888,10 +1898,10 @@ int flight_screen(SDL_Window* win, SDL_Renderer* r, const ConnectionSpec& spec,
             held.insert("space");
         if (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT])
             held.insert("shift");
-        Sticks axes = keys_to_sticks(held);
-        axes.yaw = std::max(-1.0, std::min(1.0, axes.yaw + frame_dx * kMouseYawSens));
-        frame_dx = 0.0;
-        cli.set_axes(axes);
+        // Keyboard axes only. Mouse yaw is applied in the sender loop, which drains the
+        // accumulator — clearing it here would throw away the frames that fall between
+        // two 20 Hz sends (see Client::add_mouse_dx).
+        cli.set_axes(keys_to_sticks(held));
         if (keys[SDL_SCANCODE_RIGHTBRACKET] || keys[SDL_SCANCODE_UP]) {
             gimbal_pitch = std::min(30.0, gimbal_pitch + 1.5);
             try {

@@ -1,2 +1,14 @@
+# Normalise all text to LF in the repo. Windows editors (and a WSL checkout with
+# core.autocrlf) otherwise rewrite whole files to CRLF, which shows up as a huge
+# whitespace-only diff and — worse — breaks the Pi shell scripts: bash chokes on
+# `\r` after `{` / `do`, so setup_pi.sh and ap.sh fail to run at all on the Pi.
+* text=auto eol=lf
+
+# Shell scripts and Python that ship to the Pi/Linux must stay LF no matter what.
+*.sh   text eol=lf
+*.py   text eol=lf
+*.rules text eol=lf
+*.service text eol=lf
+
 *.so filter=lfs diff=lfs merge=lfs -text
 *.apk filter=lfs diff=lfs merge=lfs -text

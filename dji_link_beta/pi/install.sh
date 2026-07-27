@@ -2,7 +2,10 @@
 # DJI-Link Pi installer — one-shot bring-up of a clean Raspberry Pi as the AOA
 # jump-host, meant to be run straight off the network:
 #
-#     curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh | sudo bash
+#     curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh | bash
+#
+# Root is required, but you do not have to remember sudo: without it the installer
+# re-runs itself under sudo (re-downloading itself first when it came in on stdin).
 #
 # It downloads the matching pi/ bundle from the GitHub release, then hands off to
 # setup_pi.sh (dwc2 + raw_gadget + dji-netctl/dji-bridge services + dji-update
@@ -22,6 +25,7 @@ set -euo pipefail
 REPO="${DJI_REPO:-@@REPO@@}"
 TAG="${DJI_TAG:-@@TAG@@}"
 ASSET="${DJI_ASSET:-@@ASSET@@}"
+INSTALLER_ASSET="${DJI_INSTALLER_ASSET:-install-pi.sh}"
 PREFIX="${DJI_PREFIX:-/opt/dji-link}"
 
 # Unsubstituted template markers -> fall back to repo defaults.
@@ -29,12 +33,43 @@ case "$REPO"  in *@@*) REPO="Kolya080808/DJI-Link";; esac
 case "$TAG"   in *@@*) TAG="latest";; esac
 case "$ASSET" in *@@*) ASSET="dji-link-pi.tar.gz";; esac
 
-# `curl | sudo bash` is intentional: when a script arrives on stdin there is no
-# reliable file path to re-exec under sudo.
+# Not root? Re-run ourselves under sudo instead of telling the user to do it.
+#
+# Two cases:
+#   * started from a file (bash install.sh)   -> exec sudo on that same file;
+#   * arrived on stdin (curl ... | bash)      -> there is no file path to re-exec and
+#     stdin is already partly consumed, so re-download the installer to a temp file
+#     and exec sudo on that. DJI_REEXEC guards against a loop if sudo somehow keeps
+#     us non-root.
 if [ "$(id -u)" -ne 0 ]; then
-    echo "!! run this installer as root:"
-    echo "   curl -fsSL https://github.com/${REPO}/releases/latest/download/${ASSET} | sudo bash"
-    exit 1
+    if [ "${DJI_REEXEC:-0}" = "1" ]; then
+        echo "!! still not root after sudo; aborting" >&2
+        exit 1
+    fi
+    command -v sudo >/dev/null 2>&1 || {
+        echo "!! this installer needs root and sudo is not available." >&2
+        echo "   log in as root and re-run it." >&2
+        exit 1
+    }
+    echo "[install] not root — re-running under sudo"
+    if [ -f "${BASH_SOURCE[0]:-}" ]; then
+        exec sudo -E DJI_REEXEC=1 bash "${BASH_SOURCE[0]}" "$@"
+    fi
+    if [ "$TAG" = "latest" ]; then
+        SELF_URL="https://github.com/${REPO}/releases/latest/download/${INSTALLER_ASSET}"
+    else
+        SELF_URL="https://github.com/${REPO}/releases/download/${TAG}/${INSTALLER_ASSET}"
+    fi
+    SELF_TMP="$(mktemp -t dji-install-XXXXXX.sh)"
+    trap 'rm -f "$SELF_TMP"' EXIT
+    curl -fsSL "$SELF_URL" -o "$SELF_TMP" || {
+        echo "!! could not re-download the installer from $SELF_URL" >&2
+        echo "   run it as root instead:" >&2
+        echo "   curl -fsSL $SELF_URL | sudo bash" >&2
+        exit 1
+    }
+    sudo -E DJI_REEXEC=1 bash "$SELF_TMP" "$@"
+    exit $?
 fi
 
 if [ "$TAG" = "latest" ]; then

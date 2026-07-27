@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <deque>
 #include <filesystem>
@@ -21,6 +22,32 @@ fs::path g_dir;
 fs::path g_latest;
 bool g_verbose = false;
 bool g_configured = false;
+
+// Absolute, always-writable log location. current_path() is wrong for a double-clicked
+// GUI app: Explorer sets the cwd to the shortcut target or System32, so logs landed
+// somewhere unpredictable (or nowhere). Installed builds live under Program Files, which
+// needs admin rights to write, so the exe directory is not an option either.
+fs::path resolve_log_dir() {
+    std::error_code ec;
+#ifdef _WIN32
+    for (const char* var : {"LOCALAPPDATA", "APPDATA", "USERPROFILE", "TEMP"}) {
+        if (const char* v = std::getenv(var)) {
+            if (*v)
+                return fs::path(v) / "DJI-Link" / "logs";
+        }
+    }
+#else
+    if (const char* xdg = std::getenv("XDG_STATE_HOME")) {
+        if (*xdg)
+            return fs::path(xdg) / "dji-link" / "logs";
+    }
+    if (const char* home = std::getenv("HOME")) {
+        if (*home)
+            return fs::path(home) / ".local" / "state" / "dji-link" / "logs";
+    }
+#endif
+    return fs::temp_directory_path(ec) / "dji-link" / "logs";
+}
 
 std::string now_hms() {
     const std::time_t t = std::time(nullptr);
@@ -110,7 +137,7 @@ void setup(bool verbose) {
     if (g_configured)
         return;
     g_verbose = verbose;
-    g_dir = fs::current_path() / "logs";
+    g_dir = resolve_log_dir();
     g_latest = g_dir / "latest.log";
     std::error_code ec;
     fs::create_directories(g_dir, ec);

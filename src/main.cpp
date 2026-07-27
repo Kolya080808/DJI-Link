@@ -141,6 +141,8 @@ int main(int argc, char** argv) {
     Args args = parse_args(argc, argv);
     applog::setup(args.verbose);
     applog::info(std::string("[log] logging to ") + applog::latest_path());
+    // Also on stdout: the log file is no longer next to the exe, so print where it went.
+    std::printf("log file: %s\n", applog::latest_path().c_str());
     // Clean up any installer left over from a previous update attempt.
     updater::wipe_temp();
 

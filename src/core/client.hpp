@@ -68,6 +68,17 @@ public:
     void set_axes(const Sticks& a);
     Sticks axes() const;
 
+    // Mouse-to-yaw scale, applied by the sender loop where the accumulator is drained.
+    static constexpr double kMouseYawSens = 0.030;
+
+    // Relative mouse motion, accumulated by the GUI and drained by the sender loop.
+    // The GUI renders at ~60 Hz but sticks go out at 20 Hz, so the GUI must not clear
+    // what it accumulated — two of every three frames would be discarded unsent and
+    // smooth mouse movement would reach the drone as sparse jerks. add_mouse_dx()
+    // accumulates; take_mouse_dx() returns and clears, so every count is sent exactly once.
+    void add_mouse_dx(double dx);
+    double take_mouse_dx();
+
     // one-line status message for the HUD (thread-safe).
     void set_msg(const std::string& s);
     std::string msg() const;
@@ -128,6 +139,7 @@ private:
 
     mutable std::mutex axes_mu_;
     Sticks axes_;
+    double mouse_dx_ = 0.0;
     mutable std::mutex msg_mu_;
     std::string msg_;
 

@@ -31,7 +31,24 @@ for a in "$@"; do
     esac
 done
 
-# Run as root, but keep track of the real user so files do not end up root-owned.
+# Root is required (apt, /boot/config.txt, systemd units). Started without sudo, we
+# re-exec ourselves under it rather than telling the user to try again — the argument
+# list is passed through, so `bash setup_pi.sh --dir X --service` keeps working.
+# DJI_REEXEC guards against looping if sudo does not actually give us root.
+if [ "$(id -u)" -ne 0 ]; then
+    if [ "${DJI_REEXEC:-0}" = "1" ]; then
+        echo "!! still not root after sudo; aborting" >&2
+        exit 1
+    fi
+    command -v sudo >/dev/null 2>&1 || {
+        echo "!! this script needs root and sudo is not available; log in as root." >&2
+        exit 1
+    }
+    echo "=== not root — re-running under sudo ==="
+    exec sudo -E DJI_REEXEC=1 bash "${BASH_SOURCE[0]}" "$@"
+fi
+
+# Keep track of the real user so files do not end up root-owned.
 RUN_USER="${SUDO_USER:-pi}"
 RUN_HOME=$(getent passwd "$RUN_USER" | cut -d: -f6)
 [ -n "$RUN_HOME" ] || RUN_HOME=/home/pi

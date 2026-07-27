@@ -81,6 +81,16 @@ Sticks Client::axes() const {
     std::lock_guard<std::mutex> lk(axes_mu_);
     return axes_;
 }
+void Client::add_mouse_dx(double dx) {
+    std::lock_guard<std::mutex> lk(axes_mu_);
+    mouse_dx_ += dx;
+}
+double Client::take_mouse_dx() {
+    std::lock_guard<std::mutex> lk(axes_mu_);
+    const double d = mouse_dx_;
+    mouse_dx_ = 0.0;
+    return d;
+}
 void Client::set_msg(const std::string& s) {
     {
         std::lock_guard<std::mutex> lk(msg_mu_);
@@ -311,12 +321,15 @@ void Client::sender_loop() {
             }
         }
         if (live_ && armed.load() && control.load()) {
+            // Fold in every mouse count accumulated since the last send, then clear it.
+            Sticks a = axes();
+            a.yaw = std::max(-1.0, std::min(1.0, a.yaw + take_mouse_dx() * kMouseYawSens));
+
             const auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration<double>(now - last_diag).count() >= 1.0) {
                 last_diag = now;
                 const auto& st = tele_.state();
                 std::string owner = st.ctrl_device ? sdk_ctrl_device_name(*st.ctrl_device) : "?";
-                Sticks a = axes();
                 std::ostringstream os;
                 os << "[stick] mode="
                    << (st.flight_mode_name ? *st.flight_mode_name : std::string("?"))
@@ -324,7 +337,6 @@ void Client::sender_loop() {
                    << a.yaw << "/" << a.throttle;
                 log(os.str());
             }
-            Sticks a = axes();
             try {
                 if (stick_mobilerc.load())
                     drone_.set_sticks_mobilerc(a.roll, a.pitch, a.yaw, a.throttle);
@@ -332,6 +344,10 @@ void Client::sender_loop() {
                     drone_.set_sticks_velocity(a.roll, a.pitch, a.yaw, a.throttle, stick_flag);
             } catch (...) {
             }
+        } else {
+            // Not sending: discard accumulated motion so enabling control later does not
+            // apply a burst of yaw collected while the sticks were inactive.
+            take_mouse_dx();
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
