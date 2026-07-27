@@ -1,0 +1,173 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1785145528913,
+  "projectRoot": "/Users/alekseyfedorov/Downloads/AyuGram Desktop/DJI-Link",
+  "techStack": {
+    "languages": [
+      {
+        "name": "C/C++",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "CMakeLists.txt"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "dji_link_beta": {
+      "path": "dji_link_beta",
+      "purpose": null,
+      "fileCount": 37,
+      "lastAccessed": 1785145528903,
+      "keyFiles": [
+        "99-dji-aoa.rules",
+        "FINDINGS.md",
+        "README.md",
+        "aoa.py",
+        "applog.py"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 1,
+      "lastAccessed": 1785145528903,
+      "keyFiles": [
+        "CI_CD.md"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1785145528903,
+      "keyFiles": [
+        "main.cpp"
+      ]
+    },
+    "third_party": {
+      "path": "third_party",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1785145528904,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "dji_link_beta/pi/netctl.py",
+      "accessCount": 10,
+      "lastAccessed": 1785146992155,
+      "type": "file"
+    },
+    {
+      "path": "dji_link_beta/pi/setup_pi.sh",
+      "accessCount": 8,
+      "lastAccessed": 1785147104067,
+      "type": "file"
+    },
+    {
+      "path": "src/core/netfind.hpp",
+      "accessCount": 4,
+      "lastAccessed": 1785146829863,
+      "type": "file"
+    },
+    {
+      "path": "src/core/netfind.cpp",
+      "accessCount": 4,
+      "lastAccessed": 1785146860651,
+      "type": "file"
+    },
+    {
+      "path": "dji_link_beta/netfind.py",
+      "accessCount": 4,
+      "lastAccessed": 1785146917199,
+      "type": "file"
+    },
+    {
+      "path": "dji_link_beta/pi/README.md",
+      "accessCount": 4,
+      "lastAccessed": 1785147002052,
+      "type": "file"
+    },
+    {
+      "path": "dji_link_beta/pi/bridge.py",
+      "accessCount": 1,
+      "lastAccessed": 1785145646024,
+      "type": "file"
+    },
+    {
+      "path": "src/core/client.cpp",
+      "accessCount": 1,
+      "lastAccessed": 1785145646080,
+      "type": "file"
+    },
+    {
+      "path": "src/gui/gui.cpp",
+      "accessCount": 1,
+      "lastAccessed": 1785145660176,
+      "type": "file"
+    },
+    {
+      "path": "src/main.cpp",
+      "accessCount": 1,
+      "lastAccessed": 1785145660640,
+      "type": "file"
+    },
+    {
+      "path": "dji_link_beta/pi/update_pi.sh",
+      "accessCount": 1,
+      "lastAccessed": 1785146473148,
+      "type": "file"
+    },
+    {
+      "path": "dji_link_beta/pi/install.sh",
+      "accessCount": 1,
+      "lastAccessed": 1785146473935,
+      "type": "file"
+    },
+    {
+      "path": "dji_link_beta/pi/ap.sh",
+      "accessCount": 1,
+      "lastAccessed": 1785146649153,
+      "type": "file"
+    },
+    {
+      "path": "docs/NETWORK_FIX.md",
+      "accessCount": 1,
+      "lastAccessed": 1785150596382,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

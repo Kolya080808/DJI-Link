@@ -38,7 +38,12 @@ def _port_open(host: str, port: int, timeout: float = 0.4) -> bool:
 
 
 def find_on_lan(saved_host: str | None = None) -> str | None:
-    """Return the Pi's address if the bridge port answers on the current network."""
+    """Return the Pi's address if the netctl control port answers on the current network.
+
+    Liveness is probed on NETCTL_PORT, not BRIDGE_PORT: netctl (Wi-Fi/AP API) is always
+    up, but the bridge only opens :9910 once an RC/UDC is plugged in — which happens
+    AFTER discovery — so keying off the bridge made a controller-less Pi look unreachable.
+    """
     candidates = []
     if saved_host:
         candidates.append(saved_host)
@@ -48,13 +53,13 @@ def find_on_lan(saved_host: str | None = None) -> str | None:
             ip = socket.gethostbyname(host)
         except OSError:
             continue
-        if _port_open(ip, BRIDGE_PORT):
+        if _port_open(ip, NETCTL_PORT):
             return ip
     return None
 
 
-def sweep_lan(port: int = BRIDGE_PORT) -> str | None:
-    """Fallback: probe every host on our own /24 for the bridge port, in parallel.
+def sweep_lan(port: int = NETCTL_PORT) -> str | None:
+    """Fallback: probe every host on our own /24 for the netctl control port, in parallel.
     Cheap on a home LAN, and it finds the Pi even when mDNS is blocked."""
     import concurrent.futures
     try:
@@ -131,10 +136,11 @@ def join_ap(ssid: str, psk: str = AP_DEFAULT_PSK) -> bool:
                        capture_output=True, text=True)
     if r.returncode != 0:
         return False
-    # Wait for the interface to actually get the AP's gateway.
+    # Wait for the interface to actually get the AP's gateway. Probe the always-up netctl
+    # control port, not the bridge (which needs an RC/UDC plugged in only later).
     for _ in range(20):
         time.sleep(0.5)
-        if _port_open(AP_GATEWAY, BRIDGE_PORT):
+        if _port_open(AP_GATEWAY, NETCTL_PORT):
             return True
     return False
 

@@ -20,20 +20,24 @@ inline constexpr int NETCTL_PORT = 9911;
 
 bool port_open(const std::string& host, int port, double timeout_s = 0.4);
 
-// The Pi's address if the bridge port answers on the current network, else nullopt.
+// The Pi's address if the netctl control port answers on the current network, else
+// nullopt. Liveness is probed on NETCTL_PORT, not BRIDGE_PORT: netctl (the Wi-Fi/AP
+// API) is always up, while the bridge only opens :9910 once an RC/UDC is plugged in —
+// which happens AFTER discovery — so keying discovery off the bridge made a Pi with no
+// controller attached look unreachable ("gateway answers on no port").
 std::optional<std::string> find_on_lan(const std::optional<std::string>& saved_host = std::nullopt);
 
 // Every non-loopback IPv4 address this machine currently holds. A PC with WSL,
 // Hyper-V, VirtualBox or a VPN has several — the Wi-Fi one is rarely the first.
 std::vector<std::string> local_ipv4s();
 
-// Probe every host on each of our own /24s for the bridge port, in parallel.
-std::optional<std::string> sweep_lan(int port = BRIDGE_PORT);
+// Probe every host on each of our own /24s for the netctl control port, in parallel.
+std::optional<std::string> sweep_lan(int port = NETCTL_PORT);
 
 // SSIDs in range whose name marks them as a Pi AP (netsh / nmcli / airport).
 std::vector<std::string> scan_ap();
 
-// Join a Pi AP and wait until its gateway answers on the bridge port.
+// Join a Pi AP and wait until its gateway answers on the netctl control port.
 bool join_ap(const std::string& ssid, const std::string& psk = AP_DEFAULT_PSK);
 
 // GET http://host:9911<path> — the Pi netctl API. Body only, nullopt on failure.

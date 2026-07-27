@@ -51,11 +51,15 @@ echo
 # ---------------------------------------------------------------- 1. packages
 echo "[1/5] installing packages"
 apt-get update -qq
-# dnsmasq-base + iptables are what NetworkManager's ipv4.method=shared uses for the
-# AP's DHCP/DNS and its NAT. A Lite image can lack both, and then the AP comes up but
-# clients get no address / no route out — the "Pi network has no internet" symptom.
+# hostapd + dnsmasq-base + iptables run the Wi-Fi AP (see pi/ap.sh): hostapd is the AP
+# (WPS off, so Windows asks for the password, not a PIN), dnsmasq gives DHCP/DNS on
+# uap0, iptables NATs to the uplink. A Lite image can lack them, and then the AP comes
+# up but clients get no address / no route out — the "Pi network has no internet" symptom.
 apt-get install -y build-essential curl git python3 iproute2 iw network-manager \
-    dnsmasq-base iptables >/dev/null
+    hostapd dnsmasq-base iptables >/dev/null
+# We drive hostapd ourselves through dji-ap.service, so keep Debian's stock hostapd
+# service out of the way (it ships masked, but be explicit for re-runs on odd images).
+systemctl disable hostapd 2>/dev/null || true
 if [ ! -d "/lib/modules/${KREL}/build" ]; then
     apt-get install -y "linux-headers-${KREL}" 2>/dev/null \
         || apt-get install -y linux-headers-rpi-v8 2>/dev/null \
@@ -162,6 +166,37 @@ User=root
 WantedBy=multi-user.target
 EOF
 
+    # uap0 is the hostapd AP interface — NetworkManager must not touch it, but must keep
+    # managing wlan0 (scanning + uplink). interface-name:uap0 matches ONLY uap0, not the
+    # shared phy, so wlan0 stays managed. Coupled with dji-ap.service so a hostapd-less
+    # setup never strands uap0 without an AP (netctl's NM fallback still needs it managed).
+    install -d /etc/NetworkManager/conf.d
+    cat > /etc/NetworkManager/conf.d/99-dji-uap0-unmanaged.conf <<'EOF'
+[keyfile]
+unmanaged-devices=interface-name:uap0
+EOF
+
+    cat > /etc/systemd/system/dji-ap.service <<EOF
+[Unit]
+Description=DJI Link Wi-Fi access point (hostapd + dnsmasq on uap0)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+# ap.sh pre creates uap0 + IP + NAT + dnsmasq and writes the hostapd config (tuned to
+# wlan0's channel); hostapd is the foreground main process; ap.sh post tears it down.
+ExecStartPre=/bin/bash ${PI_DIR}/ap.sh pre
+ExecStart=/usr/sbin/hostapd /run/dji-ap/hostapd.conf
+ExecStopPost=/bin/bash ${PI_DIR}/ap.sh post
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
     cat > /etc/systemd/system/dji-bridge.service <<EOF
 [Unit]
 Description=DJI AOA bridge (Pi jump-host)
@@ -206,10 +241,13 @@ WantedBy=timers.target
 EOF
     systemctl daemon-reload
     systemctl enable NetworkManager.service 2>/dev/null || true
+    systemctl enable dji-ap.service
     systemctl enable dji-netctl.service
     systemctl enable dji-bridge.service
     systemctl enable dji-update.timer
+    # Restart NM first so it reloads the uap0-unmanaged rule before the AP creates uap0.
     systemctl restart NetworkManager.service 2>/dev/null || true
+    systemctl restart dji-ap.service || true
     systemctl restart dji-netctl.service || true
     systemctl restart dji-update.timer || true
     # Start it now too, unless dwc2 was just enabled (no UDC until the reboot).
@@ -223,6 +261,8 @@ EOF
         echo "     dji-bridge.service enabled (will start after the reboot)"
         echo "     dji-update.timer enabled"
     fi
+    echo "     ap: $(systemctl is-active dji-ap.service 2>/dev/null || echo unknown)  (hostapd+dnsmasq)"
+    echo "     ap logs: journalctl -u dji-ap -f"
     echo "     logs: journalctl -u dji-bridge -f"
     echo "     wifi API logs: journalctl -u dji-netctl -f"
     echo "     update logs: journalctl -u dji-update -f"

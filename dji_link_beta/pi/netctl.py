@@ -8,10 +8,15 @@ Two jobs:
   2. Optionally join an existing Wi-Fi network as an uplink, so the same AP also has
      internet (for coding at home, updates, DJI account login).
 
-The Pi Zero 2 W has ONE radio. NetworkManager will not run AP and client on the same
-interface, so we add a second virtual interface (uap0) for the AP and leave wlan0 as
-the client. The chip requires both to share a channel: joining an uplink therefore
-retunes the AP, and clients must reconnect. That is a hardware constraint, not a bug.
+The Pi Zero 2 W has ONE radio. A second virtual interface (uap0) carries the AP while
+wlan0 stays the client. The AP itself is run by hostapd + dnsmasq (the dji-ap systemd
+unit, see pi/ap.sh) rather than NetworkManager: NM's AP goes through wpa_supplicant,
+which advertises WPS and makes Windows demand a PIN instead of the passphrase. hostapd
+with wps_state=0 is a plain WPA2 network every OS joins with just the password. When
+dji-ap is absent (a Pi not yet re-set-up) we fall back to NM's ipv4.method=shared AP.
+
+The chip requires AP and client to share a channel: joining an uplink therefore
+retunes the AP (netctl restarts dji-ap), and clients must reconnect. Hardware, not a bug.
 
 Usage (on the Pi):
     sudo python3 netctl.py status
@@ -32,12 +37,15 @@ HTTP API (used by pc_client's network panel):
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-AP_CON = "dji-link-ap"
+AP_CON = "dji-link-ap"       # legacy NetworkManager AP profile (fallback path)
+AP_SERVICE = "dji-ap"        # hostapd+dnsmasq AP unit created by setup_pi.sh (pi/ap.sh)
+AP_UNIT_PATH = "/etc/systemd/system/dji-ap.service"
 AP_IFACE = "uap0"
 STA_IFACE = "wlan0"
 AP_PSK = "raspberry"          # default; >= 8 chars for WPA2
@@ -73,6 +81,24 @@ def run(*args: str, check: bool = False) -> tuple[int, str]:
 
 def nmcli(*args: str, check: bool = False) -> tuple[int, str]:
     return run("nmcli", *args, check=check)
+
+
+def systemctl(*args: str) -> tuple[int, str]:
+    return run("systemctl", *args)
+
+
+_hostapd_mode: bool | None = None
+
+
+def hostapd_mode() -> bool:
+    """True when the hostapd AP unit (dji-ap.service) is installed — the normal path on a
+    Pi set up by the current setup_pi.sh. False on an older Pi, or once the unit file is
+    removed, where we fall back to the NetworkManager ipv4.method=shared AP so nothing
+    regresses. Detected by the unit file itself so the switch is unambiguous."""
+    global _hostapd_mode
+    if _hostapd_mode is None:
+        _hostapd_mode = os.path.exists(AP_UNIT_PATH)
+    return _hostapd_mode
 
 
 # ---------------------------------------------------------------- AP interface
@@ -135,6 +161,10 @@ def ensure_forwarding() -> None:
 
 
 def hotspot(on: bool) -> dict:
+    if hostapd_mode():
+        rc, out = systemctl("start" if on else "stop", AP_SERVICE)
+        return {"ok": rc == 0, "output": out, "mode": "hostapd"}
+    # Legacy NetworkManager AP fallback.
     if on:
         if not ensure_ap_iface():
             return {"ok": False, "error": "no AP-capable interface (uap0 could not be created)"}
@@ -142,9 +172,9 @@ def hotspot(on: bool) -> dict:
         rc, out = nmcli("con", "up", AP_CON)
         if rc == 0:
             ensure_forwarding()
-        return {"ok": rc == 0, "output": out}
+        return {"ok": rc == 0, "output": out, "mode": "nm"}
     rc, out = nmcli("con", "down", AP_CON)
-    return {"ok": rc == 0, "output": out}
+    return {"ok": rc == 0, "output": out, "mode": "nm"}
 
 
 # ---------------------------------------------------------------- scan / uplink
@@ -202,10 +232,13 @@ def connect(ssid: str, psk: str | None) -> dict:
         args += ["password", psk]
     rc, out = nmcli(*args)
     ok = rc == 0
-    # The radio just retuned to the uplink's channel; the AP follows and drops clients.
+    # The radio just retuned to the uplink's channel; the AP must follow (single radio).
     if ok:
-        nmcli("con", "up", AP_CON)
-        ensure_forwarding()             # the uplink is new — make sure it is NATed
+        if hostapd_mode():
+            systemctl("restart", AP_SERVICE)   # ap.sh re-reads wlan0's channel on start
+        else:
+            nmcli("con", "up", AP_CON)
+            ensure_forwarding()                # the uplink is new — make sure it is NATed
     return {"ok": ok, "output": out, "note":
             "AP retunes to the uplink channel — reconnect the laptop if it dropped"}
 
@@ -228,11 +261,17 @@ def status() -> dict:
         if len(parts) < 4:
             continue
         dev, typ, state, con = parts[:4]
-        if dev == AP_IFACE:
+        # In hostapd mode uap0 is NM-unmanaged; its state comes from the unit below.
+        if dev == AP_IFACE and not hostapd_mode():
             ap_up = {"iface": dev, "state": state, "connection": con,
                      "ssid": AP_SSID, "address": AP_ADDR}
         elif dev == STA_IFACE:
             uplink = {"iface": dev, "state": state, "connection": con}
+    if hostapd_mode():
+        _, act = systemctl("is-active", AP_SERVICE)
+        ap_up = {"iface": AP_IFACE, "state": act.strip() or "unknown",
+                 "connection": AP_SERVICE, "ssid": AP_SSID, "address": AP_ADDR,
+                 "mode": "hostapd"}
     rc, addr = run("hostname", "-I")
     return {"ap": ap_up, "uplink": uplink, "internet": have_internet(),
             "addresses": addr.split(), "ap_ssid": AP_SSID, "ap_psk": AP_PSK}

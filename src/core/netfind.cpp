@@ -334,7 +334,7 @@ std::optional<std::string> find_on_lan(const std::optional<std::string>& saved_h
         auto ip = resolve_ipv4(host);
         if (!ip)
             continue;
-        if (port_open(*ip, BRIDGE_PORT)) {
+        if (port_open(*ip, NETCTL_PORT)) {
             applog::info("[netfind] Pi answers at " + *ip + " (" + host + ")");
             return ip;
         }
@@ -477,23 +477,34 @@ bool join_ap(const std::string& ssid, const std::string& psk) {
           << "  </security></MSM>\n"
           << "</WLANProfile>\n";
     }
-    run_quiet("netsh wlan add profile filename=" + shell_quote(path));
+    // Capture netsh output — a failed profile-add or connect otherwise vanishes and the
+    // join just looks like "nothing happened". A one-line trace makes it diagnosable.
+    auto trim = [](std::string s) {
+        while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' '))
+            s.pop_back();
+        return s;
+    };
+    std::string add_out = run_capture("netsh wlan add profile filename=" + shell_quote(path));
     std::error_code ec;
     fs::remove(path, ec);
-    run_quiet("netsh wlan connect name=" + shell_quote(ssid) + " ssid=" + shell_quote(ssid));
+    applog::info("[netfind] netsh add profile: " + trim(add_out));
+    std::string conn_out =
+        run_capture("netsh wlan connect name=" + shell_quote(ssid) + " ssid=" + shell_quote(ssid));
+    applog::info("[netfind] netsh connect: " + trim(conn_out));
 #elif defined(__APPLE__)
     run_quiet("networksetup -setairportnetwork en0 " + shell_quote(ssid) + " " + shell_quote(psk));
 #else
     run_quiet("nmcli dev wifi connect " + shell_quote(ssid) + " password " + shell_quote(psk));
 #endif
-    // Wait for the interface to actually get the AP's gateway.
+    // Wait for the interface to actually get the AP's gateway. Probe the netctl control
+    // port (always up), not the bridge (needs the RC, which is plugged in only later).
     for (int i = 0; i < 20; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        if (port_open(AP_GATEWAY, BRIDGE_PORT))
+        if (port_open(AP_GATEWAY, NETCTL_PORT))
             return true;
     }
     applog::info("[netfind] joined '" + ssid + "' but " + AP_GATEWAY + ":" +
-                 std::to_string(BRIDGE_PORT) + " stayed silent");
+                 std::to_string(NETCTL_PORT) + " stayed silent");
     return false;
 }
 
