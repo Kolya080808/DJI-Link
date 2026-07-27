@@ -1129,6 +1129,15 @@ private:
 #endif
 };
 
+// Hand the command to the client's worker thread instead of running it here: callers are
+// on the render thread, and a blocking socket write would freeze the window mid-flight.
+// Every captured object is a Client/Settings member that outlives the queued item — the
+// queue is drained in Client::close() before either is torn down. Kept at namespace scope
+// so both the settings panel and the flight_screen hotkeys can reach it.
+void call(Client& cli, std::function<void()> fn, const std::string& msg) {
+    cli.post(std::move(fn), msg);
+}
+
 struct Settings {
     bool open = false;
     int max_alt = 120;
@@ -1140,14 +1149,6 @@ struct Settings {
     int mode_i = 1;
     std::vector<int> isos{0, 100, 200, 400, 800, 1600, 3200};
     std::vector<int> shutters{0, 1000, 500, 250, 125, 60, 30, 15, 8, 4};
-
-    // Hand the command to the client's worker thread instead of running it here: this is
-    // the render thread, and a blocking socket write would freeze the window mid-flight.
-    // The captured state is Settings/Client members, which outlive the queued item — the
-    // queue is drained in Client::close() before either is torn down.
-    void call(Client& cli, std::function<void()> fn, const std::string& msg) {
-        cli.post(std::move(fn), msg);
-    }
 
     void draw(SDL_Renderer* r, Client& cli, int sw, int sh, int mx, int my) {
         SDL_Rect p{std::max(24, (sw - 700) / 2), std::max(20, (sh - 560) / 2),
