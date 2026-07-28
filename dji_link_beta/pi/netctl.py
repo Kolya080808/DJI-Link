@@ -227,6 +227,12 @@ def _split_nmcli(line: str) -> list[str]:
 
 def connect(ssid: str, psk: str | None) -> dict:
     """Join a network as the uplink, keeping the AP up."""
+    # nmcli silently reuses an existing saved profile and ignores the `password` argument
+    # when one already exists for this SSID. Delete it first so the given password is
+    # always applied (delete is a no-op if no profile exists).
+    if psk is not None:
+        run("nmcli", "con", "delete", ssid)
+
     args = ["dev", "wifi", "connect", ssid, "ifname", STA_IFACE]
     if psk:
         args += ["password", psk]
@@ -235,7 +241,13 @@ def connect(ssid: str, psk: str | None) -> dict:
     # The radio just retuned to the uplink's channel; the AP must follow (single radio).
     if ok:
         if hostapd_mode():
-            systemctl("restart", AP_SERVICE)   # ap.sh re-reads wlan0's channel on start
+            # Restart MUST happen in a background thread: systemctl restart takes the AP
+            # down before this function returns, tearing down the TCP connection the HTTP
+            # server is about to reply on. Without the thread the client always sees
+            # "Pi did not answer" even on a successful join.
+            import threading
+            threading.Thread(target=lambda: systemctl("restart", AP_SERVICE),
+                             daemon=True).start()
         else:
             nmcli("con", "up", AP_CON)
             ensure_forwarding()                # the uplink is new — make sure it is NATed

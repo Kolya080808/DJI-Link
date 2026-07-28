@@ -877,14 +877,16 @@ struct WifiUi {
         set(State::Connecting, "Connecting the Pi to '" + ssid + "'...");
         spawn([this, ssid, psk] {
             auto res = netfind::pi_connect_wifi(host, ssid, psk);
-            // The AP retuned to the uplink's channel, so this PC was pushed off the Pi's
-            // network. Wait for it to come back before reporting anything.
-            set(State::Waiting, "The Pi access point retuned to the new channel. "
-                                "Waiting for the link to come back...");
+            // Pi's async dji-ap restart (for channel retune) may tear the TCP connection
+            // before the response arrives — the client then sees "no answer" even on a
+            // successful join. Always probe /status after the join and treat that as the
+            // truth; res.ok is only a hint for the error message.
+            set(State::Waiting, "Waiting for the Pi access point to come back...");
             const bool back = netfind::wait_for_pi(host);
             if (!back) {
-                set(State::Error, "Lost the Pi after the channel change. Re-join the "
-                                  "'PI_DJI_LINK-*' network on this PC, then scan again.");
+                set(State::Error, "Lost the Pi after the channel change. "
+                                  "Re-join the 'PI_DJI_LINK-*' network on this PC, "
+                                  "then scan again.");
                 return;
             }
             auto st = netfind::pi_status(host);
@@ -896,17 +898,23 @@ struct WifiUi {
                 set(State::Done, "The Pi is on '" + ssid + "' and has internet.");
                 return;
             }
-            if (res.ok) {
-                // Associated but no route out: a captive portal or a network without
-                // internet. Distinguishing the two matters — the join itself worked.
+            // Pi answered but reports no internet. Check whether it joined the network
+            // at all (uplink_name matches) — that distinguishes a captive portal / no-
+            // route situation from a wrong password.
+            const bool joined =
+                st && (st->uplink_name == ssid || st->uplink_name.find(ssid) != std::string::npos);
+            if (joined) {
                 set(State::Error, "The Pi joined '" + ssid +
-                                      "' but has no internet yet. If the network needs a "
-                                      "browser login, that will not work here.");
-                return;
+                                      "' but has no internet. Captive portal or no route "
+                                      "out — nothing to do here.");
+            } else {
+                const bool no_answer = res.output.find("did not answer") != std::string::npos;
+                set(State::Error, no_answer ? "The Pi did not answer. It may still be reconnecting "
+                                              "— wait a moment and press 'Scan again'."
+                                            : (res.output.empty() ? "Could not join '" + ssid +
+                                                                        "'. Wrong password?"
+                                                                  : res.output.substr(0, 160)));
             }
-            set(State::Error, res.output.empty()
-                                  ? "The Pi could not join '" + ssid + "'. Wrong password?"
-                                  : res.output.substr(0, 160));
         });
     }
 
