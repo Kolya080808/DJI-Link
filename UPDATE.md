@@ -1,6 +1,6 @@
 ---
-title: DJI Link v0.8.0 — fix Wi-Fi reconnect and AP after disconnect
-version: 0.8.0
+title: DJI Link v0.8.1 — fix Wi-Fi reconnect and AP after disconnect
+version: 0.8.1
 prerelease: true
 ---
 
