@@ -837,9 +837,9 @@ struct WifiUi {
     // Every action runs on its own thread so the SDL loop keeps rendering: a scan takes
     // ~3 s on the Pi and a join up to a minute, and a frozen window mid-setup is exactly
     // what the queued-command work in Client was meant to end.
+    // NOTE: callers (refresh/connect/disconnect) set a busy state before calling spawn,
+    // and the UI buttons prevent concurrent calls, so no guard is needed here.
     void spawn(std::function<void()> job) {
-        if (busy())
-            return;
         if (worker.joinable())
             worker.join();
         worker = std::thread(std::move(job));
