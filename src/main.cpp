@@ -38,6 +38,9 @@ struct Args {
     bool no_video = false;
     bool console = false;
     bool windowed = false;
+    bool wifi = false;
+    std::string wifi_ssid;
+    std::string wifi_psk;
 };
 
 Args parse_args(int argc, char** argv) {
@@ -61,8 +64,96 @@ Args parse_args(int argc, char** argv) {
             a.console = true;
         else if (s == "--windowed")
             a.windowed = true;
+        else if (s == "--wifi")
+            a.wifi = true;
+        else if (s == "--wifi-ssid")
+            a.wifi_ssid = next();
+        else if (s == "--wifi-psk")
+            a.wifi_psk = next();
     }
     return a;
+}
+
+// --wifi: put the Pi on a Wi-Fi network without a display. Same netctl API the GUI
+// screen drives, so a headless box (or the Pi itself over SSH) can do the setup, and
+// --wifi-ssid/--wifi-psk make it scriptable for an unattended install.
+int run_wifi(const Args& args) {
+    std::string host = args.pi;
+    if (auto pos = host.find(':'); pos != std::string::npos)
+        host = host.substr(0, pos);
+    if (host.empty()) {
+        std::printf("[pi] discovering the Pi...\n");
+        auto r = netfind::discover();
+        if (!r.host) {
+            std::printf("[pi] not found. Pass --pi HOST.\n");
+            return 2;
+        }
+        host = *r.host;
+    }
+    if (auto st = netfind::pi_status(host)) {
+        std::printf("[pi] %s  AP '%s' %s, uplink %s, internet %s\n", host.c_str(),
+                    st->ap_ssid.c_str(), st->ap_active ? "up" : "down",
+                    st->uplink_name.empty() ? "none" : st->uplink_name.c_str(),
+                    st->internet ? "yes" : "no");
+    } else {
+        std::printf("[pi] %s does not answer on port %d.\n", host.c_str(), netfind::NETCTL_PORT);
+        return 2;
+    }
+
+    std::string ssid = args.wifi_ssid, psk = args.wifi_psk;
+    if (ssid.empty()) {
+        std::printf("[pi] scanning (the Pi's radio, takes a few seconds)...\n");
+        auto nets = netfind::pi_scan_wifi(host);
+        if (nets.empty()) {
+            std::printf("[pi] the Pi sees no networks.\n");
+            return 1;
+        }
+        for (std::size_t i = 0; i < nets.size(); ++i) {
+            std::printf("  %2zu) %3d%%  %-12s %s%s\n", i + 1, nets[i].signal,
+                        nets[i].open() ? "open" : nets[i].security.c_str(), nets[i].ssid.c_str(),
+                        nets[i].in_use ? "  (in use)" : "");
+        }
+        std::printf("number (or SSID), empty to quit: ");
+        std::fflush(stdout);
+        std::string pick;
+        if (!std::getline(std::cin, pick) || pick.empty())
+            return 0;
+        try {
+            const int idx = std::stoi(pick);
+            if (idx >= 1 && idx <= static_cast<int>(nets.size()))
+                ssid = nets[static_cast<std::size_t>(idx) - 1].ssid;
+        } catch (const std::exception&) {
+            ssid = pick; // not a number — treat it as the SSID itself
+        }
+        if (ssid.empty())
+            ssid = pick;
+        bool open = false;
+        for (const auto& n : nets)
+            if (n.ssid == ssid)
+                open = n.open();
+        if (!open && psk.empty()) {
+            std::printf("password (empty for none): ");
+            std::fflush(stdout);
+            std::getline(std::cin, psk);
+        }
+    }
+
+    auto res = netfind::pi_connect_wifi(host, ssid, psk);
+    std::printf("[pi] %s\n", res.output.empty() ? (res.ok ? "connect ok" : "connect failed")
+                                                : res.output.c_str());
+    // The AP retunes to the uplink's channel, so this machine's own link to the Pi drops
+    // for a few seconds when it was connected over that AP.
+    std::printf("[pi] waiting for the Pi to answer again...\n");
+    if (!netfind::wait_for_pi(host)) {
+        std::printf("[pi] still unreachable — re-join the Pi's access point and re-check.\n");
+        return 1;
+    }
+    auto st = netfind::pi_status(host);
+    const bool net = st && st->internet;
+    std::printf("[pi] uplink %s, internet %s\n",
+                st && !st->uplink_name.empty() ? st->uplink_name.c_str() : "none",
+                net ? "yes" : "no");
+    return (res.ok && net) ? 0 : 1;
 }
 
 // Build the transport for a connection spec (used by the console path; the GUI
@@ -145,6 +236,11 @@ int main(int argc, char** argv) {
     std::printf("log file: %s\n", applog::latest_path().c_str());
     // Clean up any installer left over from a previous update attempt.
     updater::wipe_temp();
+
+    // Wi-Fi setup is a standalone job: it never opens a window or a drone session, so it
+    // is handled before the GUI branch and works in a build without the GUI.
+    if (args.wifi)
+        return run_wifi(args);
 
 #if DJI_LINK_HAVE_GUI
     if (!args.console) {

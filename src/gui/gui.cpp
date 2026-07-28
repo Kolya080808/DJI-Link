@@ -507,11 +507,19 @@ struct TextInput {
     std::string value;
     std::string placeholder;
     bool focused = false;
+    // Wi-Fi passphrase entry: show dots, and offer a reveal toggle next to the field
+    // (a typo in a WPA2 key is otherwise indistinguishable from a wrong password).
+    bool password = false;
+    bool reveal = false;
 
     void draw(SDL_Renderer* r) const {
         fill_round(r, rect, 6, Color{14, 16, 21, 255});
         outline_round(r, rect, 6, focused ? ACCENT : PANEL_HI);
-        std::string shown = value.empty() ? placeholder : value;
+        std::string shown = value;
+        if (password && !reveal)
+            shown.assign(value.size(), '*');
+        if (shown.empty())
+            shown = placeholder;
         if (focused && (SDL_GetTicks() / 500) % 2 == 0)
             shown += "|";
         text(r, rect.x + 10, rect.y + 12, shown.substr(0, 80), 2, value.empty() ? MUTED : TEXT);
@@ -771,6 +779,295 @@ std::optional<ConnectionSpec> serial_screen(SDL_Window* win, SDL_Renderer* r,
     return result;
 }
 
+// ------------------------------------------------------------------ Pi Wi-Fi screen
+// Connect the Raspberry Pi to a Wi-Fi network from the PC. The Pi has one radio: it
+// holds the access point this PC is joined to AND acts as the uplink client, so all of
+// the scanning and joining happens ON THE PI (netctl's HTTP API) — the PC never touches
+// its own adapter here. Joining retunes the AP, which briefly drops this PC; the screen
+// waits for the Pi to answer again rather than reporting a failure.
+//
+// Every platform runs the identical code path: the work is HTTP to the Pi, so there is
+// no netsh/nmcli/airport branch to get wrong.
+struct WifiUi {
+    enum class State { Idle, Scanning, Connecting, Waiting, Done, Error };
+
+    std::string host;
+    std::mutex mu;
+    std::atomic<State> state{State::Idle};
+    std::vector<netfind::WifiNet> nets;
+    std::optional<netfind::PiNetStatus> status;
+    std::string msg;
+    int selected = -1;
+    int scroll = 0;
+    std::thread worker;
+
+    explicit WifiUi(std::string h) : host(std::move(h)) {}
+
+    ~WifiUi() {
+        if (worker.joinable())
+            worker.join();
+    }
+
+    bool busy() const {
+        const State s = state.load();
+        return s == State::Scanning || s == State::Connecting || s == State::Waiting;
+    }
+
+    void set(State s, std::string m) {
+        std::lock_guard<std::mutex> lk(mu);
+        state.store(s);
+        msg = std::move(m);
+    }
+
+    std::string message() {
+        std::lock_guard<std::mutex> lk(mu);
+        return msg;
+    }
+
+    std::vector<netfind::WifiNet> list() {
+        std::lock_guard<std::mutex> lk(mu);
+        return nets;
+    }
+
+    std::optional<netfind::PiNetStatus> stat() {
+        std::lock_guard<std::mutex> lk(mu);
+        return status;
+    }
+
+    // Every action runs on its own thread so the SDL loop keeps rendering: a scan takes
+    // ~3 s on the Pi and a join up to a minute, and a frozen window mid-setup is exactly
+    // what the queued-command work in Client was meant to end.
+    void spawn(std::function<void()> job) {
+        if (busy())
+            return;
+        if (worker.joinable())
+            worker.join();
+        worker = std::thread(std::move(job));
+    }
+
+    void refresh() {
+        set(State::Scanning, "Asking the Pi to scan for networks...");
+        spawn([this] {
+            auto st = netfind::pi_status(host);
+            auto found = netfind::pi_scan_wifi(host);
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                status = st;
+                nets = found;
+                if (selected >= static_cast<int>(nets.size()))
+                    selected = -1;
+            }
+            if (found.empty()) {
+                set(State::Error, st ? "The Pi sees no networks. Move it closer to the router "
+                                       "and scan again."
+                                     : "The Pi stopped answering on port 9911.");
+                return;
+            }
+            std::string m =
+                "Pick a network for the Pi. " + std::to_string(found.size()) + " in range.";
+            if (st && st->internet)
+                m += " It already has internet" +
+                     (st->uplink_name.empty() ? std::string() : " via '" + st->uplink_name + "'") +
+                     ".";
+            set(State::Done, m);
+        });
+    }
+
+    void connect(const std::string& ssid, const std::string& psk) {
+        set(State::Connecting, "Connecting the Pi to '" + ssid + "'...");
+        spawn([this, ssid, psk] {
+            auto res = netfind::pi_connect_wifi(host, ssid, psk);
+            // The AP retuned to the uplink's channel, so this PC was pushed off the Pi's
+            // network. Wait for it to come back before reporting anything.
+            set(State::Waiting, "The Pi access point retuned to the new channel. "
+                                "Waiting for the link to come back...");
+            const bool back = netfind::wait_for_pi(host);
+            if (!back) {
+                set(State::Error, "Lost the Pi after the channel change. Re-join the "
+                                  "'PI_DJI_LINK-*' network on this PC, then scan again.");
+                return;
+            }
+            auto st = netfind::pi_status(host);
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                status = st;
+            }
+            if (st && st->internet) {
+                set(State::Done, "The Pi is on '" + ssid + "' and has internet.");
+                return;
+            }
+            if (res.ok) {
+                // Associated but no route out: a captive portal or a network without
+                // internet. Distinguishing the two matters — the join itself worked.
+                set(State::Error, "The Pi joined '" + ssid +
+                                      "' but has no internet yet. If the network needs a "
+                                      "browser login, that will not work here.");
+                return;
+            }
+            set(State::Error, res.output.empty()
+                                  ? "The Pi could not join '" + ssid + "'. Wrong password?"
+                                  : res.output.substr(0, 160));
+        });
+    }
+
+    void disconnect() {
+        set(State::Connecting, "Disconnecting the Pi's uplink...");
+        spawn([this] {
+            auto res = netfind::pi_disconnect_wifi(host);
+            netfind::wait_for_pi(host, 20.0);
+            auto st = netfind::pi_status(host);
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                status = st;
+            }
+            set(res.ok ? State::Done : State::Error,
+                res.ok ? "The Pi's uplink is down. Its access point is still up."
+                       : "Disconnect failed: " + res.output.substr(0, 140));
+        });
+    }
+};
+
+void wifi_screen(SDL_Window* win, SDL_Renderer* r, const std::string& host) {
+    WifiUi ui(host);
+    TextInput pw{{0, 0, 420, 46}, "", "WI-FI PASSWORD", false, true, false};
+    ui.refresh();
+    bool done = false;
+    SDL_StartTextInput();
+    while (!done) {
+        int w, h;
+        SDL_GetWindowSize(win, &w, &h);
+        auto nets = ui.list();
+        const int rows = std::max(1, std::min<int>(7, static_cast<int>(nets.size())));
+        const SDL_Rect list{40, 150, w - 80, rows * 34 + 12};
+        const int form_y = list.y + list.h + 22;
+        pw.rect = {40, form_y, std::min(420, w - 80), 46};
+
+        const bool have_sel = ui.selected >= 0 && ui.selected < static_cast<int>(nets.size());
+        const bool needs_pw = have_sel && !nets[ui.selected].open();
+        std::vector<Button> buttons;
+        buttons.push_back({{40, form_y + 62, 220, 46},
+                           "Connect the Pi",
+                           true,
+                           !ui.busy() && have_sel && (!needs_pw || !pw.value.empty()),
+                           [&] {
+                               if (have_sel)
+                                   ui.connect(nets[ui.selected].ssid, pw.value);
+                           }});
+        buttons.push_back(
+            {{275, form_y + 62, 150, 46}, "Scan again", false, !ui.busy(), [&] { ui.refresh(); }});
+        auto st = ui.stat();
+        buttons.push_back({{440, form_y + 62, 190, 46},
+                           "Disconnect uplink",
+                           false,
+                           !ui.busy() && st.has_value() && !st->uplink_name.empty(),
+                           [&] { ui.disconnect(); }});
+        buttons.push_back(
+            {{w - 200, h - 80, 160, 46}, "Back", false, !ui.busy(), [&] { done = true; }});
+        Button reveal{{pw.rect.x + pw.rect.w + 12, form_y, 110, 46},
+                      pw.reveal ? "Hide" : "Show",
+                      false,
+                      true,
+                      [&] { pw.reveal = !pw.reveal; }};
+
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT || (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)) {
+                if (!ui.busy())
+                    done = true;
+            } else if (e.type == SDL_MOUSEWHEEL) {
+                ui.scroll = std::max(
+                    0, std::min<int>(ui.scroll - e.wheel.y,
+                                     std::max<int>(0, static_cast<int>(nets.size()) - rows)));
+            } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT &&
+                       inside(list, e.button.x, e.button.y)) {
+                const int idx = ui.scroll + (e.button.y - list.y - 6) / 34;
+                if (idx >= 0 && idx < static_cast<int>(nets.size())) {
+                    ui.selected = idx;
+                    pw.value.clear();
+                    pw.focused = !nets[idx].open();
+                }
+            } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_RETURN && have_sel &&
+                       !ui.busy() && (!needs_pw || !pw.value.empty())) {
+                ui.connect(nets[ui.selected].ssid, pw.value);
+            }
+            pw.handle(e);
+            reveal.handle(e);
+            for (const auto& b : buttons)
+                if (b.handle(e))
+                    break;
+        }
+
+        int mx, my;
+        SDL_GetMouseState(&mx, &my);
+        set_color(r, BG);
+        SDL_RenderClear(r);
+        text(r, 40, 40, "CONNECT THE PI TO WI-FI", 3, TEXT);
+        text(r, 40, 88,
+             "The Pi scans and joins with its own radio. Its access point stays up, so this "
+             "PC keeps the link.",
+             2, MUTED);
+        if (st) {
+            std::string line =
+                "Pi access point: " + (st->ap_ssid.empty() ? std::string("unknown") : st->ap_ssid) +
+                (st->ap_active ? " (up)" : " (down)") +
+                "   Uplink: " + (st->uplink_name.empty() ? std::string("none") : st->uplink_name) +
+                "   Internet: " + (st->internet ? "yes" : "no");
+            text(r, 40, 118, line, 1, st->internet ? GOOD : MUTED);
+        }
+
+        fill_round(r, list, 8, PANEL);
+        outline_round(r, list, 8, PANEL_HI);
+        for (int i = 0; i < rows; ++i) {
+            const int idx = ui.scroll + i;
+            if (idx >= static_cast<int>(nets.size()))
+                break;
+            const auto& n = nets[idx];
+            const SDL_Rect row{list.x + 6, list.y + 6 + i * 34, list.w - 12, 32};
+            if (idx == ui.selected)
+                fill_round(r, row, 6, ACCENT);
+            else if (inside(row, mx, my))
+                fill_round(r, row, 6, PANEL_HI);
+            const Color fg = idx == ui.selected ? Color{12, 16, 22, 255} : TEXT;
+            char sig[16];
+            std::snprintf(sig, sizeof(sig), "%3d%%", n.signal);
+            text(r, row.x + 10, row.y + 8, sig, 2, fg);
+            text(r, row.x + 76, row.y + 8, n.open() ? "open" : n.security, 2,
+                 idx == ui.selected ? fg : MUTED);
+            text(r, row.x + 220, row.y + 8, n.ssid.substr(0, 46), 2, fg);
+            if (n.in_use)
+                text(r, row.x + row.w - 90, row.y + 8, "in use", 2, idx == ui.selected ? fg : GOOD);
+        }
+        if (nets.empty()) {
+            text(r, list.x + 16, list.y + 14,
+                 ui.busy() ? "Scanning..." : "No networks. Press \"Scan again\".", 2, MUTED);
+        }
+
+        if (have_sel && !needs_pw) {
+            text(r, 40, form_y + 14, "'" + nets[ui.selected].ssid + "' is open - no password.", 2,
+                 MUTED);
+        } else {
+            pw.draw(r);
+            reveal.draw(r, mx, my);
+        }
+        for (const auto& b : buttons)
+            b.draw(r, mx, my);
+
+        const std::string m = ui.message();
+        if (!m.empty()) {
+            const auto s = ui.state.load();
+            Color c = s == WifiUi::State::Error ? WARN : s == WifiUi::State::Done ? GOOD : ACCENT;
+            text(r, 40, form_y + 126, m.substr(0, 150), 2, c);
+        }
+        text(r, 40, h - 74,
+             "Joining a network retunes the Pi's access point to that channel (one radio), so "
+             "this PC may reconnect on its own - that is normal.",
+             1, MUTED);
+        SDL_RenderPresent(r);
+        SDL_Delay(16);
+    }
+    SDL_StopTextInput();
+}
+
 std::optional<ConnectionSpec> discovery_screen(SDL_Window* win, SDL_Renderer* r,
                                                const std::optional<std::string>& saved_host) {
     std::atomic<bool> scanning{true};
@@ -806,6 +1103,16 @@ std::optional<ConnectionSpec> discovery_screen(SDL_Window* win, SDL_Renderer* r,
                          });
                      }};
         Button back{{40, h - 110, 160, 44}, "Back", false, true, [&] { done = true; }};
+        // Available as soon as the Pi answers, not only when it lacks internet: the user
+        // may want to move it to another network, or drop the uplink before flying.
+        Button wifi{{220, h - 110, 240, 44},
+                    "Pi Wi-Fi setup",
+                    false,
+                    !scanning.load() && disc.host.has_value(),
+                    [&] {
+                        if (disc.host)
+                            wifi_screen(win, r, *disc.host);
+                    }};
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
                 result = ConnectionSpec{"quit"};
@@ -815,6 +1122,7 @@ std::optional<ConnectionSpec> discovery_screen(SDL_Window* win, SDL_Renderer* r,
             }
             start.handle(e);
             retry.handle(e);
+            wifi.handle(e);
             back.handle(e);
         }
         int mx, my;
@@ -831,7 +1139,7 @@ std::optional<ConnectionSpec> discovery_screen(SDL_Window* win, SDL_Renderer* r,
                 text(r, 40, 132, "Joined the Pi access point '" + *disc.joined_ap + "'.", 2, GOOD);
             if (disc.needs_internet_prompt)
                 text(r, 40, 156,
-                     "Pi reports no uplink. If it needs internet, configure Wi-Fi on the Pi.", 2,
+                     "Pi reports no internet. Press \"Pi Wi-Fi setup\" to put it on a network.", 2,
                      WARN);
             text(r, 40, 180,
                  "Now turn on RC, plug RC into Pi, power the drone, wait for link, then start.", 2,
@@ -844,6 +1152,7 @@ std::optional<ConnectionSpec> discovery_screen(SDL_Window* win, SDL_Renderer* r,
         }
         start.draw(r, mx, my);
         retry.draw(r, mx, my);
+        wifi.draw(r, mx, my);
         back.draw(r, mx, my);
         auto lines = applog::tail();
         int y = h - 260;

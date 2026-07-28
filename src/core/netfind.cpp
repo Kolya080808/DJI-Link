@@ -508,14 +508,24 @@ bool join_ap(const std::string& ssid, const std::string& psk) {
     return false;
 }
 
-std::optional<std::string> netctl_get(const std::string& host, const std::string& path,
-                                      double timeout_s) {
+namespace {
+
+// Minimal HTTP/1.0 request against the netctl API. One request per connection
+// (Connection: close), which is all netctl's BaseHTTPRequestHandler serves anyway.
+std::optional<std::string> netctl_request(const std::string& host, const std::string& method,
+                                          const std::string& path, const std::string& body,
+                                          double timeout_s) {
     sock_t fd = connect_timeout(host, NETCTL_PORT, timeout_s);
     if (fd == kBadSock)
         return std::nullopt;
     set_io_timeout(fd, timeout_s);
-    const std::string req = "GET " + path + " HTTP/1.0\r\nHost: " + host + "\r\n" +
-                            "Connection: close\r\nAccept: application/json\r\n\r\n";
+    std::string req = method + " " + path + " HTTP/1.0\r\nHost: " + host + "\r\n" +
+                      "Connection: close\r\nAccept: application/json\r\n";
+    if (!body.empty()) {
+        req += "Content-Type: application/json\r\nContent-Length: " + std::to_string(body.size()) +
+               "\r\n";
+    }
+    req += "\r\n" + body;
     if (::send(fd, req.data(), static_cast<int>(req.size()), 0) < 0) {
         close_sock(fd);
         return std::nullopt;
@@ -537,18 +547,287 @@ std::optional<std::string> netctl_get(const std::string& host, const std::string
     return resp.substr(sep + 4);
 }
 
+// ---------------------------------------------------------------- tiny JSON reads
+// netctl's replies are flat, machine-generated objects (json.dumps of a dict of
+// scalars and one list of flat dicts), so scanning for the key is enough — the same
+// approach updater.cpp already uses for the GitHub API. No dependency, no parser.
+
+// Value slice after "key": , or npos. Search starts at `from` so a caller can walk
+// repeated keys inside an array.
+std::size_t value_pos(const std::string& js, const std::string& key, std::size_t from = 0) {
+    const std::string k = "\"" + key + "\"";
+    const auto at = js.find(k, from);
+    if (at == std::string::npos)
+        return std::string::npos;
+    const auto colon = js.find(':', at + k.size());
+    if (colon == std::string::npos)
+        return std::string::npos;
+    return js.find_first_not_of(" \t\r\n", colon + 1);
+}
+
+bool json_bool(const std::string& js, const std::string& key, std::size_t from = 0) {
+    const auto v = value_pos(js, key, from);
+    return v != std::string::npos && js.compare(v, 4, "true") == 0;
+}
+
+int json_int(const std::string& js, const std::string& key, std::size_t from = 0) {
+    const auto v = value_pos(js, key, from);
+    if (v == std::string::npos)
+        return 0;
+    // A quoted number ("signal": "72") must parse too — nmcli fields reach netctl
+    // as strings in some paths and json.dumps keeps them quoted.
+    const std::size_t s = (js[v] == '"') ? v + 1 : v;
+    try {
+        return std::stoi(js.substr(s, 12));
+    } catch (const std::exception&) {
+        return 0;
+    }
+}
+
+// Unescaped string value. SSIDs legitimately contain quotes, backslashes and UTF-8
+// (json.dumps escapes non-ASCII as \uXXXX), so the escapes must be undone or the
+// SSID handed back to nmcli would not match the network.
+std::string json_str(const std::string& js, const std::string& key, std::size_t from = 0) {
+    auto v = value_pos(js, key, from);
+    if (v == std::string::npos || js[v] != '"')
+        return {};
+    std::string out;
+    for (std::size_t i = v + 1; i < js.size(); ++i) {
+        const char c = js[i];
+        if (c == '"')
+            break;
+        if (c != '\\') {
+            out += c;
+            continue;
+        }
+        if (++i >= js.size())
+            break;
+        switch (js[i]) {
+            case 'n':
+                out += '\n';
+                break;
+            case 't':
+                out += '\t';
+                break;
+            case 'r':
+                out += '\r';
+                break;
+            case 'b':
+                out += '\b';
+                break;
+            case 'f':
+                out += '\f';
+                break;
+            case 'u': {
+                if (i + 4 >= js.size())
+                    return out;
+                unsigned cp = 0;
+                try {
+                    cp = static_cast<unsigned>(std::stoul(js.substr(i + 1, 4), nullptr, 16));
+                } catch (const std::exception&) {
+                    return out;
+                }
+                i += 4;
+                // UTF-8 encode; surrogate halves are passed through as U+FFFD since a
+                // lone half cannot be encoded and an SSID that needs one is unusable.
+                if (cp >= 0xD800 && cp <= 0xDFFF)
+                    cp = 0xFFFD;
+                if (cp < 0x80) {
+                    out += static_cast<char>(cp);
+                } else if (cp < 0x800) {
+                    out += static_cast<char>(0xC0 | (cp >> 6));
+                    out += static_cast<char>(0x80 | (cp & 0x3F));
+                } else {
+                    out += static_cast<char>(0xE0 | (cp >> 12));
+                    out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+                    out += static_cast<char>(0x80 | (cp & 0x3F));
+                }
+                break;
+            }
+            default:
+                out += js[i];
+                break;
+        }
+    }
+    return out;
+}
+
+// JSON string literal for one value (keys here are all ASCII literals we control).
+std::string json_quote(const std::string& s) {
+    std::string out = "\"";
+    for (unsigned char c : s) {
+        switch (c) {
+            case '"':
+                out += "\\\"";
+                break;
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                if (c < 0x20) {
+                    char buf[7];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    out += buf;
+                } else {
+                    out += static_cast<char>(c);
+                }
+        }
+    }
+    return out + "\"";
+}
+
+} // namespace
+
+std::optional<std::string> netctl_get(const std::string& host, const std::string& path,
+                                      double timeout_s) {
+    return netctl_request(host, "GET", path, {}, timeout_s);
+}
+
+std::optional<std::string> netctl_post(const std::string& host, const std::string& path,
+                                       const std::string& json_body, double timeout_s) {
+    return netctl_request(host, "POST", path, json_body, timeout_s);
+}
+
 bool pi_has_internet(const std::string& host) {
     auto body = netctl_get(host, "/status");
+    return body && json_bool(*body, "internet");
+}
+
+std::optional<PiNetStatus> parse_status(const std::string& body) {
+    if (body.find("\"ap\"") == std::string::npos)
+        return std::nullopt;
+    PiNetStatus s;
+    s.internet = json_bool(body, "internet");
+    s.ap_ssid = json_str(body, "ap_ssid");
+    s.ap_psk = json_str(body, "ap_psk");
+    // "ap" and "uplink" are nested objects that both carry a "state"/"connection" key,
+    // so each is read from its own offset rather than from the top of the document.
+    const auto ap_at = body.find("\"ap\"");
+    const auto up_at = body.find("\"uplink\"");
+    if (ap_at != std::string::npos) {
+        // hostapd mode reports systemctl's "active"; the NM fallback reports "activated".
+        const std::string st = json_str(body, "state", ap_at);
+        s.ap_active = st == "active" || st == "activated" || st == "connected";
+    }
+    if (up_at != std::string::npos) {
+        s.uplink_state = json_str(body, "state", up_at);
+        s.uplink_name = json_str(body, "connection", up_at);
+        if (s.uplink_name == "--")
+            s.uplink_name.clear();
+    }
+    return s;
+}
+
+std::vector<WifiNet> parse_networks(const std::string& body) {
+    std::vector<WifiNet> nets;
+    // Walk the "networks" array by its per-entry "ssid" keys: every entry has exactly
+    // one, and the remaining fields of that entry follow it before the next one.
+    std::size_t pos = body.find("\"networks\"");
+    if (pos == std::string::npos)
+        return nets;
+    while (true) {
+        const std::size_t ssid_at = body.find("\"ssid\"", pos);
+        if (ssid_at == std::string::npos)
+            break;
+        WifiNet n;
+        n.ssid = json_str(body, "ssid", ssid_at);
+        n.signal = json_int(body, "signal", ssid_at);
+        n.security = json_str(body, "security", ssid_at);
+        n.in_use = json_bool(body, "in_use", ssid_at);
+        if (!n.ssid.empty())
+            nets.push_back(std::move(n));
+        pos = ssid_at + 6;
+    }
+    // netctl already sorts by signal; re-sort so the UI does not depend on that.
+    std::stable_sort(nets.begin(), nets.end(),
+                     [](const WifiNet& a, const WifiNet& b) { return a.signal > b.signal; });
+    return nets;
+}
+
+PiActionResult parse_action(const std::string& body) {
+    PiActionResult r;
+    r.ok = json_bool(body, "ok");
+    r.output = json_str(body, "output");
+    if (r.output.empty())
+        r.output = json_str(body, "error");
+    if (r.output.empty())
+        r.output = json_str(body, "note");
+    return r;
+}
+
+std::optional<PiNetStatus> pi_status(const std::string& host) {
+    auto body = netctl_get(host, "/status");
     if (!body)
-        return false;
-    const auto key = body->find("\"internet\"");
-    if (key == std::string::npos)
-        return false;
-    const auto colon = body->find(':', key);
-    if (colon == std::string::npos)
-        return false;
-    const auto val = body->find_first_not_of(" \t", colon + 1);
-    return val != std::string::npos && body->compare(val, 4, "true") == 0;
+        return std::nullopt;
+    return parse_status(*body);
+}
+
+std::vector<WifiNet> pi_scan_wifi(const std::string& host) {
+    // The Pi rescans wlan0 and sleeps 2 s before replying, so allow well over that.
+    auto body = netctl_get(host, "/scan", 25.0);
+    if (!body)
+        return {};
+    return parse_networks(*body);
+}
+
+namespace {
+
+PiActionResult action_from(const std::optional<std::string>& body, const char* what) {
+    if (!body) {
+        PiActionResult r;
+        r.output = std::string(what) + ": the Pi did not answer";
+        return r;
+    }
+    return parse_action(*body);
+}
+
+} // namespace
+
+PiActionResult pi_connect_wifi(const std::string& host, const std::string& ssid,
+                               const std::string& psk) {
+    applog::info("[netctl] asking the Pi to join '" + ssid + "'");
+    std::string body = "{\"ssid\":" + json_quote(ssid);
+    if (!psk.empty())
+        body += ",\"psk\":" + json_quote(psk);
+    body += "}";
+    // nmcli's association plus the AP restart can take a while; the Pi answers only
+    // once both are done, so this request is deliberately long-lived.
+    auto resp = netctl_post(host, "/connect", body, 60.0);
+    auto r = action_from(resp, "connect");
+    applog::info(std::string("[netctl] connect ") + (r.ok ? "ok" : "failed") + ": " +
+                 r.output.substr(0, 200));
+    return r;
+}
+
+PiActionResult pi_disconnect_wifi(const std::string& host) {
+    auto resp = netctl_post(host, "/disconnect", "", 30.0);
+    auto r = action_from(resp, "disconnect");
+    applog::info(std::string("[netctl] disconnect ") + (r.ok ? "ok" : "failed"));
+    return r;
+}
+
+bool wait_for_pi(const std::string& host, double timeout_s) {
+    // Joining an uplink retunes the single radio and restarts the AP, so this PC's
+    // association drops. Windows/NetworkManager re-join on their own; we just wait for
+    // the control port to answer again instead of declaring the Pi lost.
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(static_cast<int>(timeout_s * 1000));
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (port_open(host, NETCTL_PORT, 1.0))
+            return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(700));
+    }
+    applog::info("[netctl] " + host + " stayed unreachable after the AP retune");
+    return false;
 }
 
 DiscoverResult discover(const std::optional<std::string>& saved_host, bool allow_ap_join) {

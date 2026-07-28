@@ -88,6 +88,17 @@ endif()
 
 install(TARGETS dji-link RUNTIME DESTINATION bin BUNDLE DESTINATION .)
 
+# --------------------------------------------------------------------- tests
+# Built and run by ci.yml's `ctest` step on every platform in the matrix. Only
+# display-free, network-free core logic is covered here, so it runs everywhere.
+# Skipped when this project is consumed as a subproject.
+if(PROJECT_IS_TOP_LEVEL)
+    enable_testing()
+    add_executable(netctl_parse_test tests/netctl_parse_test.cpp)
+    target_link_libraries(netctl_parse_test PRIVATE djilink_core)
+    add_test(NAME netctl_parse COMMAND netctl_parse_test)
+endif()
+
 # Release-time ffmpeg bundle. The release workflow sets these paths after preparing
 # platform-native ffmpeg binaries. Application code never installs ffmpeg at runtime;
 # it only launches the binary installed here.
