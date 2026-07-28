@@ -225,20 +225,94 @@ def _split_nmcli(line: str) -> list[str]:
     return out
 
 
-def _delete_profiles_for_ssid(ssid: str) -> None:
-    """Delete every saved connection profile whose wireless SSID matches `ssid`.
+def _wifi_profiles() -> list[tuple[str, str, str, str]]:
+    """Saved Wi-Fi profiles as (uuid, name, ssid, filename).
 
-    nmcli con delete takes a profile NAME, not an SSID. On a netplan/NM Pi the
-    profile for 'ASUS_65' is named 'netplan-wlan0-ASUS_65', so deleting by the
-    bare SSID silently does nothing and the stale profile is found on the next
-    connect — causing '802-11-wireless-security-key-mgmt.property-is-missing'
-    when nmcli tries to reuse a profile that has no security section at all.
+    Two steps on purpose. Setting properties like 802-11-wireless.ssid are NOT valid
+    fields for the `con show` *list* — nmcli rejects them with rc=2 and prints
+    "invalid field", which is easy to mistake for "no profiles matched". The SSID can
+    only be read per profile, so list first (UUID/NAME/TYPE/FILENAME are all valid list
+    fields), then query each Wi-Fi profile by UUID.
     """
-    _, out = nmcli("-t", "-f", "NAME,802-11-WIRELESS.SSID", "con", "show")
+    out_list: list[tuple[str, str, str, str]] = []
+    rc, out = nmcli("-t", "-f", "UUID,NAME,TYPE,FILENAME", "con", "show")
+    if rc != 0:
+        print(f"[netctl] could not list connections: {out}")
+        return out_list
     for line in out.splitlines():
         parts = [p.replace("\\:", ":") for p in _split_nmcli(line)]
-        if len(parts) >= 2 and parts[1] == ssid:
-            run("nmcli", "con", "delete", parts[0])
+        if len(parts) < 4:
+            continue
+        uuid, name, typ, fname = parts[0], parts[1], parts[2], ":".join(parts[3:])
+        if "wireless" not in typ and "wifi" not in typ:
+            continue
+        rc_if, if_out = nmcli("-t", "-f", "connection.interface-name", "con", "show", "uuid", uuid)
+        bound_if = if_out.split(":", 1)[1].strip() if rc_if == 0 and ":" in if_out else ""
+        if bound_if == AP_IFACE:
+            continue                          # the access point's own profile
+        rc2, ssid_out = nmcli("-t", "-f", "802-11-wireless.ssid", "con", "show", "uuid", uuid)
+        if rc2 != 0:
+            continue
+        # Output is "802-11-wireless.ssid:MySSID"; the SSID itself may contain ':'.
+        ssid = ""
+        for l2 in ssid_out.splitlines():
+            fields = [p.replace("\\:", ":") for p in _split_nmcli(l2)]
+            if len(fields) >= 2 and fields[0].endswith("ssid"):
+                ssid = ":".join(fields[1:])
+                break
+        out_list.append((uuid, name, ssid, fname))
+    return out_list
+
+
+def _sec_key_mgmt(ssid: str) -> str:
+    """Pick key-mgmt for `ssid` from the scan: 'sae' only for a WPA3-only AP.
+
+    'wpa-psk' covers WPA2 *and* WPA3-transition APs, so it is the right default. A
+    WPA3-only AP (SECURITY says WPA3 with no WPA2) needs 'sae' and rejects wpa-psk.
+    """
+    rc, out = nmcli("-t", "-f", "SSID,SECURITY", "dev", "wifi", "list", "ifname", STA_IFACE)
+    if rc != 0:
+        return "wpa-psk"
+    for line in out.splitlines():
+        parts = [p.replace("\\:", ":") for p in _split_nmcli(line)]
+        if len(parts) < 2 or parts[0] != ssid:
+            continue
+        sec = parts[1].upper()
+        if "WPA3" in sec and "WPA2" not in sec:
+            print(f"[netctl] '{ssid}' looks WPA3-only; using key-mgmt=sae")
+            return "sae"
+        break
+    return "wpa-psk"
+
+
+def _delete_profiles_for_ssid(ssid: str) -> None:
+    """Delete every saved profile whose wireless SSID matches `ssid`.
+
+    nmcli con delete takes a profile NAME or UUID, not an SSID. On a netplan/NM Pi the
+    profile for 'ASUS_65' is named 'netplan-wlan0-ASUS_65', so deleting by the bare SSID
+    silently does nothing; the stale profile is then reused by the next `dev wifi connect`,
+    which discards the supplied password and fails with
+    '802-11-wireless-security-key-mgmt.property-is-missing' because the leftover profile
+    has no security section. Delete by UUID — names are not unique, SSIDs are what we match.
+    """
+    for uuid, name, prof_ssid, fname in _wifi_profiles():
+        if prof_ssid != ssid:
+            continue
+        # Never delete the AP. Checking the name alone is not enough: the profile may be
+        # named anything, and a user could ask to join a network whose SSID equals ours.
+        if name == AP_CON or prof_ssid == AP_SSID:
+            continue
+        # A netplan/cloud-init YAML in /etc/netplan can regenerate the profile after we
+        # delete it, so say so rather than letting the next failure look inexplicable.
+        if "netplan" in fname or fname.startswith("/usr/lib"):
+            print(f"[netctl] note: '{name}' is backed by {fname}; it may be regenerated")
+        # "uuid" keyword: con delete accepts id|uuid|path, and a profile NAME is not
+        # unique, so an ambiguous bare argument could match the wrong profile.
+        rc, out = nmcli("con", "delete", "uuid", uuid)
+        if rc == 0:
+            print(f"[netctl] deleted stale profile '{name}' for SSID '{ssid}'")
+        else:
+            print(f"[netctl] could not delete profile '{name}': {out}")
 
 
 def connect(ssid: str, psk: str | None) -> dict:
@@ -253,6 +327,36 @@ def connect(ssid: str, psk: str | None) -> dict:
         args += ["password", psk]
     rc, out = nmcli(*args)
     ok = rc == 0
+
+    # Fallback: build the profile by hand. `dev wifi connect` is a convenience wrapper that
+    # reuses whatever profile it finds; if one survived deletion (renamed, read-only, owned
+    # by netplan) it still fails with a missing key-mgmt. An explicit profile sets every
+    # security property itself, so there is nothing left to inherit from a stale one.
+    if not ok and psk:
+        print(f"[netctl] dev wifi connect failed ({out.strip()}); building profile explicitly")
+        _delete_profiles_for_ssid(ssid)
+        tmp = f"dji-uplink-{ssid}"
+        nmcli("con", "delete", "id", tmp)    # a leftover from a previous failed attempt
+        # Every security property in ONE call. Setting key-mgmt in a separate `con modify`
+        # from the properties it depends on can itself fail validation.
+        rc_add, out_add = nmcli(
+            "con", "add", "type", "wifi", "ifname", STA_IFACE, "con-name", tmp,
+            "autoconnect", "yes", "ssid", ssid,
+            "802-11-wireless.mode", "infrastructure",
+            "802-11-wireless-security.key-mgmt", _sec_key_mgmt(ssid),
+            "802-11-wireless-security.psk", psk,
+            # psk-flags 0 = system-owned. The default (agent-owned) makes NM wait for a
+            # secret agent that does not exist on a headless Pi, which fails with
+            # "(7) Secrets were required, but not provided".
+            "802-11-wireless-security.psk-flags", "0",
+            "ipv4.method", "auto")
+        if rc_add == 0:
+            rc, out = nmcli("con", "up", tmp)
+            ok = rc == 0
+            if not ok:
+                nmcli("con", "delete", "id", tmp)  # do not leave a broken profile behind
+        else:
+            out = f"{out}\nprofile creation failed: {out_add}"
     # The radio just retuned to the uplink's channel; the AP must follow (single radio).
     if ok:
         if hostapd_mode():

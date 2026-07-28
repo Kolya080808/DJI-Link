@@ -6,14 +6,35 @@ prerelease: true
 
 ## Fixed
 
-- **Reconnecting to a previously used network failed with
-  `802-11-wireless-security-key-mgmt.property-is-missing`.** The stale profile was deleted with
-  `nmcli con delete <ssid>`, but that command takes a profile *name*, not an SSID — on a
-  netplan/NetworkManager Pi the profile for `MyNet` is named `netplan-wlan0-MyNet`, so the
-  delete silently did nothing. `nmcli dev wifi connect` then reused the stale profile, discarded
-  the supplied password, and tripped over a profile with no security section. `netctl.py` now
-  enumerates profiles by their `802-11-WIRELESS.SSID` field and deletes every match regardless
-  of profile name, so the credentials are always reapplied.
+- **Reconnecting to a previously used network still failed with
+  `802-11-wireless-security-key-mgmt.property-is-missing`.** Two separate bugs, both fixed.
+
+  The error is a profile *validation* failure, not a wrong password: a saved profile that has
+  an `802-11-wireless-security` section but no `key-mgmt` value cannot be activated at all.
+  `nmcli dev wifi connect` is a wrapper that reuses any profile matching the SSID, so once a
+  stale one existed, the password passed on the command line never reached it.
+
+  Finding the stale profile was the first bug. `nmcli con delete <ssid>` takes a profile
+  *name*, not an SSID, and a generated profile is often named something else entirely, so the
+  delete silently did nothing. The previous attempt to fix that queried
+  `nmcli -t -f NAME,802-11-WIRELESS.SSID con show` — but setting properties are not valid
+  fields for the `con show` *list* (nmcli answers rc=2 and "invalid field"), so the loop
+  matched nothing and the deletion was dead code. Profiles are now listed with
+  `UUID,NAME,TYPE,FILENAME`, each Wi-Fi profile is queried individually for its SSID, and
+  matches are deleted with the explicit `uuid` keyword, since names are not unique. The
+  access point's own profile is skipped both by name and by being bound to `uap0`.
+
+  Deletion alone is not enough, which was the second bug. A profile can survive it when it is
+  read-only or regenerated from `/etc/netplan`, and `dev wifi connect` will reuse it again.
+  When that command fails, `connect()` now creates the profile itself in a single `con add`
+  carrying `key-mgmt`, the passphrase, and `psk-flags 0`. All in one call because setting
+  `key-mgmt` separately from its dependent properties can fail validation on its own;
+  `psk-flags 0` marks the secret system-owned, since the default waits for a secret agent
+  that does not exist on a headless Pi and fails with "Secrets were required, but not
+  provided". `key-mgmt` is chosen from the scan — `sae` for a WPA3-only AP, otherwise
+  `wpa-psk`, which covers WPA2 and WPA3-transition. A profile that fails to activate is
+  removed instead of being left behind, and a profile backed by `/etc/netplan` is called out
+  in the log because it can come back on its own.
 
 - **The Pi's AP address (`10.42.0.1`) stopped responding after disconnecting the uplink.** The
   BCM43430 has a single radio, so the AP on `uap0` shares wlan0's channel. Dropping the uplink
@@ -47,9 +68,9 @@ prerelease: true
 
 <!--
 Release checklist:
-  1. Keep "version" above equal to the tag you push (tag v0.7.9 => version: 0.7.9).
+  1. Keep "version" above equal to the tag you push (tag v0.8.0 => version: 0.8.0).
   2. Commit UPDATE.md.
-  3. git tag v0.7.9 && git push origin v0.7.9
+  3. git tag v0.8.0 && git push origin v0.8.0
 Everything below the second "---" (except this comment) becomes the GitHub Release body.
 These binaries are unsigned, so first launch shows a Gatekeeper (macOS) / SmartScreen
 (Windows) warning — expected for a pre-release.
