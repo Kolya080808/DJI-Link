@@ -225,13 +225,28 @@ def _split_nmcli(line: str) -> list[str]:
     return out
 
 
+def _delete_profiles_for_ssid(ssid: str) -> None:
+    """Delete every saved connection profile whose wireless SSID matches `ssid`.
+
+    nmcli con delete takes a profile NAME, not an SSID. On a netplan/NM Pi the
+    profile for 'ASUS_65' is named 'netplan-wlan0-ASUS_65', so deleting by the
+    bare SSID silently does nothing and the stale profile is found on the next
+    connect — causing '802-11-wireless-security-key-mgmt.property-is-missing'
+    when nmcli tries to reuse a profile that has no security section at all.
+    """
+    _, out = nmcli("-t", "-f", "NAME,802-11-WIRELESS.SSID", "con", "show")
+    for line in out.splitlines():
+        parts = [p.replace("\\:", ":") for p in _split_nmcli(line)]
+        if len(parts) >= 2 and parts[1] == ssid:
+            run("nmcli", "con", "delete", parts[0])
+
+
 def connect(ssid: str, psk: str | None) -> dict:
     """Join a network as the uplink, keeping the AP up."""
-    # nmcli silently reuses an existing saved profile and ignores the `password` argument
-    # when one already exists for this SSID. Delete it first so the given password is
-    # always applied (delete is a no-op if no profile exists).
+    # Delete any existing profile for this SSID so the given password is always
+    # applied. Must search by SSID field — the profile name rarely equals the SSID.
     if psk is not None:
-        run("nmcli", "con", "delete", ssid)
+        _delete_profiles_for_ssid(ssid)
 
     args = ["dev", "wifi", "connect", ssid, "ifname", STA_IFACE]
     if psk:
@@ -257,6 +272,13 @@ def connect(ssid: str, psk: str | None) -> dict:
 
 def disconnect() -> dict:
     rc, out = nmcli("dev", "disconnect", STA_IFACE)
+    # BCM43430 is a single radio: when wlan0 loses its uplink channel the AP on uap0
+    # loses its channel too and stops being reachable. Restarting dji-ap makes ap.sh
+    # pick a default channel so 10.42.0.1 answers again.
+    if hostapd_mode():
+        import threading
+        threading.Thread(target=lambda: systemctl("restart", AP_SERVICE),
+                         daemon=True).start()
     return {"ok": rc == 0, "output": out}
 
 
