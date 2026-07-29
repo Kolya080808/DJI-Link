@@ -213,6 +213,10 @@ Check it with `systemctl status dji-netctl dji-bridge dji-update.timer` and
 `journalctl -u dji-update -f`. Bridge tracebacks are also mirrored to
 `/var/log/dji-link/bridge.log` on the Pi.
 
+Before publishing the Pi assets, `release.yml` also runs the shell/Python Pi regression
+tests (`tests/ap_channel_test.sh`, `tests/netctl_sim_test.py`), then syntax-checks every
+bundled shell script and byte-compiles every bundled Python file.
+
 > `raw_gadget` is an out-of-tree module, so it must be rebuilt after a kernel upgrade —
 > re-run the installer (or `sudo bash /opt/dji-link/pi/setup_pi.sh --dir /opt/dji-link/pi --service`).
 

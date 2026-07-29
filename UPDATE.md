@@ -1,50 +1,47 @@
 ---
-title: DJI Link v0.8.5 — Bridge is always reachable
-version: 0.8.5
+title: DJI Link v0.8.6 — AP survives same-radio uplink channels
+version: 0.8.6
 prerelease: true
 ---
 
 ## Fixed
 
-- **`Start flying` could look like it did nothing after the v0.8.x Pi Wi-Fi work.**
-  Discovery found the Pi through the netctl API on `:9911`, but the flight screen then
-  needs the AOA bridge on `:9910`. The bridge process used to open `:9910` only after
-  the AOA/UDC path was ready, so the desktop could find the Pi and immediately fail to
-  enter flight mode because the bridge port was still closed.
+- **The Pi installer could roll back a working upgrade while the uplink was on channel
+  7 or another non-1/6/11 2.4 GHz channel.** After repeated short hostapd starts,
+  `ap.sh` treated the AP as unstable and pinned it to the safe fallback list
+  (`6 -> 1 -> 11`) before checking the current uplink channel.
 
-- **`dji-bridge.service` no longer waits on `dji-netctl.service`.** The bridge is an
-  independent data path and now starts as soon as `network.target` is up. This keeps the
-  flying endpoint available even if the Wi-Fi control service is restarting, blocked on
-  AP recovery, or otherwise slow.
+- **AP+STA channel selection now respects the live uplink first.** On a single-radio Pi,
+  if `wlan0` is already associated on channel 7, starting `uap0` on channel 6 can fail
+  with `kernel reports: (extension) channel is disabled`. A live uplink channel now wins
+  whenever the kernel says this radio may beacon on it; the safe fallback list is used
+  only when there is no usable current uplink channel.
 
-- **`bridge.py` now listens on `:9910` immediately.** AOA setup runs in a background
-  worker and retries there. If the laptop connects before the RC/UDC is ready, the TCP
-  connection is accepted and incoming frames are explicitly logged as dropped until AOA
-  becomes available, instead of making the port look dead.
-
-- **Bridge crashes and background-thread failures are now visible.** `bridge.py` tees
-  stdout/stderr to systemd journal and `/var/log/dji-link/bridge.log`, installs
-  `sys.excepthook`, `threading.excepthook`, and `faulthandler`, and logs full tracebacks
-  for AOA worker crashes, TCP session crashes, and fatal main-loop failures.
+- **The release Pi bundle now runs the Wi-Fi regression tests before publishing.**
+  `release.yml` executes `tests/ap_channel_test.sh` and `tests/netctl_sim_test.py`
+  before packaging `dji-link-pi.tar.gz`, so the channel-7 rollback case and the
+  NetworkManager explicit-profile fixes are checked during tagged releases.
 
 ## Kept
 
-- The existing AOA process self-restart on dirty USB disconnect is intentionally kept.
-  It is still the recovery path for the UDC state machine; this release only makes the
-  normal bridge listener come up earlier and improves logging around failures.
+- The v0.8.5 bridge behavior is unchanged: `dji-bridge` still starts independently,
+  listens on `:9910` immediately, retries AOA setup in the background, and logs crashes
+  to the journal plus `/var/log/dji-link/bridge.log`.
+
+- The existing AOA process self-restart on dirty USB disconnect remains in place.
 
 ## Known limitations
 
-- This is a Pi bundle / service wiring fix. Desktop flying code is unchanged.
+- This is a Pi AP/release-gate fix. Desktop flying code is unchanged.
 - If `/dev/raw-gadget` is missing on a first install, `install.sh` still reports that
   bridge activation completes after reboot; `setup_pi.sh` still installs the service,
   and the service then opens `:9910` immediately when it starts.
 
 <!--
 Release checklist:
-  1. Keep "version" above equal to the tag you push (tag v0.8.5 => version: 0.8.5).
+  1. Keep "version" above equal to the tag you push (tag v0.8.6 => version: 0.8.6).
   2. Commit UPDATE.md.
-  3. git tag v0.8.5 && git push origin v0.8.5
+  3. git tag v0.8.6 && git push origin v0.8.6
 Everything below the second "---" (except this comment) becomes the GitHub Release body.
 These binaries are unsigned, so first launch shows a Gatekeeper (macOS) / SmartScreen
 (Windows) warning — expected for a pre-release.

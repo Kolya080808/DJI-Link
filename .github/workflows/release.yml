@@ -450,6 +450,8 @@ jobs:
       - name: Package the pi/ bundle
         run: |
           set -euo pipefail
+          bash tests/ap_channel_test.sh
+          python3 tests/netctl_sim_test.py
           mkdir -p dist stage/pi
           # Everything the Pi needs at runtime (transparent AOA<->TCP bridge + setup).
           cp dji_link_beta/pi/*.py dji_link_beta/pi/*.sh stage/pi/

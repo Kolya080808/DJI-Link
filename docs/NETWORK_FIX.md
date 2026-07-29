@@ -183,7 +183,11 @@ the reported "everything fell".
 The channel is now intersected with what the kernel says this radio may beacon on
 (`iw phy … info`, minus `disabled` / `no IR` / `radar detection`) and falls back to
 6/1/11 otherwise; `post` no longer deletes `uap0`; two short hostapd runs in a row pin a
-safe channel until a run lasts.
+safe channel until a run lasts. One important exception: if `wlan0` is already associated
+on a kernel-beaconable 2.4 GHz channel (for example channel 7), that live uplink channel
+still wins even with a high failure counter. The Pi has one radio, and forcing channel 6
+while the station side holds channel 7 can make hostapd fail with `kernel reports:
+(extension) channel is disabled`.
 
 ### D. The AP was restarted when it did not need to be
 
