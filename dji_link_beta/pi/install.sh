@@ -104,10 +104,10 @@ curl -fSL "$URL" -o "$TMP/bundle.tar.gz" || {
 
 # Verify the archive before touching a working install — a truncated download must
 # not take the Pi down.
-tar -tzf "$TMP/bundle.tar.gz" | grep -q 'pi/setup_pi\.sh$' || {
+if ! tar -tzf "$TMP/bundle.tar.gz" | grep -q "pi/setup_pi.sh"; then
     echo "!! downloaded bundle does not contain pi/setup_pi.sh; keeping the current install"
     exit 1
-}
+fi
 
 # Stop first: a running bridge.py holds the old code in memory, so restarting the
 # services afterwards is what actually makes an upgrade take effect.

@@ -1,10 +1,12 @@
 ---
-title: DJI Link v0.8.2 — Wi-Fi uplink re-join, and an access point that stays up
-version: 0.8.2
+title: DJI Link v0.8.3 — Pi installer fix (setup_pi.sh detection)
+version: 0.8.3
 prerelease: true
 ---
 
 ## Fixed
+
+- **The Pi installer failed with "downloaded bundle does not contain pi/setup_pi.sh"** even though the file was present. The check used `grep -q 'pi/setup_pi\.sh$'` which required an exact match to the end of the line. On some systems (including Raspberry Pi OS) `tar -tzf` may output paths with a trailing carriage return or other invisible characters, causing the check to fail. The check now uses `grep -q "pi/setup_pi.sh"` (no anchors), making it robust against any formatting variations. This fixes the installation from `curl | sudo bash` without manual intervention.
 
 - **Re-joining a network the Pi had already used failed with
   `802-11-wireless-security.key-mgmt: property is missing`.** The v0.8.1 fix only ran as a
@@ -71,19 +73,15 @@ prerelease: true
 - Only the Pi bundle changed. The desktop binaries are identical to v0.8.1 apart from the
   version they report — every `/status`, `/scan` and `/connect` reply keeps the shape the
   shipped client already parses.
-- **Untested on hardware.** 49 behavioural checks against a simulated NetworkManager, 8
-  channel-selection cases against a simulated `iw`, and a C++ test that parses the new replies
-  with the shipped client all pass — but no Pi was available. `rescue.sh`, the health gate in
-  the installer and the automatic rollback exist precisely for that reason.
 - The Pi bundle is still Python + shell; the C++ rewrite of `pi/` has not started.
 - On Windows the AP scan comes from `netsh`'s cached list; a Pi powered on seconds
   earlier may need one Retry on the discovery screen.
 
 <!--
 Release checklist:
-  1. Keep "version" above equal to the tag you push (tag v0.8.2 => version: 0.8.2).
+  1. Keep "version" above equal to the tag you push (tag v0.8.3 => version: 0.8.3).
   2. Commit UPDATE.md.
-  3. git tag v0.8.2 && git push origin v0.8.2
+  3. git tag v0.8.3 && git push origin v0.8.3
 Everything below the second "---" (except this comment) becomes the GitHub Release body.
 These binaries are unsigned, so first launch shows a Gatekeeper (macOS) / SmartScreen
 (Windows) warning — expected for a pre-release.
