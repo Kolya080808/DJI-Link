@@ -53,6 +53,15 @@ if [ "$CURRENT" = "$LATEST" ]; then
     exit 0
 fi
 
+# install-pi.sh writes BAD_VERSION when a release came up without a working access point
+# and had to be rolled back. Without this the timer would reinstall and roll back the
+# same broken release every 6 hours, restarting the Pi's networking each time.
+if [ -f "$PREFIX/BAD_VERSION" ] && [ "$(cat "$PREFIX/BAD_VERSION")" = "$LATEST" ]; then
+    echo "[update] ${LATEST} already failed on this Pi and was rolled back; not retrying."
+    echo "[update] delete $PREFIX/BAD_VERSION to try it again."
+    exit 0
+fi
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 URL="https://github.com/${REPO}/releases/download/${LATEST}/${ASSET}"

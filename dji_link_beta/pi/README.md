@@ -17,6 +17,7 @@ receives telemetry/video over Wi-Fi; the Pi only forwards bytes.
 | `update_pi.sh` | non-interactive updater run by `dji-update.timer` when internet is available |
 | `netctl.py` | Wi-Fi/AP HTTP API on `:9911` used by the C++ discovery screen |
 | `ap.sh` | brings the Wi-Fi AP up/down with hostapd + dnsmasq (run by `dji-ap.service`) |
+| `rescue.sh` | standalone repair for a Pi that has lost all networking (see below) |
 | `bridge.py` | AOA ↔ TCP bridge on `:9910` |
 | `aoa_device.py` | AOA device emulator: 51/52/53 handshake, re-enumeration, bulk endpoints |
 | `raw_gadget.py` | wrapper over `/dev/raw-gadget` |
@@ -103,17 +104,94 @@ just the password. dnsmasq hands out `10.42.0.50–150` and forwards DNS to `1.1
 whenever the Pi does. `wlan0` stays NetworkManager-managed (scanning + optional uplink);
 only `uap0` is marked unmanaged.
 
-Single radio: the AP must share a channel with the uplink. `ap.sh` reads `wlan0`'s
-channel on start, and `netctl.py` restarts `dji-ap` after joining an uplink so the AP
-re-tunes; clients reconnect once.
+### Two paths, one association
+
+Joining `PI_DJI_LINK-*` gives the PC two independent things:
+
+| Path | Route | Depends on the uplink? |
+|------|-------|------------------------|
+| the Pi itself (`:9911` control, `:9910` bridge) | on-link to `10.42.0.1`, never NATed | **no** |
+| the internet | default route -> Pi -> NAT out of `wlan0` | yes |
+
+So the Pi stays reachable at `10.42.0.1` with no uplink at all, in the field, and gains
+internet on top of that the moment `wlan0` joins a network. When the Pi does have an
+uplink it is *also* reachable on that LAN — the PC client's `find_on_lan` / `sweep_lan`
+uses that as a second, completely separate way in.
+
+### Single radio: what actually happens on a channel change
+
+The AP has to share a channel with the uplink. `ap.sh` picks that channel from the
+channels the kernel reports this radio may **beacon** on (`iw phy … info`, minus
+`disabled` / `no IR` / `radar detection`), so it never writes a config hostapd will
+refuse: a 5 GHz uplink channel on the 2.4 GHz-only Zero 2 W radio, or channel 12/13
+under the world regulatory domain (`00`), fall back to a safe channel instead of taking
+the AP down. Two short hostapd runs in a row and it stops following the uplink entirely
+until the next good run.
+
+`netctl.py` restarts `dji-ap` only when the channel it must use actually changed, or
+when the AP is unhealthy. Joining a network that is already on the AP's channel, and
+every `disconnect`, leave the laptop's association alone.
+
+Set the WLAN country (`sudo raspi-config` -> System Options -> Wireless LAN) if your
+router uses channel 12 or 13 — without it the kernel forbids beaconing there and the AP
+stays on channel 6 while the uplink sits on 12/13, which one radio cannot do well.
 
 Verify / troubleshoot on the Pi:
 
 ```bash
-systemctl status dji-ap                 # active = AP up
+sudo python3 netctl.py doctor            # start here: every check in one place
+bash ap.sh health                        # "ok", or what exactly is wrong
+systemctl status dji-ap                  # active = AP up
 iw dev                                   # expect a uap0 interface in type AP
+bash ap.sh chan                          # the channel it would pick right now
 grep -E 'wps_state|wpa|channel' /run/dji-ap/hostapd.conf
 journalctl -u dji-ap -n 40 --no-pager    # hostapd/dnsmasq startup errors
+```
+
+## Rescue: the Pi is not reachable at all
+
+No `PI_DJI_LINK-*` network in range **and** nothing on the LAN. `pi/rescue.sh` is
+standalone — it uses nothing from the bundle, because the bundle is what you are
+recovering from. It stops the AP restart loop, unblocks the radio, puts NetworkManager
+back in charge of `wlan0`, writes a correct Wi-Fi profile if you give it one, and
+installs a minimal always-on AP (`dji-rescue-ap.service`, channel 6) so the Pi is
+reachable at `10.42.0.1` even after a reboot.
+
+With a keyboard/HDMI or serial console on the Pi:
+
+```bash
+sudo bash rescue.sh                       # access point only
+sudo bash rescue.sh "MyHomeNetwork" "password"   # and rejoin that network
+```
+
+With no console at all, from the SD card on another computer — open the small FAT
+partition (the one with `config.txt`), then:
+
+1. copy `rescue.sh` there as `dji-rescue.sh`;
+2. optionally create `dji-rescue.conf` next to it:
+   ```
+   SSID=MyHomeNetwork
+   PSK=MyPassword
+   COUNTRY=RU
+   ```
+3. append to the single line in `cmdline.txt` (do not add a newline):
+   ```
+   systemd.run=/boot/firmware/dji-rescue.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target
+   ```
+4. boot the Pi and wait ~2 minutes. It repairs itself, removes those parameters again
+   and reboots.
+
+This is the same first-boot mechanism Raspberry Pi Imager uses for its `firstrun.sh`.
+`systemd.run=` needs the file to be executable: the boot partition is FAT and Raspberry Pi
+OS mounts it so that every file already is, which is why copying from Windows is enough —
+but if you copy it from Linux or macOS, `chmod +x dji-rescue.sh` to be sure.
+
+Re-running the installer afterwards removes the rescue AP and hands the job back to
+`dji-ap.service`. `latest` only resolves to a non-prerelease, so name the tag if the
+release you want is marked pre-release:
+
+```bash
+curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/download/v0.8.2/install-pi.sh | sudo bash
 ```
 
 If the AP won't start (e.g. hostapd rejects the channel), the older NetworkManager AP

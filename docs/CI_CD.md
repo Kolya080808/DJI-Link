@@ -176,7 +176,7 @@ job in `release.yml`). It publishes two assets:
 | Asset | What |
 |-------|------|
 | `install-pi.sh` | self-contained `curl \| bash` bootstrap, stamped with this repo + tag |
-| `dji-link-pi.tar.gz` | the `pi/` bundle (bridge scripts + `setup_pi.sh`) it downloads |
+| `dji-link-pi.tar.gz` | the `pi/` bundle it downloads — bridge scripts, `setup_pi.sh`, the access point (`ap.sh`) and `rescue.sh` |
 
 On a **clean** Raspberry Pi (Zero 2 W), bring it up in one line:
 
@@ -195,6 +195,9 @@ then runs `setup_pi.sh` which:
 - enables `dwc2` in peripheral mode and builds the `raw_gadget` kernel module (the Pi kernel
   ships it disabled);
 - installs and enables **systemd services**:
+  - `dji-ap.service` — the Wi-Fi access point itself (hostapd + dnsmasq on `uap0`); this is
+    the control path to the Pi in the field, so it is the one service that must never stay
+    down, and `install-pi.sh` rolls the whole bundle back if an upgrade leaves it broken;
   - `dji-netctl.service` — Pi Wi-Fi/AP HTTP API on `:9911` for the PC discovery screen;
   - `dji-bridge.service` — AOA↔TCP bridge on `:9910`;
   - `dji-update.timer` / `dji-update.service` — checks the latest GitHub Release every 6

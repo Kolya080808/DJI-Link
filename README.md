@@ -111,10 +111,21 @@ Flash Raspberry Pi OS, enable SSH, then run the latest release installer on the 
 curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh | sudo bash
 ```
 The installer downloads `dji-link-pi.tar.gz` from the same latest release, installs
-`dwc2`, `raw_gadget`, `dji-netctl.service`, `dji-bridge.service`, and
-`dji-update.timer`. If the Pi has internet, the timer checks GitHub Releases and updates
-the Pi bundle automatically. A first-time install may require one reboot, then services
-start by themselves on every power-up.
+`dwc2`, `raw_gadget`, `dji-ap.service` (the Wi-Fi access point), `dji-netctl.service`,
+`dji-bridge.service`, and `dji-update.timer`. If the Pi has internet, the timer checks
+GitHub Releases and updates the Pi bundle automatically. A first-time install may require
+one reboot, then services start by themselves on every power-up.
+
+`latest` resolves to the most recent **non**-prerelease. To install a specific release —
+including a prerelease — name the tag instead:
+
+```bash
+curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/download/v0.8.2/install-pi.sh | sudo bash
+```
+
+If the Pi ends up with no network at all and no access point, see
+[`dji_link_beta/pi/README.md`](dji_link_beta/pi/README.md#rescue-the-pi-is-not-reachable-at-all) —
+`rescue.sh` repairs it, including straight off the SD card with no console attached.
 
 Direct latest assets:
 - `https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh`
@@ -162,7 +173,7 @@ the setup.
   - `pc_client.py` — historical desktop prototype (video, telemetry, control, settings, console)
   - `drone.py` · `duml.py` · `composite.py` · `telemetry.py` · `diag_codes.py` · `control.py` · `transport.py`
   - `pi/` — release-packaged Raspberry Pi bridge/update tooling (`bridge.py`,
-    `netctl.py`, `install.sh`, `setup_pi.sh`, `update_pi.sh`)
+    `netctl.py`, `ap.sh`, `rescue.sh`, `install.sh`, `setup_pi.sh`, `update_pi.sh`)
   - `reverse_docs/` — the reverse-engineering documentation
 - **`decompiled/`** — the DJI Fly app, unpacked (source material for the research)
 

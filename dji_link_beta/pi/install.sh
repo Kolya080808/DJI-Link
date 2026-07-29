@@ -165,6 +165,50 @@ for svc in dji-netctl dji-bridge; do
     fi
 done
 
+# ---------------------------------------------------------------- health gate
+# An upgrade that leaves the Pi without an access point leaves it with no way in at
+# all — and dji-update.timer runs this installer unattended, so nobody is watching when
+# it happens. Verify the AP really came up; if it did not and there is a previous
+# bundle, put it back and restart on it rather than ending the run with a dead Pi.
+ap_ok() {
+    [ -f "$PI_DIR/ap.sh" ] || return 0          # older bundle without the health check
+    bash "$PI_DIR/ap.sh" health >/dev/null 2>&1
+}
+if [ -f "$PI_DIR/ap.sh" ]; then
+    echo "[install] verifying the access point"
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        ap_ok && break
+        sleep 2
+    done
+    if ap_ok; then
+        echo "     ap: ok"
+        rm -f "$PREFIX/BAD_VERSION"     # this tag works; let the updater try it again
+    else
+        echo "!! the access point did not come up after the upgrade:"
+        bash "$PI_DIR/ap.sh" health 2>&1 | sed 's/^/       /' || true
+        journalctl -u dji-ap -n 20 --no-pager 2>/dev/null | sed 's/^/       /' || true
+        if [ -d "$PREFIX/pi.old" ]; then
+            echo "!! rolling back to the previous bundle so the Pi stays reachable"
+            rm -rf "$PREFIX/pi.new-failed"
+            mv "$PREFIX/pi" "$PREFIX/pi.new-failed"
+            mv "$PREFIX/pi.old" "$PREFIX/pi"
+            printf '%s\n' "${OLD_VERSION:-unknown}" > "$PREFIX/VERSION"
+            # Remember which tag did this: dji-update.timer fires every 6 hours and
+            # would otherwise reinstall and roll back the same broken release forever.
+            printf '%s\n' "$TAG" > "$PREFIX/BAD_VERSION"
+            systemctl daemon-reload
+            systemctl restart dji-ap.service 2>/dev/null || true
+            systemctl restart dji-netctl.service 2>/dev/null || true
+            systemctl restart dji-bridge.service 2>/dev/null || true
+            echo "     rolled back to ${OLD_VERSION:-the previous bundle}"
+            echo "     the failed bundle is kept at $PREFIX/pi.new-failed"
+            exit 1
+        fi
+        echo "   no previous bundle to roll back to; diagnose with:"
+        echo "   sudo python3 $PI_DIR/netctl.py doctor"
+    fi
+fi
+
 echo
 echo "=== installer finished ==="
 echo ">>> installed version: $TAG  (was: ${OLD_VERSION:-none})"

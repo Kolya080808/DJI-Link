@@ -454,7 +454,10 @@ jobs:
           # Everything the Pi needs at runtime (transparent AOA<->TCP bridge + setup).
           cp dji_link_beta/pi/*.py dji_link_beta/pi/*.sh stage/pi/
           cp dji_link_beta/pi/README.md stage/pi/ 2>/dev/null || true
-          bash -n stage/pi/*.sh
+          # One file per invocation: `bash -n a.sh b.sh` parses only a.sh and turns the
+          # rest into positional parameters, so the glob silently checked ap.sh alone and
+          # nothing else in the bundle was ever syntax-checked.
+          for f in stage/pi/*.sh; do bash -n "$f"; done
           python3 -m py_compile stage/pi/*.py
           tar -czf dist/dji-link-pi.tar.gz -C stage pi
           echo "Bundle contents:"

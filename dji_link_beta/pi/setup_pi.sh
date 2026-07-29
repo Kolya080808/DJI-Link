@@ -74,6 +74,13 @@ apt-get update -qq
 # up but clients get no address / no route out — the "Pi network has no internet" symptom.
 apt-get install -y build-essential curl git python3 iproute2 iw network-manager \
     hostapd dnsmasq-base iptables >/dev/null
+# Nice to have, never fatal (some images do not carry them, and `set -e` would turn a
+# missing optional package into a failed setup). wireless-regdb is the regulatory
+# database: without it the kernel stays in the world domain (00), which marks channels
+# 12-13 NO-IR so hostapd cannot beacon there. ap.sh only picks channels the kernel
+# reports as usable either way, so this just widens what the AP is allowed to follow.
+apt-get install -y wireless-regdb rfkill >/dev/null 2>&1 || \
+    echo "     (wireless-regdb/rfkill unavailable — continuing without them)"
 # We drive hostapd ourselves through dji-ap.service, so keep Debian's stock hostapd
 # service out of the way (it ships masked, but be explicit for re-runs on odd images).
 systemctl disable hostapd 2>/dev/null || true
@@ -169,8 +176,8 @@ if [ "$WANT_SERVICE" = "1" ] && [ -n "$PI_DIR" ]; then
     cat > /etc/systemd/system/dji-netctl.service <<EOF
 [Unit]
 Description=DJI Link Pi Wi-Fi control API
-After=NetworkManager.service
-Wants=NetworkManager.service
+After=NetworkManager.service dji-ap.service
+Wants=NetworkManager.service dji-ap.service
 
 [Service]
 ExecStart=/usr/bin/python3 ${PI_DIR}/netctl.py serve
@@ -193,6 +200,31 @@ EOF
 unmanaged-devices=interface-name:uap0
 EOF
 
+    # Wi-Fi power save is a well-known cause of a Raspberry Pi that answers for a few
+    # minutes and then goes quiet, and it makes the brcmfmac AP+STA combination much
+    # less stable. NM turns it back on for every new connection, so setting it once on
+    # the interface is not enough — it has to be the default here (2 = disable).
+    # MAC randomisation is disabled for the same class of reason: uap0's address is
+    # derived from wlan0's, and a station MAC that changes per scan/connection breaks
+    # DHCP reservations and some routers' client lists.
+    cat > /etc/NetworkManager/conf.d/98-dji-wifi.conf <<'EOF'
+[connection]
+wifi.powersave = 2
+
+[device]
+wifi.scan-rand-mac-address = no
+EOF
+
+    # Create the AP interface as soon as the radio appears, before NetworkManager has
+    # used wlan0 for anything. Adding a virtual AP interface to a brcmfmac phy that is
+    # already associated is the step that most often knocks the station connection over;
+    # doing it at phy-registration time avoids that entirely. ap.sh copes either way, so
+    # a failure here is not fatal.
+    cat > /etc/udev/rules.d/90-dji-uap0.rules <<'EOF'
+ACTION=="add", SUBSYSTEM=="ieee80211", KERNEL=="phy0", RUN+="/sbin/iw phy %k interface add uap0 type __ap"
+EOF
+    udevadm control --reload 2>/dev/null || true
+
     cat > /etc/systemd/system/dji-ap.service <<EOF
 [Unit]
 Description=DJI Link Wi-Fi access point (hostapd + dnsmasq on uap0)
@@ -201,13 +233,20 @@ Wants=NetworkManager.service
 
 [Service]
 Type=simple
-# ap.sh pre creates uap0 + IP + NAT + dnsmasq and writes the hostapd config (tuned to
-# wlan0's channel); hostapd is the foreground main process; ap.sh post tears it down.
+# ap.sh pre creates uap0 + IP + NAT + dnsmasq and writes the hostapd config (on a
+# channel this radio is actually allowed to beacon on); hostapd is the foreground main
+# process; ap.sh post stops dnsmasq and records how long the run lasted.
 ExecStartPre=/bin/bash ${PI_DIR}/ap.sh pre
 ExecStart=/usr/sbin/hostapd /run/dji-ap/hostapd.conf
 ExecStopPost=/bin/bash ${PI_DIR}/ap.sh post
+# The AP is the only way into the Pi in the field, so it is restarted for as long as it
+# takes (StartLimitIntervalSec=0 disables systemd's give-up-after-N-tries). What makes
+# that safe is that ap.sh no longer destroys uap0 between runs and pins a known-good
+# channel after two short runs: the old 3-second create/destroy loop on the shared
+# brcmfmac radio is what used to take wlan0 down with it.
 Restart=always
-RestartSec=3
+RestartSec=5
+StartLimitIntervalSec=0
 User=root
 
 [Install]
@@ -256,6 +295,16 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 EOF
+    # rescue.sh installs a minimal stand-in AP so a Pi with a broken bundle is still
+    # reachable. The real one is going back in now, and two hostapds on one interface
+    # would fight, so retire it.
+    if [ -f /etc/systemd/system/dji-rescue-ap.service ]; then
+        echo "     removing the rescue access point (dji-ap takes over)"
+        systemctl disable --now dji-rescue-ap.service 2>/dev/null || true
+        rm -f /etc/systemd/system/dji-rescue-ap.service
+        rm -rf /usr/local/lib/dji-rescue
+    fi
+
     systemctl daemon-reload
     systemctl enable NetworkManager.service 2>/dev/null || true
     systemctl enable dji-ap.service
@@ -278,7 +327,24 @@ EOF
         echo "     dji-bridge.service enabled (will start after the reboot)"
         echo "     dji-update.timer enabled"
     fi
-    echo "     ap: $(systemctl is-active dji-ap.service 2>/dev/null || echo unknown)  (hostapd+dnsmasq)"
+    # Do not walk away from a setup that left the Pi with no access point: report the
+    # real state of it, not just whether systemd thinks the unit is running.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        bash "${PI_DIR}/ap.sh" health >/dev/null 2>&1 && break
+        sleep 1
+    done
+    AP_STATE="$(systemctl is-active dji-ap.service 2>/dev/null || echo unknown)"
+    # Keyed off the exit status, not the text: a healthy AP can still print an
+    # informational note (the firmware moved it to the station's channel, say).
+    if bash "${PI_DIR}/ap.sh" health >/dev/null 2>&1; then
+        echo "     ap: ${AP_STATE}  (hostapd+dnsmasq) — ok"
+    else
+        echo "     ap: ${AP_STATE}  (hostapd+dnsmasq)"
+        bash "${PI_DIR}/ap.sh" health 2>&1 | sed 's/^/       /' || true
+        echo "     !! the access point is NOT healthy. Diagnose with:"
+        echo "        sudo python3 ${PI_DIR}/netctl.py doctor"
+        echo "        journalctl -u dji-ap -n 40 --no-pager"
+    fi
     echo "     ap logs: journalctl -u dji-ap -f"
     echo "     logs: journalctl -u dji-bridge -f"
     echo "     wifi API logs: journalctl -u dji-netctl -f"
