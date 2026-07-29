@@ -132,10 +132,10 @@ channels the kernel reports this radio may **beacon** on (`iw phy … info`, min
 `disabled` / `no IR` / `radar detection`), so it never writes a config hostapd will
 refuse: a 5 GHz uplink channel on the 2.4 GHz-only Zero 2 W radio, or channel 12/13
 under the world regulatory domain (`00`), fall back to a safe channel instead of taking
-the AP down. Two short hostapd runs in a row pin the AP to a safe fallback only when
-there is no current uplink channel that is usable for AP beaconing. If `wlan0` is already
-associated on a valid 2.4 GHz channel such as 7, that live channel still wins; one-radio
-AP+STA cannot reliably start hostapd on channel 6 while the station side holds channel 7.
+the AP down. While hostapd is healthy, the AP follows a usable live uplink channel. Two
+short hostapd runs in a row switch back to the v0.8.4 recovery behavior: `ap.sh pre`
+disconnects `wlan0`, then pins hostapd to a safe fallback channel. That may temporarily
+drop the uplink, but it keeps the Pi's own `PI_DJI_LINK-*` access point reachable.
 
 `netctl.py` restarts `dji-ap` only when the channel it must use actually changed, or
 when the AP is unhealthy. Joining a network that is already on the AP's channel, and

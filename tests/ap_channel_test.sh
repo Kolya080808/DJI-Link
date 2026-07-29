@@ -71,10 +71,10 @@ run_case "5 GHz uplink on a DFS channel"      "g 6"  IW_LINK_FREQ=5260 IW_BAND5=
 # Odd regulatory domains: fall back to something, never to nothing.
 run_case "channel 6 not allowed, 1 is"        "g 1"  IW_LINK_FREQ= IW_BAND24="1 2 3 4 5"
 run_case "only channel 4 allowed"             "g 4"  IW_LINK_FREQ= IW_BAND24="4"
-# If earlier bad starts pinned the AP, a live same-radio uplink must still win. Otherwise
-# hostapd may try channel 6 while brcmfmac already has the phy on channel 7 and fail with
-# "kernel reports: (extension) channel is disabled".
-run_failed_case "failed starts, uplink on channel 7" "g 7" IW_LINK_FREQ=2442
+# If earlier bad starts pinned the AP, recover the lifeline AP first. cmd_pre disconnects
+# wlan0 in this mode before hostapd starts, so the safe channel is no longer fighting an
+# active station interface.
+run_failed_case "failed starts, uplink on channel 7" "g 6" IW_LINK_FREQ=2442
 
 if [ "$fails" -ne 0 ]; then
     echo "$fails check(s) failed"

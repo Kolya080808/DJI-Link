@@ -1,5 +1,5 @@
 ---
-title: DJI Link v0.8.6 — AP survives same-radio uplink channels
+title: DJI Link v0.8.6 — AP recovery wins over uplink
 version: 0.8.6
 prerelease: true
 ---
@@ -11,15 +11,15 @@ prerelease: true
   `ap.sh` treated the AP as unstable and pinned it to the safe fallback list
   (`6 -> 1 -> 11`) before checking the current uplink channel.
 
-- **AP+STA channel selection now respects the live uplink first.** On a single-radio Pi,
-  if `wlan0` is already associated on channel 7, starting `uap0` on channel 6 can fail
-  with `kernel reports: (extension) channel is disabled`. A live uplink channel now wins
-  whenever the kernel says this radio may beacon on it; the safe fallback list is used
-  only when there is no usable current uplink channel.
+- **AP recovery now wins over the uplink after repeated hostapd failures.** While the AP
+  is healthy, it still follows the station channel when that channel is usable. After
+  repeated instant failures, `ap.sh` stops following `wlan0`, disconnects the uplink in
+  `ExecStartPre`, and starts the Pi's own AP on a safe 2.4 GHz channel instead. This can
+  temporarily drop internet/LAN uplink, but keeps `PI_DJI_LINK-*` reachable.
 
 - **The release Pi bundle now runs the Wi-Fi regression tests before publishing.**
   `release.yml` executes `tests/ap_channel_test.sh` and `tests/netctl_sim_test.py`
-  before packaging `dji-link-pi.tar.gz`, so the channel-7 rollback case and the
+  before packaging `dji-link-pi.tar.gz`, so the AP recovery rollback case and the
   NetworkManager explicit-profile fixes are checked during tagged releases.
 
 ## Kept

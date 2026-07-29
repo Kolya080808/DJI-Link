@@ -29,9 +29,11 @@
 #     the 2.4 GHz-only Zero 2 W radio, and an uplink on channel 12/13 produced a
 #     channel the world regulatory domain (00) marks NO-IR. hostapd refuses to start
 #     in both cases, systemd restarts it, and the Pi has no network at all.
-#   * Two failed runs in a row and `pick_channel` pins the AP to a known-good 2.4 GHz
-#     channel only when there is no current uplink channel that the kernel says is
-#     beaconable. A live same-radio uplink still wins, because AP+STA must share it.
+#   * Two failed runs in a row and `pick_channel` stops trying to follow the uplink
+#     and pins the AP to a known-good 2.4 GHz channel (the v0.8.4 behaviour). In that
+#     recovery mode `pre` also disconnects wlan0 first, so the one-radio AP can really
+#     move to the safe channel. Losing uplink is acceptable here; losing the Pi's own AP
+#     is not.
 #   * `post` does NOT delete uap0. Creating/destroying a brcmfmac virtual interface
 #     every few seconds wedges the firmware and takes the station interface down with
 #     it. The interface is created once and reused; only hostapd restarts.
@@ -170,21 +172,21 @@ fail_count() {
 
 # Echo "hw_mode channel".
 #
-# Follow the live uplink when — and only when — the kernel says this radio may beacon on
-# that channel. This stays true even after repeated short hostapd runs: on a one-radio
-# Pi, forcing channel 6 while wlan0 is already associated on channel 7 can make hostapd
-# fail with "channel is disabled". Anything else falls back to a safe 2.4 GHz channel:
-# an AP on the "wrong" channel may not be reachable while the uplink is up, but an AP
-# that refuses to start is not reachable ever, which is far worse.
+# Follow the live uplink while the AP is healthy, and only when the kernel says this
+# radio may beacon on that channel. After repeated instant hostapd failures, stop
+# following the uplink and choose a safe channel; cmd_pre disconnects wlan0 first so the
+# one-radio AP is not forced to fight the station side for a different channel.
 pick_hw_channel() {
     local want fails
     fails="$(fail_count)"
     want="$(sta_channel)"
-    if [ -n "$want" ] && chan_is_usable "$want"; then
+    if [ "$fails" -lt "$MAX_FAILS" ] && [ -n "$want" ] && chan_is_usable "$want"; then
         printf '%s %s' "$(chan_to_hw "$want")" "$want"
         return 0
     fi
-    [ -n "$want" ] && echo "[ap] uplink channel $want is not usable for an AP here; not following it" >&2
+    if [ -n "$want" ] && [ "$fails" -lt "$MAX_FAILS" ]; then
+        echo "[ap] uplink channel $want is not usable for an AP here; not following it" >&2
+    fi
     [ "$fails" -ge "$MAX_FAILS" ] && \
         echo "[ap] $fails failed starts in a row — pinning the AP to a safe channel" >&2
     local c
@@ -199,6 +201,20 @@ pick_hw_channel() {
     if [ -n "$c" ]; then printf '%s %s' "$(chan_to_hw "$c")" "$c"; return 0; fi
     # `iw` missing or the phy told us nothing — channel 6 is the safest blind guess.
     printf 'g 6'
+}
+
+drop_uplink_for_recovery_ap() {
+    local fails want
+    fails="$(fail_count)"
+    [ "$fails" -ge "$MAX_FAILS" ] || return 0
+    want="$(sta_channel)"
+    [ -n "$want" ] || return 0
+
+    echo "[ap] $fails failed starts in a row; disconnecting $STA_IFACE from channel $want so the AP can recover" >&2
+    nmcli dev disconnect "$STA_IFACE" >/dev/null 2>&1 \
+        || iw dev "$STA_IFACE" disconnect >/dev/null 2>&1 \
+        || true
+    sleep 1
 }
 
 ensure_iface() {
@@ -360,6 +376,7 @@ cmd_pre() {
     # and benign on other chips. Failures are non-fatal (some kernels ignore the request).
     iw dev "$STA_IFACE" set power_save off 2>/dev/null || true
     iw dev "$AP_IFACE" set power_save off 2>/dev/null || true
+    drop_uplink_for_recovery_ap
     write_hostapd_conf
     setup_nat
     start_dnsmasq
@@ -371,9 +388,10 @@ cmd_pre() {
 cmd_post() {
     # Count how long hostapd actually stayed up. A run that ends immediately means the
     # config was rejected (bad channel for this regulatory domain, 5 GHz on a 2.4 GHz
-    # radio, …); after $MAX_FAILS of those, pick_hw_channel pins a safe fallback unless
-    # a live uplink is on a kernel-beaconable channel. A run that lasted is a normal
-    # restart and clears the counter.
+    # radio, …); after $MAX_FAILS of those, pick_hw_channel stops following the uplink
+    # and pins a channel that works. cmd_pre disconnects wlan0 in that recovery mode so
+    # the one-radio AP can actually move there. A run that lasted is a normal restart
+    # and clears the counter.
     local start now ran fails
     start="$(cat "$STARTED_AT" 2>/dev/null || echo 0)"
     now="$(date +%s)"
