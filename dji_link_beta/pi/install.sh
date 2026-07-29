@@ -104,8 +104,20 @@ curl -fSL "$URL" -o "$TMP/bundle.tar.gz" || {
 
 # Verify the archive before touching a working install — a truncated download must
 # not take the Pi down.
-if ! tar -tzf "$TMP/bundle.tar.gz" | grep -q "pi/setup_pi.sh"; then
-    echo "!! downloaded bundle does not contain pi/setup_pi.sh; keeping the current install"
+echo "[install] verifying bundle"
+
+LIST="$TMP/bundle.lst"
+
+if ! tar -tzf "$TMP/bundle.tar.gz" >"$LIST"; then
+    echo "!! could not read downloaded archive"
+    exit 1
+fi
+
+if ! grep -qx 'pi/setup_pi.sh' "$LIST"; then
+    echo "!! downloaded bundle does not contain pi/setup_pi.sh,"
+    echo "   archive contents:"
+    sed 's/^/     /' "$LIST"
+    echo "keeping current install"
     exit 1
 fi
 
