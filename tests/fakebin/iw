@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Fake `iw` for testing ap.sh's channel selection.
+#   IW_LINK_FREQ  : the frequency wlan0's uplink is on ("" = not associated)
+#   IW_BAND24     : "1..11" style list of usable 2.4 GHz channels
+#   IW_NOIR       : channels to mark "(no IR)"
+#   IW_BAND5      : usable 5 GHz channels (empty = 2.4 GHz-only radio)
+#   IW_DFS        : 5 GHz channels to mark "(radar detection)"
+#   IW_REG        : regulatory country
+set -u
+BAND24="${IW_BAND24:-1 2 3 4 5 6 7 8 9 10 11 12 13}"
+NOIR="${IW_NOIR-12 13}"
+BAND5="${IW_BAND5:-}"
+DFS="${IW_DFS:-}"
+
+# in_list <needle> <space-separated haystack>
+in_list() {
+    local n="$1" x
+    local -a hay
+    read -r -a hay <<<"${2:-}"
+    for x in "${hay[@]}"; do [ "$x" = "$n" ] && return 0; done
+    return 1
+}
+
+case "$1 ${2:-}" in
+    "dev ")
+        echo "phy#0"
+        echo "	Interface wlan0"
+        echo "		ifindex 3"
+        [ -n "${IW_HAVE_UAP:-}" ] && { echo "	Interface uap0"; echo "		ifindex 4"; }
+        exit 0 ;;
+esac
+
+if [ "$1" = "dev" ] && [ "${3:-}" = "info" ]; then
+    echo "Interface $2"
+    echo "	ifindex 3"
+    echo "	wiphy 0"
+    [ "$2" = "uap0" ] && echo "	channel 6 (2437 MHz), width: 20 MHz"
+    exit 0
+fi
+
+if [ "$1" = "dev" ] && [ "${3:-}" = "link" ]; then
+    if [ -n "${IW_LINK_FREQ:-}" ]; then
+        echo "Connected to aa:bb:cc:dd:ee:ff (on wlan0)"
+        echo "	SSID: TestNet"
+        echo "	freq: ${IW_LINK_FREQ}"
+    else
+        echo "Not connected."
+    fi
+    exit 0
+fi
+
+if [ "$1" = "phy" ] && [ "${3:-}" = "info" ]; then
+    echo "Wiphy phy0"
+    echo "	Band 1:"
+    echo "		Frequencies:"
+    for c in $BAND24; do
+        if [ "$c" = 14 ]; then f=2484; else f=$(( 2407 + c * 5 )); fi
+        line="			* ${f}.0 MHz [$c] (20.0 dBm)"
+        in_list "$c" "$NOIR" && line="$line (no IR)"
+        echo "$line"
+    done
+    if [ -n "$BAND5" ]; then
+        echo "	Band 2:"
+        echo "		Frequencies:"
+        for c in $BAND5; do
+            f=$(( 5000 + c * 5 ))
+            line="			* ${f}.0 MHz [$c] (20.0 dBm)"
+            in_list "$c" "$DFS" && line="$line (radar detection)"
+            echo "$line"
+        done
+    fi
+    exit 0
+fi
+
+if [ "$1" = "reg" ] && [ "${2:-}" = "get" ]; then
+    echo "global"
+    echo "country ${IW_REG:-00}: DFS-UNSET"
+    exit 0
+fi
+
+exit 0

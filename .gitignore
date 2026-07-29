@@ -10,7 +10,7 @@ __pycache__/
 venv/
 env/
 *.egg-info/
-tests/
+
 
 # IDE / OS
 .idea/
