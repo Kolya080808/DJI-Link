@@ -1,6 +1,6 @@
 ---
-title: DJI Link v0.8.3 — Pi installer fix (setup_pi.sh detection)
-version: 0.8.3
+title: DJI Link v0.8.4 — Pi installer fix (setup_pi.sh detection)
+version: 0.8.4
 prerelease: true
 ---
 
