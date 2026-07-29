@@ -199,7 +199,8 @@ then runs `setup_pi.sh` which:
     the control path to the Pi in the field, so it is the one service that must never stay
     down, and `install-pi.sh` rolls the whole bundle back if an upgrade leaves it broken;
   - `dji-netctl.service` — Pi Wi-Fi/AP HTTP API on `:9911` for the PC discovery screen;
-  - `dji-bridge.service` — AOA↔TCP bridge on `:9910`;
+  - `dji-bridge.service` — AOA↔TCP bridge on `:9910`; the TCP listener opens immediately
+    and AOA/UDC setup retries in the background;
   - `dji-update.timer` / `dji-update.service` — checks the latest GitHub Release every 6
     hours when internet is available and re-runs the Pi installer only when the tag changed;
   both **start automatically on every boot / power-up** — after the install finishes you can
@@ -209,7 +210,8 @@ then runs `setup_pi.sh` which:
 
 Check it with `systemctl status dji-netctl dji-bridge dji-update.timer` and
 `journalctl -u dji-netctl -f` / `journalctl -u dji-bridge -f` /
-`journalctl -u dji-update -f`.
+`journalctl -u dji-update -f`. Bridge tracebacks are also mirrored to
+`/var/log/dji-link/bridge.log` on the Pi.
 
 > `raw_gadget` is an out-of-tree module, so it must be rebuilt after a kernel upgrade —
 > re-run the installer (or `sudo bash /opt/dji-link/pi/setup_pi.sh --dir /opt/dji-link/pi --service`).

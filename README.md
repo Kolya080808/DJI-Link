@@ -116,6 +116,12 @@ The installer downloads `dji-link-pi.tar.gz` from the same latest release, insta
 GitHub Releases and updates the Pi bundle automatically. A first-time install may require
 one reboot, then services start by themselves on every power-up.
 
+`dji-netctl.service` exposes discovery/Wi-Fi control on `:9911`; `dji-bridge.service`
+exposes the flight data path on `:9910`. The bridge service opens `:9910` as soon as it
+starts and retries AOA/UDC setup in the background, so the PC can reach the flying
+endpoint even while the remote controller is still being plugged in. Bridge logs are in
+`journalctl -u dji-bridge` and `/var/log/dji-link/bridge.log` on the Pi.
+
 If the Pi ends up with no network at all and no access point, see
 [`dji_link_beta/pi/README.md`](dji_link_beta/pi/README.md#rescue-the-pi-is-not-reachable-at-all) —
 `rescue.sh` repairs it, including straight off the SD card with no console attached.

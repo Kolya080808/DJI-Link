@@ -17,13 +17,19 @@ internet / its gateway answering on no port.
 
 ### A. Discovery probed the wrong port (bridge :9910 instead of netctl :9911)
 
-Discovery keyed liveness off `BRIDGE_PORT` (9910). But `bridge.py` calls `detect_udc()`
-and **exits when no RC/UDC is plugged in** — and the RC is plugged in *after* discovery
-(the UI even says so). So :9910 was down at discovery time and `dji-bridge.service`
-just restart-looped. The control service `netctl` (:9911) is always up.
+Discovery keyed liveness off `BRIDGE_PORT` (9910). At the time, `bridge.py` called
+`detect_udc()` before opening TCP and **exited when no RC/UDC was plugged in** — while
+the RC is plugged in *after* discovery (the UI even says so). So :9910 was down at
+discovery time and `dji-bridge.service` just restart-looped. The control service
+`netctl` (:9911) is the stable discovery/control endpoint.
 
 Result: `join_ap()` waited 10 s on a dead :9910 and reported failure ("joined but does
 nothing"); `find_on_lan` / `sweep_lan` found nothing → "gateway answers on no port".
+
+Current bridge behavior is stricter: `dji-bridge.service` opens `:9910` immediately and
+retries AOA/UDC setup in a background worker, with tracebacks mirrored to
+`/var/log/dji-link/bridge.log`. Discovery still uses `:9911` because `:9910` is the
+flight data path, not the Pi management API.
 
 ### B. NetworkManager's AP advertises WPS → Windows PIN prompt
 
@@ -44,8 +50,10 @@ come up without dnsmasq/iptables, so clients associate but get no DHCP / no rout
 ### Discovery → netctl control port (:9911)
 
 Liveness is now probed on `NETCTL_PORT`, which is always up; `BRIDGE_PORT` stays only
-for the actual flight data connection. `netsh` output on Windows is now logged so a
-failed join is diagnosable instead of silent.
+for the actual flight data connection. The bridge now keeps `:9910` open early too, but
+that only proves the data endpoint can accept TCP, not that Wi-Fi management is usable.
+`netsh` output on Windows is now logged so a failed join is diagnosable instead of
+silent.
 
 - `src/core/netfind.cpp`, `src/core/netfind.hpp` — `find_on_lan`, `sweep_lan`,
   `join_ap` probe `NETCTL_PORT`; netsh add-profile / connect output logged.
@@ -93,8 +101,8 @@ Fallback / rollback to the NetworkManager AP is documented in
 - **Single-radio limit.** "AP + Wi-Fi uplink at the same time" stays fragile on the Pi
   Zero 2 W. Field use (no uplink) is solid; the home/uplink mode is best-effort with a
   channel re-tune.
-- **Follow-up.** The C++ discovery screen only shows "configure Wi-Fi on the Pi"; it has
-  no uplink scan/connect UI yet (the Python client does, via netctl `/scan` + `/connect`).
+- **Follow-up.** The C++ discovery screen now has a Pi Wi-Fi setup path; hardware testing
+  is still the deciding check for AP+STA behavior on the Zero 2 W radio.
 
 ## CI/CD impact
 

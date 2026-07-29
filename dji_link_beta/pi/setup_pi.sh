@@ -256,14 +256,15 @@ EOF
     cat > /etc/systemd/system/dji-bridge.service <<EOF
 [Unit]
 Description=DJI AOA bridge (Pi jump-host)
-After=network.target dji-netctl.service
-Wants=dji-netctl.service
+After=network.target
 
 [Service]
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 ${PI_DIR}/bridge.py
 WorkingDirectory=${PI_DIR}
 Restart=always
 RestartSec=2
+StartLimitIntervalSec=0
 User=root
 
 [Install]
@@ -315,16 +316,17 @@ EOF
     systemctl restart NetworkManager.service 2>/dev/null || true
     systemctl restart dji-ap.service || true
     systemctl restart dji-netctl.service || true
+    systemctl restart dji-bridge.service || true
     systemctl restart dji-update.timer || true
-    # Start it now too, unless dwc2 was just enabled (no UDC until the reboot).
-    if [ "$NEED_REBOOT" = "0" ] && [ -e /dev/raw-gadget ]; then
-        systemctl restart dji-bridge.service || true
+    # bridge.py opens :9910 immediately and retries AOA in the background, so it is useful
+    # even before /dev/raw-gadget or the RC is ready.
+    if [ "$NEED_REBOOT" = "0" ]; then
         echo "     dji-netctl.service enabled + started"
         echo "     dji-bridge.service enabled + started"
         echo "     dji-update.timer enabled"
     else
         echo "     dji-netctl.service enabled + started"
-        echo "     dji-bridge.service enabled (will start after the reboot)"
+        echo "     dji-bridge.service enabled + started (AOA activates after the reboot)"
         echo "     dji-update.timer enabled"
     fi
     # Do not walk away from a setup that left the Pi with no access point: report the

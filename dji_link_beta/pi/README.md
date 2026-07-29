@@ -18,7 +18,7 @@ receives telemetry/video over Wi-Fi; the Pi only forwards bytes.
 | `netctl.py` | Wi-Fi/AP HTTP API on `:9911` used by the C++ discovery screen |
 | `ap.sh` | brings the Wi-Fi AP up/down with hostapd + dnsmasq (run by `dji-ap.service`) |
 | `rescue.sh` | standalone repair for a Pi that has lost all networking (see below) |
-| `bridge.py` | AOA ↔ TCP bridge on `:9910` |
+| `bridge.py` | AOA ↔ TCP bridge on `:9910`; TCP listens immediately, AOA retries in the background |
 | `aoa_device.py` | AOA device emulator: 51/52/53 handshake, re-enumeration, bulk endpoints |
 | `raw_gadget.py` | wrapper over `/dev/raw-gadget` |
 | `build_raw_gadget.sh` / `setup_gadget.sh` | low-level gadget helpers used by setup/debugging |
@@ -77,6 +77,8 @@ the USB port carries data.
   for DHCP/DNS + iptables NAT). Always-on so the laptop can join in the field.
 - `dji-netctl.service` runs `netctl.py serve` and exposes Pi Wi-Fi/AP control on `:9911`.
 - `dji-bridge.service` runs `bridge.py` and exposes the AOA byte stream on `:9910`.
+  The TCP listener opens before the remote controller / UDC path is ready; until AOA
+  comes up, incoming laptop frames are accepted and logged as dropped.
 - `dji-update.timer` runs every 6 hours, checks GitHub Releases when internet is
   available, and re-runs `install-pi.sh` only when the latest tag changed.
 
@@ -87,7 +89,12 @@ journalctl -u dji-ap -f
 journalctl -u dji-netctl -f
 journalctl -u dji-bridge -f
 journalctl -u dji-update -f
+tail -f /var/log/dji-link/bridge.log
 ```
+
+`bridge.py` also writes full Python tracebacks for main-thread crashes, background-thread
+crashes, TCP session failures, and AOA worker failures to both `journalctl` and
+`/var/log/dji-link/bridge.log`.
 
 ## Wi-Fi access point (why hostapd, not NetworkManager)
 
@@ -211,7 +218,8 @@ The next `setup_pi.sh` / auto-update re-creates the unit and returns to hostapd.
 1. Without the remote controller, plug the Pi into a normal PC/phone host and watch
    `dmesg -w` on both sides. The host should first see `18d1:4ee1`, then `18d1:2d01`
    after the AOA handshake.
-2. Then plug the Pi into the remote controller. If the bridge log prints
+2. Then plug the Pi into the remote controller. `dji-bridge.service` should already be
+   listening on `:9910`; if the bridge log prints
    `Remote controller identified itself: {0:'DJI',1:'com.dji.logiclink'...}`, the remote
    accepted the Pi as the phone accessory.
 3. Launch the installed desktop app (`dji-link`) on the PC. The discovery screen should

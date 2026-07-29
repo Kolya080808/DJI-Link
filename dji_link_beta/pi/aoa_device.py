@@ -151,6 +151,10 @@ class AoaDevice:
         self._running = False
 
     # ---- public API ----
+    def ready(self) -> bool:
+        """True only when accessory bulk endpoints are enabled and IO threads may move data."""
+        return self._running and self._configured and self._ep_in is not None and self._ep_out is not None
+
     def send(self, data: bytes):
         self._tx_queue.put(data)
 
