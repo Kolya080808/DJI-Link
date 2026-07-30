@@ -1,0 +1,41 @@
+name: Cleanup Actions Storage
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # каждый день в 3:00 UTC
+  workflow_dispatch:      # чтобы можно было запустить вручную
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write      # нужно для удаления артефактов и кешей
+      contents: read
+    steps:
+      - name: Delete all artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Получаем список всех артефактов и удаляем каждый
+          gh api -X GET /repos/$REPO/actions/artifacts \
+            --paginate \
+            --jq '.artifacts[].id' \
+            | while read id; do
+              echo "Deleting artifact $id"
+              gh api -X DELETE /repos/$REPO/actions/artifacts/$id
+            done
+
+      - name: Delete all caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Получаем все кеши и удаляем их
+          gh api -X GET /repos/$REPO/actions/caches \
+            --paginate \
+            --jq '.actions_caches[].id' \
+            | while read id; do
+              echo "Deleting cache $id"
+              gh api -X DELETE /repos/$REPO/actions/caches/$id
+            done
