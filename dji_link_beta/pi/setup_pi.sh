@@ -98,6 +98,7 @@ fi
 # ---------------------------------------------------------------- 2. dwc2
 echo "[2/5] configuring dwc2 (peripheral mode)"
 NEED_REBOOT=0
+AP_REBOOT=0
 # Match only our own uncommented line: a loose "dtoverlay=dwc2" grep would hit the
 # stock "[cm5] dtoverlay=dwc2,dr_mode=host" line and skip this. The "[all]" header
 # makes it apply on every model no matter which conditional section is last.
@@ -215,19 +216,35 @@ wifi.powersave = 2
 wifi.scan-rand-mac-address = no
 EOF
 
-    # Older installers tried to create uap0 from an udev RUN rule. That was racy on
-    # reboot: the path to iw differs between images, and udev can race NetworkManager's
-    # first wlan0 association. dji-ap.service now owns uap0 creation before
-    # NetworkManager starts, so remove the obsolete rule on upgrades.
-    rm -f /etc/udev/rules.d/90-dji-uap0.rules
+    # BCM43430 must create the virtual AP before wpa_supplicant creates its P2P device.
+    # A normal boot service is already too late: both NetworkManager and the service are
+    # consumers of the same phy uevent. RUN executes while udev is still processing that
+    # event, so uap0 deterministically gets the first virtual-interface slot. Resolve
+    # the executable now so the rule works on both usr-merged and older images.
+    IW_BIN="$(command -v iw)"
+    [ -x "$IW_BIN" ] || { echo "!! iw executable not found after package install" >&2; exit 1; }
+    UAP_RULE="ACTION==\"add\", SUBSYSTEM==\"ieee80211\", KERNEL==\"phy0\", RUN+=\"${IW_BIN} phy %k interface add uap0 type __ap\""
+    if [ "$(cat /etc/udev/rules.d/90-dji-uap0.rules 2>/dev/null || true)" != "$UAP_RULE" ]; then
+        printf '%s\n' "$UAP_RULE" > /etc/udev/rules.d/90-dji-uap0.rules
+        AP_REBOOT=1
+        NEED_REBOOT=1
+    fi
     udevadm control --reload 2>/dev/null || true
+
+    # Remove the experimental split-start unit from v0.8.9 development installs. It ran
+    # after the phy uevent and therefore could still lose the interface-order race.
+    systemctl disable --now dji-ap-iface.service 2>/dev/null || true
+    rm -f /etc/systemd/system/dji-ap-iface.service
 
     cat > /etc/systemd/system/dji-ap.service <<EOF
 [Unit]
 Description=DJI Link Wi-Fi access point (hostapd + dnsmasq on uap0)
-After=systemd-modules-load.service systemd-udev-trigger.service
-Before=NetworkManager.service
-Wants=systemd-udev-trigger.service
+After=NetworkManager.service
+Wants=NetworkManager.service
+# A broken hostapd must not reset the shared radio forever. Three attempts preserve
+# recovery from a transient firmware error while keeping wlan0/SSH usable for diagnosis.
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -239,14 +256,9 @@ StateDirectory=dji-ap
 ExecStartPre=/bin/bash ${PI_DIR}/ap.sh pre
 ExecStart=/usr/sbin/hostapd /run/dji-ap/hostapd.conf
 ExecStopPost=/bin/bash ${PI_DIR}/ap.sh post
-# The AP is the only way into the Pi in the field, so it is restarted for as long as it
-# takes (StartLimitIntervalSec=0 disables systemd's give-up-after-N-tries). What makes
-# that safe is that ap.sh no longer destroys uap0 between runs and pins a known-good
-# channel after two short runs: the old 3-second create/destroy loop on the shared
-# brcmfmac radio is what used to take wlan0 down with it.
-Restart=always
+# Restart a crashed hostapd, but never turn a clean administrative stop into a restart.
+Restart=on-failure
 RestartSec=5
-StartLimitIntervalSec=0
 User=root
 
 [Install]
@@ -257,6 +269,7 @@ EOF
 [Unit]
 Description=DJI AOA bridge (Pi jump-host)
 After=network.target
+StartLimitIntervalSec=0
 
 [Service]
 Environment=PYTHONUNBUFFERED=1
@@ -264,7 +277,6 @@ ExecStart=/usr/bin/python3 ${PI_DIR}/bridge.py
 WorkingDirectory=${PI_DIR}
 Restart=always
 RestartSec=2
-StartLimitIntervalSec=0
 User=root
 
 [Install]
@@ -314,10 +326,20 @@ EOF
     systemctl enable dji-update.timer
     # Do not restart NetworkManager here: on an SSH install that tears down the uplink
     # we are currently using. Reload the config and mark uap0 unmanaged directly; the
-    # boot ordering below makes a full NM restart unnecessary on the next reboot too.
+    # udev rule creates uap0 in the correct order on the next boot.
     systemctl reload NetworkManager.service 2>/dev/null || nmcli general reload 2>/dev/null || true
     nmcli dev set uap0 managed no 2>/dev/null || true
-    systemctl restart dji-ap.service || true
+    systemctl reset-failed dji-ap.service 2>/dev/null || true
+    if [ "$AP_REBOOT" = "1" ]; then
+        # The current phy has already created NetworkManager's P2P device. Starting
+        # hostapd now would test the wrong interface order and can reset wlan0 in a loop.
+        systemctl stop dji-ap.service 2>/dev/null || true
+        touch /run/dji-link-ap-reboot-required
+        echo "     ap start deferred until reboot (new early-interface rule)"
+    else
+        rm -f /run/dji-link-ap-reboot-required
+        systemctl restart dji-ap.service || true
+    fi
     systemctl restart dji-netctl.service || true
     systemctl restart dji-bridge.service || true
     systemctl restart dji-update.timer || true
@@ -334,14 +356,18 @@ EOF
     fi
     # Do not walk away from a setup that left the Pi with no access point: report the
     # real state of it, not just whether systemd thinks the unit is running.
-    for _ in 1 2 3 4 5 6 7 8 9 10; do
-        bash "${PI_DIR}/ap.sh" health >/dev/null 2>&1 && break
-        sleep 1
-    done
+    if [ "$AP_REBOOT" = "0" ]; then
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            bash "${PI_DIR}/ap.sh" health >/dev/null 2>&1 && break
+            sleep 1
+        done
+    fi
     AP_STATE="$(systemctl is-active dji-ap.service 2>/dev/null || echo unknown)"
     # Keyed off the exit status, not the text: a healthy AP can still print an
     # informational note (the firmware moved it to the station's channel, say).
-    if bash "${PI_DIR}/ap.sh" health >/dev/null 2>&1; then
+    if [ "$AP_REBOOT" = "1" ]; then
+        echo "     ap: deferred — reboot required"
+    elif bash "${PI_DIR}/ap.sh" health >/dev/null 2>&1; then
         echo "     ap: ${AP_STATE}  (hostapd+dnsmasq) — ok"
     else
         echo "     ap: ${AP_STATE}  (hostapd+dnsmasq)"

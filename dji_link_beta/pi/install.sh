@@ -188,36 +188,40 @@ ap_ok() {
 }
 if [ -f "$PI_DIR/ap.sh" ]; then
     echo "[install] verifying the access point"
-    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-        ap_ok && break
-        sleep 2
-    done
-    if ap_ok; then
-        echo "     ap: ok"
-        rm -f "$PREFIX/BAD_VERSION"     # this tag works; let the updater try it again
+    if [ -f /run/dji-link-ap-reboot-required ]; then
+        echo "     ap: verification deferred until the required reboot"
     else
-        echo "!! the access point did not come up after the upgrade:"
-        bash "$PI_DIR/ap.sh" health 2>&1 | sed 's/^/       /' || true
-        journalctl -u dji-ap -n 20 --no-pager 2>/dev/null | sed 's/^/       /' || true
-        if [ -d "$PREFIX/pi.old" ]; then
-            echo "!! rolling back to the previous bundle so the Pi stays reachable"
-            rm -rf "$PREFIX/pi.new-failed"
-            mv "$PREFIX/pi" "$PREFIX/pi.new-failed"
-            mv "$PREFIX/pi.old" "$PREFIX/pi"
-            printf '%s\n' "${OLD_VERSION:-unknown}" > "$PREFIX/VERSION"
-            # Remember which tag did this: dji-update.timer fires every 6 hours and
-            # would otherwise reinstall and roll back the same broken release forever.
-            printf '%s\n' "$TAG" > "$PREFIX/BAD_VERSION"
-            systemctl daemon-reload
-            systemctl restart dji-ap.service 2>/dev/null || true
-            systemctl restart dji-netctl.service 2>/dev/null || true
-            systemctl restart dji-bridge.service 2>/dev/null || true
-            echo "     rolled back to ${OLD_VERSION:-the previous bundle}"
-            echo "     the failed bundle is kept at $PREFIX/pi.new-failed"
-            exit 1
+        for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+            ap_ok && break
+            sleep 2
+        done
+        if ap_ok; then
+            echo "     ap: ok"
+            rm -f "$PREFIX/BAD_VERSION"     # this tag works; let the updater try it again
+        else
+            echo "!! the access point did not come up after the upgrade:"
+            bash "$PI_DIR/ap.sh" health 2>&1 | sed 's/^/       /' || true
+            journalctl -u dji-ap -n 20 --no-pager 2>/dev/null | sed 's/^/       /' || true
+            if [ -d "$PREFIX/pi.old" ]; then
+                echo "!! rolling back to the previous bundle so the Pi stays reachable"
+                rm -rf "$PREFIX/pi.new-failed"
+                mv "$PREFIX/pi" "$PREFIX/pi.new-failed"
+                mv "$PREFIX/pi.old" "$PREFIX/pi"
+                printf '%s\n' "${OLD_VERSION:-unknown}" > "$PREFIX/VERSION"
+                # Remember which tag did this: dji-update.timer fires every 6 hours and
+                # would otherwise reinstall and roll back the same broken release forever.
+                printf '%s\n' "$TAG" > "$PREFIX/BAD_VERSION"
+                systemctl daemon-reload
+                systemctl restart dji-ap.service 2>/dev/null || true
+                systemctl restart dji-netctl.service 2>/dev/null || true
+                systemctl restart dji-bridge.service 2>/dev/null || true
+                echo "     rolled back to ${OLD_VERSION:-the previous bundle}"
+                echo "     the failed bundle is kept at $PREFIX/pi.new-failed"
+                exit 1
+            fi
+            echo "   no previous bundle to roll back to; diagnose with:"
+            echo "   sudo python3 $PI_DIR/netctl.py doctor"
         fi
-        echo "   no previous bundle to roll back to; diagnose with:"
-        echo "   sudo python3 $PI_DIR/netctl.py doctor"
     fi
 fi
 
@@ -225,8 +229,8 @@ echo
 echo "=== installer finished ==="
 echo ">>> installed version: $TAG  (was: ${OLD_VERSION:-none})"
 echo ">>> If a reboot was requested above, run: sudo reboot"
-echo ">>> After that dji-netctl and dji-bridge start automatically on every power-up."
-echo ">>> Status:  systemctl status dji-netctl dji-bridge dji-update.timer"
+echo ">>> After that dji-ap, dji-netctl and dji-bridge start automatically on every power-up."
+echo ">>> Status:  systemctl status dji-ap dji-netctl dji-bridge dji-update.timer"
 echo ">>> Logs:    journalctl -u dji-netctl -f   |   journalctl -u dji-bridge -f"
 echo ">>> Updates: journalctl -u dji-update -f"
 echo ">>> Rollback: rm -rf $PREFIX/pi && mv $PREFIX/pi.old $PREFIX/pi && systemctl restart dji-netctl dji-bridge"

@@ -1,6 +1,6 @@
 ---
-title: DJI Link v0.8.8 — Pi AP lifeline hardening
-version: 0.8.8
+title: DJI Link v0.8.9 — Pi AP lifeline hardening
+version: 0.8.9
 prerelease: true
 ---
 
@@ -27,13 +27,34 @@ prerelease: true
   was left in the wrong state.
 
 - **The AP boot path no longer disconnects `wlan0`.** A previous recovery path could
-  cut the normal LAN/SSH uplink while trying to recover the Pi AP. The AP service now
-  starts before NetworkManager on boot, owns `uap0` creation itself, and never drops the
-  station interface from `ap.sh` during ordinary service restarts.
+  cut the normal LAN/SSH uplink while trying to recover the Pi AP. The AP service owns
+  `uap0` creation itself and never drops the station interface from `ap.sh` during
+  ordinary service restarts.
+
+- **`uap0` is created directly from the radio's udev event.** BCM43430 rejects hostapd
+  when NetworkManager's P2P device takes the first virtual-interface slot. A normal
+  systemd oneshot was still late enough to lose that race; the udev rule now creates
+  `uap0` before NetworkManager can create P2P, and hostapd starts afterwards.
+
+- **A broken AP can no longer reset the shared radio forever.** systemd makes at most
+  three short hostapd attempts per minute, and the netctl watchdog latches after three
+  confirmed failures instead of bypassing that limit. This preserves the LAN/SSH path
+  for diagnosis. An explicit hotspot/uplink action clears the latch for a controlled
+  retry.
+
+- **Installing a new early-interface rule requires a real reboot.** The installer does
+  not test hostapd against the already-initialized, wrong-order PHY or claim the AP is
+  healthy. It defers AP startup, leaves the current LAN intact, and reports the required
+  reboot explicitly.
 
 - **Uplink changes no longer have to come from the PC client.** If NetworkManager
   reconnects `wlan0` after boot by itself, the `netctl.py` watchdog notices when the AP
   needs to retune to the uplink channel and restarts only the AP service.
+
+- **A live uplink channel now always overrides the AP failure fallback.** On the Pi's
+  single radio, pinning `uap0` to channel 6 after failed starts while `wlan0` is live on
+  channel 7 guarantees a `channel is disabled` hostapd loop. The safe channel fallback
+  is now used only while there is no usable uplink channel.
 
 - **The beta flight HUD now performs an automatic GPS/SATS check every 10 seconds.** The
   result is shown in the top-left flight HUD card and logged as `[gps-check]`, so GPS
@@ -70,9 +91,9 @@ prerelease: true
 
 <!--
 Release checklist:
-  1. Keep "version" above equal to the tag you push (tag v0.8.7 => version: 0.8.7).
+  1. Keep "version" above equal to the tag you push (tag v0.8.9 => version: 0.8.9).
   2. Commit UPDATE.md.
-  3. git tag v0.8.7 && git push origin v0.8.7
+  3. git tag v0.8.9 && git push origin v0.8.9
 Everything below the second "---" (except this comment) becomes the GitHub Release body.
 These binaries are unsigned, so first launch shows a Gatekeeper (macOS) / SmartScreen
 (Windows) warning — expected for a pre-release.

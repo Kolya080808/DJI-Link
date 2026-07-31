@@ -73,9 +73,34 @@ run_case "5 GHz uplink on a DFS channel"      "g 6"  IW_LINK_FREQ=5260 IW_BAND5=
 # Odd regulatory domains: fall back to something, never to nothing.
 run_case "channel 6 not allowed, 1 is"        "g 1"  IW_LINK_FREQ= IW_BAND24="1 2 3 4 5"
 run_case "only channel 4 allowed"             "g 4"  IW_LINK_FREQ= IW_BAND24="4"
-# If earlier bad starts pinned the AP, channel selection falls back to the lifeline
-# channel. The service must not disconnect wlan0 from ap.sh's boot/restart path.
-run_failed_case "failed starts, uplink on channel 7" "g 6" IW_LINK_FREQ=2442
+# Earlier failures must never override a live uplink. A single Pi radio cannot use two
+# channels at once, so choosing channel 6 here would guarantee a hostapd restart loop.
+run_failed_case "failed starts, uplink on channel 7" "g 7" IW_LINK_FREQ=2442
+
+# Boot invariants that caused the real Pi regression: uap0 must be created from the phy
+# uevent, and a broken hostapd must not be allowed to reset the shared radio forever.
+SETUP_SH="$HERE/../dji_link_beta/pi/setup_pi.sh"
+check_source() {
+    local desc="$1" needle="$2"
+    if grep -Fq "$needle" "$SETUP_SH"; then
+        printf '  ok    %s\n' "$desc"
+    else
+        printf '  FAIL  %s (missing: %s)\n' "$desc" "$needle"
+        fails=$(( fails + 1 ))
+    fi
+}
+check_source "udev creates uap0 at the phy event" \
+    'phy %k interface add uap0 type __ap'
+check_source "hostapd waits for NetworkManager" 'After=NetworkManager.service'
+check_source "hostapd restart loop is bounded" 'StartLimitBurst=3'
+check_source "clean service stops stay stopped" 'Restart=on-failure'
+check_source "new interface order defers AP until reboot" 'dji-link-ap-reboot-required'
+if grep -Fq 'cat > /etc/systemd/system/dji-ap-iface.service' "$SETUP_SH"; then
+    echo "  FAIL  late dji-ap-iface.service generator is still present"
+    fails=$(( fails + 1 ))
+else
+    echo "  ok    late dji-ap-iface.service generator removed"
+fi
 
 if [ "$fails" -ne 0 ]; then
     echo "$fails check(s) failed"

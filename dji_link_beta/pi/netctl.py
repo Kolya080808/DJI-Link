@@ -70,6 +70,7 @@ HOSTAPD_CONF = "/run/dji-ap/hostapd.conf"
 # off during an experiment can never turn into a Pi that comes up unreachable.
 AP_OFF_FLAG = "/run/dji-ap/hotspot-off"
 UPLINK_PREFIX = "dji-uplink-"
+AP_AUTO_RESTART_LIMIT = 3
 
 
 def ap_ssid() -> str:
@@ -236,6 +237,21 @@ def ap_clients() -> int:
     return out.count("Station ") if rc == 0 else 0
 
 
+def ap_failures() -> int:
+    """Consecutive short hostapd runs recorded by ap.sh."""
+    rc, out = ap_sh("failures")
+    if rc != 0:
+        return 0
+    try:
+        return max(0, int(out.strip()))
+    except ValueError:
+        return 0
+
+
+def reset_ap_failures() -> None:
+    ap_sh("reset-failures")
+
+
 def _restart_ap_async(reason: str, delay: float = 0.7) -> None:
     """Restart dji-ap off the request thread.
 
@@ -258,6 +274,11 @@ def ensure_ap(reason: str = "") -> None:
         return
     ok, why = ap_health()
     if ok:
+        return
+    failures = ap_failures()
+    if failures >= AP_AUTO_RESTART_LIMIT:
+        print(f"[netctl] AP unhealthy ({why}); automatic restart suppressed after "
+              f"{failures} short failures — preserving wlan0/SSH", flush=True)
         return
     print(f"[netctl] AP unhealthy ({why}); restarting{' — ' + reason if reason else ''}",
           flush=True)
@@ -326,6 +347,10 @@ def hotspot(on: bool) -> dict:
     if hostapd_mode():
         if on:
             _set_ap_off_flag(False)
+            # This endpoint is an explicit operator request, unlike the watchdog. Allow
+            # one new bounded systemd attempt after the underlying condition changed.
+            reset_ap_failures()
+            systemctl("reset-failed", AP_SERVICE)
             systemctl("start", AP_SERVICE)
             for _ in range(10):             # the unit is Type=simple; give hostapd a moment
                 ok, why = ap_health()
@@ -609,10 +634,14 @@ def _finish_ap_for_uplink() -> str:
         return "AP re-applied (NetworkManager fallback)"
     healthy, why = ap_health()
     if not healthy:
+        reset_ap_failures()
+        systemctl("reset-failed", AP_SERVICE)
         _restart_ap_async(why)
         return "AP is restarting — reconnect the laptop if it dropped"
     wanted, current = ap_wanted_channel(), ap_conf_channel()
     if wanted and current and wanted != current:
+        reset_ap_failures()
+        systemctl("reset-failed", AP_SERVICE)
         _restart_ap_async(f"channel {current} -> {wanted}")
         return "AP retunes to the uplink channel — reconnect the laptop if it dropped"
     return "AP unchanged — the laptop stays connected"
@@ -771,6 +800,7 @@ def status() -> dict:
             "ap_healthy": healthy, "ap_detail": why,
             "ap_channel": ap_live_channel() or ap_conf_channel(),
             "ap_clients": ap_clients() if hostapd_mode() else 0,
+            "ap_failures": ap_failures() if hostapd_mode() else 0,
             "uplink_ssid": _uplink_ssid(), "uplink_ip": _uplink_ip(),
             "service": "dji-link-netctl"}
 
@@ -881,12 +911,21 @@ def ap_watchdog() -> None:
     backoff, last_fix = 30.0, 0.0
     had_clients = False
     idle_since: float | None = None
+    failure_latched = False
 
     while True:
         time.sleep(CHECK_S)
         now = time.monotonic()
         healthy, why = ap_health()
         if not healthy:
+            failures = ap_failures()
+            if failures >= AP_AUTO_RESTART_LIMIT:
+                if not failure_latched:
+                    print(f"[netctl] watchdog: AP remains unhealthy ({why}); "
+                          f"{failures} short failures, leaving wlan0 stable for recovery",
+                          flush=True)
+                    failure_latched = True
+                continue
             if now - last_fix < backoff:
                 continue
             last_fix = now
@@ -895,6 +934,7 @@ def ap_watchdog() -> None:
                   flush=True)
             systemctl("restart", AP_SERVICE)
             continue
+        failure_latched = False
         backoff = 30.0
 
         wanted, current = ap_wanted_channel(), ap_conf_channel()
@@ -922,7 +962,10 @@ def ap_watchdog() -> None:
 
 def serve():
     _wifi_radio_on()
-    hotspot(True)          # the AP is the whole point — bring it up on start
+    # systemd starts dji-ap independently. Do not turn netctl startup into an unbounded
+    # second supervisor that resets systemd's failure counter after a broken AP boot.
+    if not hostapd_mode():
+        hotspot(True)
     threading.Thread(target=ap_watchdog, daemon=True).start()
     # Threaded: /scan takes seconds and /connect tens of seconds. On the old
     # single-threaded server either one blocked /status, and the PC client read that as

@@ -127,15 +127,21 @@ uses that as a second, completely separate way in.
 
 ### Single radio: what actually happens on a channel change
 
-The AP has to share a channel with the uplink. `ap.sh` picks that channel from the
-channels the kernel reports this radio may **beacon** on (`iw phy … info`, minus
+The AP has to share a channel with the uplink. A udev rule creates `uap0` at the
+`phy0` add event, before NetworkManager creates BCM43430's P2P device; creating the AP
+interface later can make the firmware reject even a valid channel. `dji-ap.service`
+starts hostapd after NetworkManager, when the uplink channel is known. `ap.sh` then
+picks from the channels the kernel reports this radio may **beacon** on (`iw phy … info`, minus
 `disabled` / `no IR` / `radar detection`), so it never writes a config hostapd will
 refuse: a 5 GHz uplink channel on the 2.4 GHz-only Zero 2 W radio, or channel 12/13
 under the world regulatory domain (`00`), fall back to a safe channel instead of taking
-the AP down. While hostapd is healthy, the AP follows a usable live uplink channel. Two
-short hostapd runs in a row switch back to the v0.8.4 recovery behavior: `ap.sh pre`
-disconnects `wlan0`, then pins hostapd to a safe fallback channel. That may temporarily
-drop the uplink, but it keeps the Pi's own `PI_DJI_LINK-*` access point reachable.
+the AP down. The live uplink channel always wins because one radio cannot beacon elsewhere. Without
+an uplink, the AP uses a safe 2.4 GHz fallback channel.
+
+Three short hostapd failures trip both systemd's start limit and netctl's persistent
+failure latch. Automatic recovery then stops instead of resetting the shared radio
+forever and taking LAN/SSH down with it. A reboot still attempts the AP normally; an
+explicit hotspot or uplink action clears the latch for a controlled retry.
 
 `netctl.py` restarts `dji-ap` only when the channel it must use actually changed, or
 when the AP is unhealthy. Joining a network that is already on the AP's channel, and
