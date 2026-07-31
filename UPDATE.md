@@ -1,6 +1,6 @@
 ---
-title: DJI Link v0.8.9 — Pi AP lifeline hardening
-version: 0.8.9
+title: DJI Link v0.9.0 — Pi AP lifeline hardening
+version: 0.9.0
 prerelease: true
 ---
 
@@ -36,11 +36,31 @@ prerelease: true
   systemd oneshot was still late enough to lose that race; the udev rule now creates
   `uap0` before NetworkManager can create P2P, and hostapd starts afterwards.
 
-- **A broken AP can no longer reset the shared radio forever.** systemd makes at most
-  three short hostapd attempts per minute, and the netctl watchdog latches after three
-  confirmed failures instead of bypassing that limit. This preserves the LAN/SSH path
-  for diagnosis. An explicit hotspot/uplink action clears the latch for a controlled
-  retry.
+- **A temporary hostapd failure can no longer permanently disable the AP.** On the
+  tested BCM43430, cfg80211 rejected a correct shared channel during early boot but
+  accepted the identical configuration later. systemd now retries every 15 seconds
+  until the lifeline AP is serving. The retry path reuses `uap0` and never disconnects
+  `wlan0`, while netctl's separate watchdog still backs off after repeated failures.
+
+- **The AP now follows the active kernel regulatory domain.** If a connected uplink's
+  country IE changes the live domain, hostapd uses that value instead of forcing a
+  conflicting country from the kernel command line. NetworkManager's connected state
+  and the uplink channel must also remain stable before the first hostapd attempt.
+
+- **BCM43430 now starts the AP in stable non-HT mode.** Hardware testing isolated the
+  boot failure to `ieee80211n=1`: cfg80211 rejected the otherwise correct shared channel
+  with `(extension) channel is disabled`, while `ieee80211n=0` reached `AP-ENABLED`
+  immediately. 802.11g capacity remains well above control and telemetry requirements.
+
+- **dnsmasq now belongs to the normal service lifecycle.** It starts from `ap.sh run`
+  immediately before that process execs hostapd, instead of surviving `ExecStartPre`
+  and triggering systemd's `service implementation deficiencies` warning.
+
+- **Manual hotspot-off now remains off until reboot or an explicit hotspot-on.** Its
+  marker moved outside systemd's `RuntimeDirectory`; stopping `dji-ap.service` no longer
+  deletes the marker and causes the netctl watchdog to immediately undo the request.
+  The early-created `uap0` is kept down and addressless rather than deleted, so a later
+  hotspot-on reuses the boot-safe interface order.
 
 - **Installing a new early-interface rule requires a real reboot.** The installer does
   not test hostapd against the already-initialized, wrong-order PHY or claim the AP is
@@ -91,9 +111,9 @@ prerelease: true
 
 <!--
 Release checklist:
-  1. Keep "version" above equal to the tag you push (tag v0.8.9 => version: 0.8.9).
+  1. Keep "version" above equal to the tag you push (tag v0.9.0 => version: 0.9.0).
   2. Commit UPDATE.md.
-  3. git tag v0.8.9 && git push origin v0.8.9
+  3. git tag v0.9.0 && git push origin v0.9.0
 Everything below the second "---" (except this comment) becomes the GitHub Release body.
 These binaries are unsigned, so first launch shows a Gatekeeper (macOS) / SmartScreen
 (Windows) warning — expected for a pre-release.

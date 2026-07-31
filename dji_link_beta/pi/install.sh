@@ -191,7 +191,10 @@ if [ -f "$PI_DIR/ap.sh" ]; then
     if [ -f /run/dji-link-ap-reboot-required ]; then
         echo "     ap: verification deferred until the required reboot"
     else
-        for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        # A valid AP can need more than one low-rate hostapd attempt while BCM43430's
+        # boot-time regulatory state settles. Do not roll back good code after 30s and
+        # interrupt the very recovery loop that is bringing the AP back.
+        for _ in $(seq 1 45); do
             ap_ok && break
             sleep 2
         done

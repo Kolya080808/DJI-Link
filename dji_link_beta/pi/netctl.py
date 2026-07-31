@@ -68,7 +68,10 @@ HOSTAPD_CONF = "/run/dji-ap/hostapd.conf"
 # "the operator asked for the AP to be off" — the one thing that must stop the watchdog
 # from putting it back. Under /run on purpose: a reboot clears it, so a hotspot switched
 # off during an experiment can never turn into a Pi that comes up unreachable.
-AP_OFF_FLAG = "/run/dji-ap/hotspot-off"
+# Deliberately outside RuntimeDirectory=dji-ap: systemd removes that directory when the
+# AP unit stops, which used to erase the operator's "hotspot off" request and let the
+# watchdog turn it straight back on. /run still clears the request on the next reboot.
+AP_OFF_FLAG = "/run/dji-link-hotspot-off"
 UPLINK_PREFIX = "dji-uplink-"
 AP_AUTO_RESTART_LIMIT = 3
 
@@ -170,8 +173,16 @@ def nmcli_get(field: str, *args: str) -> str:
 
 
 # ---------------------------------------------------------------- AP (hostapd path)
+def ap_unit_state() -> str:
+    return systemctl("is-active", AP_SERVICE)[1].strip()
+
+
 def ap_active() -> bool:
-    return systemctl("is-active", AP_SERVICE)[1].strip() == "active"
+    return ap_unit_state() == "active"
+
+
+def ap_recovering() -> bool:
+    return ap_unit_state() in ("activating", "reloading")
 
 
 def ap_should_run() -> bool:
@@ -275,10 +286,12 @@ def ensure_ap(reason: str = "") -> None:
     ok, why = ap_health()
     if ok:
         return
+    if ap_recovering():
+        return
     failures = ap_failures()
     if failures >= AP_AUTO_RESTART_LIMIT:
-        print(f"[netctl] AP unhealthy ({why}); automatic restart suppressed after "
-              f"{failures} short failures — preserving wlan0/SSH", flush=True)
+        print(f"[netctl] AP unhealthy ({why}); watchdog restart suppressed after "
+              f"{failures} short failures — systemd recovery remains active", flush=True)
         return
     print(f"[netctl] AP unhealthy ({why}); restarting{' — ' + reason if reason else ''}",
           flush=True)
@@ -347,8 +360,9 @@ def hotspot(on: bool) -> dict:
     if hostapd_mode():
         if on:
             _set_ap_off_flag(False)
-            # This endpoint is an explicit operator request, unlike the watchdog. Allow
-            # one new bounded systemd attempt after the underlying condition changed.
+            # This endpoint is an explicit operator request, unlike the watchdog. Clear
+            # the diagnostic latch and request an immediate attempt; systemd continues
+            # low-rate attempts if the firmware is still settling.
             reset_ap_failures()
             systemctl("reset-failed", AP_SERVICE)
             systemctl("start", AP_SERVICE)
@@ -362,7 +376,7 @@ def hotspot(on: bool) -> dict:
         # Flag first: the watchdog would otherwise see a stopped AP and put it back.
         _set_ap_off_flag(True)
         rc, out = systemctl("stop", AP_SERVICE)
-        ap_sh("down")                       # explicit off: release uap0 and the NAT rules
+        ap_sh("down")                       # explicit off: silence uap0 and remove NAT
         return {"ok": rc == 0, "output": out, "mode": "hostapd",
                 "note": "the AP stays off until /hotspot on, or until the next reboot"}
     # Legacy NetworkManager AP fallback.
@@ -897,8 +911,8 @@ def ap_watchdog() -> None:
     This is the last line of defence for the one thing that must never stay broken: if
     hostapd died, if uap0 lost its address, if dnsmasq is gone or the NAT rule was
     flushed, put it back. Restarts are backed off so a genuinely unstartable AP does not
-    turn into a create/destroy loop on the shared radio — that loop is what took wlan0
-    down with it and left the Pi unreachable from both sides.
+    turn into a second restart loop on top of systemd. The service itself retries at a
+    low rate without deleting uap0 or disconnecting wlan0.
 
     It also clears the BCM43430 (Pi Zero 2 W) state where hostapd stops accepting new
     associations after the last client disassociates — but only while nobody is
@@ -918,11 +932,16 @@ def ap_watchdog() -> None:
         now = time.monotonic()
         healthy, why = ap_health()
         if not healthy:
+            # `Restart=always` reports activating during its retry delay and while
+            # ap.sh pre waits for NetworkManager. A watchdog restart here kills that
+            # valid attempt halfway through and resets the delay.
+            if ap_recovering():
+                continue
             failures = ap_failures()
             if failures >= AP_AUTO_RESTART_LIMIT:
                 if not failure_latched:
                     print(f"[netctl] watchdog: AP remains unhealthy ({why}); "
-                          f"{failures} short failures, leaving wlan0 stable for recovery",
+                          f"{failures} short failures; systemd continues low-rate recovery",
                           flush=True)
                     failure_latched = True
                 continue
@@ -962,8 +981,8 @@ def ap_watchdog() -> None:
 
 def serve():
     _wifi_radio_on()
-    # systemd starts dji-ap independently. Do not turn netctl startup into an unbounded
-    # second supervisor that resets systemd's failure counter after a broken AP boot.
+    # systemd starts and persistently recovers dji-ap independently. Do not turn netctl
+    # startup into a second supervisor that resets its retry delay after a broken boot.
     if not hostapd_mode():
         hotspot(True)
     threading.Thread(target=ap_watchdog, daemon=True).start()

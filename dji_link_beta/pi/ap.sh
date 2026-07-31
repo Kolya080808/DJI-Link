@@ -15,8 +15,8 @@
 #
 # A udev rule creates uap0 during the phy add event, before NetworkManager creates its
 # P2P device. The dji-ap systemd unit then starts hostapd after NetworkManager:
-#   ExecStartPre = ap.sh pre    (create uap0 + IP + NAT + dnsmasq, write hostapd.conf)
-#   ExecStart    = hostapd /run/dji-ap/hostapd.conf   (the foreground main process)
+#   ExecStartPre = ap.sh pre    (create uap0 + IP + NAT, write hostapd.conf)
+#   ExecStart    = ap.sh run    (start dnsmasq, exec hostapd as the main process)
 #   ExecStopPost = ap.sh post   (stop dnsmasq, account for the run)
 #
 # THE AP IS THE LIFELINE. If it is down the Pi cannot be reached at all in the field,
@@ -162,36 +162,62 @@ sta_channel() {
 wait_for_sta_settle() {
     # NetworkManager.service being active does not mean its boot-time autoconnect has
     # finished. Starting hostapd during that retune produced the observed channel 6 -> 7
-    # race. Give NM a short bounded window; an offline field boot still gets its AP in
-    # at most ten seconds and never waits for internet or network-online.target.
+    # race. Give NM a short bounded window; an offline field boot returns after three
+    # disconnected samples and never waits for internet or network-online.target.
     systemctl is-active --quiet NetworkManager.service 2>/dev/null || return 0
     sleep 2
-    local state stable=0
-    for _ in 1 2 3 4 5 6 7 8; do
-        [ -n "$(sta_channel)" ] && return 0
+    local state channel last_channel="" stable=0
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
         state="$(nmcli -g GENERAL.STATE dev show "$STA_IFACE" 2>/dev/null | head -n1)"
+        channel="$(sta_channel)"
         case "$state" in
-            30*|disconnected*) stable=$(( stable + 1 )) ;;
-            *) stable=0 ;;
+            100*|connected*)
+                # `iw link` exposes a frequency during the last part of association.
+                # Starting hostapd at that first sighting races cfg80211's regulatory
+                # update and BCM43430 rejects the otherwise valid shared channel. Wait
+                # until NM is fully connected and the channel has stayed put.
+                if [ -n "$channel" ] && [ "$channel" = "$last_channel" ]; then
+                    stable=$(( stable + 1 ))
+                else
+                    stable=0
+                fi
+                last_channel="$channel"
+                [ "$stable" -ge 3 ] && return 0
+                ;;
+            30*|disconnected*)
+                # No saved/available uplink is a valid field state. Do not wait for
+                # internet: three stable disconnected samples are enough to start the
+                # standalone AP on its fallback channel.
+                [ -z "$channel" ] && stable=$(( stable + 1 )) || stable=0
+                last_channel=""
+                [ "$stable" -ge 3 ] && return 0
+                ;;
+            *)
+                stable=0
+                last_channel="$channel"
+                ;;
         esac
-        [ "$stable" -ge 3 ] && return 0
         sleep 1
     done
+    echo "[ap] NetworkManager did not settle in 20s; continuing with current radio state" >&2
 }
 
 ap_country() {
     # Regulatory domain, best source first:
-    #   1. the kernel command line — this is where raspi-config's "WLAN country" ends
-    #      up on Bookworm (cfg80211.ieee80211_regdom=XX in /boot/firmware/cmdline.txt);
-    #   2. what the kernel is actually enforcing right now (`iw reg get`), which also
-    #      picks up a domain adopted from an AP's country IE;
+    #   1. what the kernel is actually enforcing right now (`iw reg get`), including a
+    #      domain adopted from the connected uplink's country IE. hostapd requesting a
+    #      different cmdline domain while STA is live needlessly retunes regulatory
+    #      state on the shared radio during the most timing-sensitive part of startup;
+    #   2. the kernel command line — raspi-config's offline fallback on Bookworm
+    #      (cfg80211.ieee80211_regdom=XX in /boot/firmware/cmdline.txt);
     #   3. the legacy crda default.
-    # "00" is the world domain and means "no country code", not a country.
+    # Numeric self-managed domains such as 99 and world domain 00 are not ISO country
+    # codes and are deliberately ignored by the [A-Z][A-Z] match.
     local c cmdline
+    c="$(iw reg get 2>/dev/null | sed -n 's/^country[[:space:]]*\([A-Z][A-Z]\):.*/\1/p' | head -n1)"
     cmdline="$(cat /proc/cmdline 2>/dev/null || true)"
-    c="$(printf '%s' "$cmdline" | sed -n 's/.*cfg80211\.ieee80211_regdom=\([A-Z][A-Z]\).*/\1/p' | head -n1)"
     if [ -z "$c" ]; then
-        c="$(iw reg get 2>/dev/null | sed -n 's/^country[[:space:]]*\([A-Z][A-Z]\):.*/\1/p' | head -n1)"
+        c="$(printf '%s' "$cmdline" | sed -n 's/.*cfg80211\.ieee80211_regdom=\([A-Z][A-Z]\).*/\1/p' | head -n1)"
     fi
     if [ -z "$c" ] && [ -f /etc/default/crda ]; then
         c="$(sed -n 's/^REGDOMAIN=\([A-Z][A-Z]\)$/\1/p' /etc/default/crda | head -n1)"
@@ -371,14 +397,20 @@ start_dnsmasq() {
     dnsmasq_alive && return 0
     stop_dnsmasq
     mkdir -p "$RUN_DIR"
-    dnsmasq --interface="$AP_IFACE" --bind-dynamic --except-interface=lo \
+    if ! dnsmasq --interface="$AP_IFACE" --bind-dynamic --except-interface=lo \
         --no-resolv --no-hosts --dhcp-authoritative \
         --dhcp-range="$DHCP_LO,$DHCP_HI,255.255.255.0,12h" \
         --dhcp-option=option:router,"$AP_ADDR" \
         --dhcp-option=option:dns-server,"$AP_ADDR" \
         --server=1.1.1.1 --server=8.8.8.8 \
-        --pid-file="$DNSMASQ_PID" \
-        || echo "[ap] WARNING: dnsmasq did not start; AP clients will get no address" >&2
+        --pid-file="$DNSMASQ_PID"; then
+        echo "[ap] dnsmasq did not start; refusing an AP with no DHCP" >&2
+        return 1
+    fi
+    dnsmasq_alive || {
+        echo "[ap] dnsmasq exited immediately; refusing an AP with no DHCP" >&2
+        return 1
+    }
 }
 
 stop_dnsmasq() {
@@ -400,7 +432,12 @@ write_hostapd_conf() {
         echo "ssid=$(ap_ssid)"
         echo "hw_mode=$hw"
         echo "channel=$ch"
-        echo "ieee80211n=1"
+        # BCM43430 on the tested 6.18 Raspberry Pi kernel rejects HT during early AP+STA
+        # boot with "(extension) channel is disabled", then accepts the identical HT
+        # config minutes later. Plain 802.11g starts immediately and its 54 Mbit/s is
+        # far above DJI Link's control/telemetry traffic, so make that stable mode
+        # explicit instead of leaving hostapd/driver defaults to change underneath us.
+        echo "ieee80211n=0"
         echo "wmm_enabled=1"
         echo "auth_algs=1"
         echo "ignore_broadcast_ssid=0"
@@ -443,10 +480,18 @@ cmd_pre() {
     iw dev "$AP_IFACE" set power_save off 2>/dev/null || true
     write_hostapd_conf
     setup_nat
-    start_dnsmasq
     date +%s > "$STARTED_AT"
     echo "[ap] $AP_IFACE up at $AP_ADDR; hostapd conf $HOSTAPD_CONF"
     return 0
+}
+
+cmd_run() {
+    # Start the companion daemon from ExecStart, not ExecStartPre. A daemon surviving
+    # an ExecStartPre command is explicitly diagnosed by systemd as a service lifecycle
+    # error. After this shell execs, hostapd is the unit's main PID and dnsmasq remains
+    # in the same cgroup, so systemd and cmd_post clean both up together.
+    start_dnsmasq || return 1
+    exec /usr/sbin/hostapd "$HOSTAPD_CONF"
 }
 
 cmd_post() {
@@ -481,13 +526,15 @@ cmd_post() {
     return 0
 }
 
-# Full teardown — only for an explicit "hotspot off", never on a restart.
+# Explicit "hotspot off" teardown. Keep the early-created uap0 object reserved: deleting
+# it here means the next "hotspot on" must recreate it after NetworkManager's P2P device,
+# undoing the deterministic interface order established at boot. Link-down plus no
+# address/hostapd/dnsmasq is fully off from a client's point of view.
 cmd_down() {
     stop_dnsmasq
     teardown_nat
     ip addr flush dev "$AP_IFACE" 2>/dev/null || true
     ip link set "$AP_IFACE" down 2>/dev/null || true
-    iw dev "$AP_IFACE" del 2>/dev/null || true
     rm -f "$STARTED_AT" "$FAILS"
     return 0
 }
@@ -521,6 +568,7 @@ cmd_health() {
 
 case "${1:-}" in
     pre)    cmd_pre ;;
+    run)    cmd_run ;;
     post)   cmd_post ;;
     down)   cmd_down ;;
     health) cmd_health ;;
@@ -530,5 +578,5 @@ case "${1:-}" in
     # stdout is exactly "<hw_mode> <channel>" and nothing else: netctl.py reads this to
     # decide whether the AP has to be retuned, and it merges stderr into what it reads.
     chan)   pick_hw_channel 2>/dev/null; echo ;;
-    *) echo "usage: ap.sh pre|post|down|health|failures|reset-failures|conf|chan" >&2; exit 2 ;;
+    *) echo "usage: ap.sh pre|run|post|down|health|failures|reset-failures|conf|chan" >&2; exit 2 ;;
 esac

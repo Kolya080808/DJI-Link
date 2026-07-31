@@ -138,10 +138,24 @@ under the world regulatory domain (`00`), fall back to a safe channel instead of
 the AP down. The live uplink channel always wins because one radio cannot beacon elsewhere. Without
 an uplink, the AP uses a safe 2.4 GHz fallback channel.
 
-Three short hostapd failures trip both systemd's start limit and netctl's persistent
-failure latch. Automatic recovery then stops instead of resetting the shared radio
-forever and taking LAN/SSH down with it. A reboot still attempts the AP normally; an
-explicit hotspot or uplink action clears the latch for a controlled retry.
+`brcmfmac`/cfg80211 can temporarily reject that valid shared channel while regulatory
+state is still settling at boot. `dji-ap.service` therefore retries every 15 seconds
+until hostapd succeeds; it never permanently gives up after an arbitrary number of
+attempts. The retry path reuses `uap0` and never disconnects `wlan0`, so LAN/SSH remains
+available while the lifeline AP recovers. netctl's separate watchdog still backs off
+after repeated failures and does not add a second tight restart loop.
+
+The BCM43430 AP is deliberately configured as 802.11g (`ieee80211n=0`). On the tested
+kernel, enabling 802.11n/HT made cfg80211 reject the correct shared channel during boot
+with `(extension) channel is disabled`; non-HT mode starts immediately and still gives
+far more bandwidth than control and telemetry need.
+
+An explicit `hotspot off` request is kept in `/run/dji-link-hotspot-off`, outside the
+service's `RuntimeDirectory`. It survives stopping `dji-ap.service`, so the watchdog
+respects the request, but disappears on reboot so a field boot always restores the AP.
+The off path leaves the early-created `uap0` object reserved but down and addressless;
+the next hotspot-on can therefore reuse the correct interface order instead of creating
+a new virtual interface after NetworkManager's P2P device.
 
 `netctl.py` restarts `dji-ap` only when the channel it must use actually changed, or
 when the AP is unhealthy. Joining a network that is already on the AP's channel, and

@@ -241,24 +241,25 @@ EOF
 Description=DJI Link Wi-Fi access point (hostapd + dnsmasq on uap0)
 After=NetworkManager.service
 Wants=NetworkManager.service
-# A broken hostapd must not reset the shared radio forever. Three attempts preserve
-# recovery from a transient firmware error while keeping wlan0/SSH usable for diagnosis.
-StartLimitIntervalSec=60
-StartLimitBurst=3
+# BCM43430/cfg80211 can reject a valid shared channel during boot while regulatory
+# state is still settling. Never convert that temporary error into a permanently dead
+# field AP. Retrying is safe here: ap.sh keeps uap0 and never disconnects wlan0.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 RuntimeDirectory=dji-ap
 StateDirectory=dji-ap
-# ap.sh pre creates uap0 + IP + NAT + dnsmasq and writes the hostapd config (on a
-# channel this radio is actually allowed to beacon on); hostapd is the foreground main
-# process; ap.sh post stops dnsmasq and records how long the run lasted.
+# ap.sh pre creates uap0 + IP + NAT and writes the hostapd config on a channel this
+# radio may beacon on. ap.sh run starts dnsmasq and execs hostapd as the foreground main
+# process; ap.sh post records how long the run lasted and performs idempotent cleanup.
 ExecStartPre=/bin/bash ${PI_DIR}/ap.sh pre
-ExecStart=/usr/sbin/hostapd /run/dji-ap/hostapd.conf
+ExecStart=/bin/bash ${PI_DIR}/ap.sh run
 ExecStopPost=/bin/bash ${PI_DIR}/ap.sh post
-# Restart a crashed hostapd, but never turn a clean administrative stop into a restart.
-Restart=on-failure
-RestartSec=5
+# systemctl stop is never restarted by systemd. Any other exit must retry until the
+# lifeline AP is back, with enough delay to avoid hammering the shared firmware.
+Restart=always
+RestartSec=15
 User=root
 
 [Install]
@@ -357,7 +358,7 @@ EOF
     # Do not walk away from a setup that left the Pi with no access point: report the
     # real state of it, not just whether systemd thinks the unit is running.
     if [ "$AP_REBOOT" = "0" ]; then
-        for _ in 1 2 3 4 5 6 7 8 9 10; do
+        for _ in {1..45}; do
             bash "${PI_DIR}/ap.sh" health >/dev/null 2>&1 && break
             sleep 1
         done
