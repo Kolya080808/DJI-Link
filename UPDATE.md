@@ -1,6 +1,6 @@
 ---
-title: DJI Link v0.9.1 - Pi networking rollback to v0.8.7
-version: 0.9.1
+title: DJI Link v0.8.7 - Pi networking rollback to v0.8.7
+version: 0.8.7
 prerelease: true
 ---
 
