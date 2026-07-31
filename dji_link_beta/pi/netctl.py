@@ -237,6 +237,49 @@ def ap_wanted_channel() -> str:
     return parts[-1] if parts and parts[-1].isdigit() else ""
 
 
+def live_uplink_channel() -> str:
+    """The channel of a fully associated wlan0, never an AP fallback channel.
+
+    NetworkManager can keep GENERAL.STATE at 100 while wpa_supplicant briefly moves
+    through disconnected/scanning/associating. During that window `ap.sh chan` returns
+    its no-uplink fallback (normally channel 6), which the watchdog used to mistake for
+    a real channel change and restart the otherwise healthy field AP. `iw link` is the
+    authoritative extra check: it only contains an SSID/frequency while STA is actually
+    associated.
+    """
+    state = nmcli_get("GENERAL.STATE", "dev", "show", STA_IFACE)
+    if not re.match(r"^(?:100\b|connected\b)", state, re.I):
+        return ""
+    rc, out = run("iw", "dev", STA_IFACE, "link", timeout=15)
+    if rc != 0 or not re.search(r"^Connected to\s", out, re.M):
+        return ""
+    if not re.search(r"^\s*SSID:\s*\S", out, re.M):
+        return ""
+    m = re.search(r"^\s*freq:\s*(\d+)(?:\.\d+)?\s*$", out, re.M)
+    if not m:
+        return ""
+    freq = int(m.group(1))
+    if 2412 <= freq <= 2472:
+        return str((freq - 2407) // 5)
+    if freq == 2484:
+        return "14"
+    if 5000 <= freq < 5950:
+        return str((freq - 5000) // 5)
+    if 5955 <= freq <= 7115:
+        return str((freq - 5950) // 5)
+    return ""
+
+
+def confirmed_uplink_channel(delay_s: float = 2.0) -> str:
+    """A live uplink channel that stayed unchanged across two observations."""
+    first = live_uplink_channel()
+    if not first:
+        return ""
+    time.sleep(delay_s)
+    second = live_uplink_channel()
+    return first if second == first else ""
+
+
 def ap_live_channel() -> str:
     rc, out = run("iw", "dev", AP_IFACE, "info", timeout=15)
     m = re.search(r"channel\s+(\d+)", out) if rc == 0 else None
@@ -956,7 +999,10 @@ def ap_watchdog() -> None:
         failure_latched = False
         backoff = 30.0
 
-        wanted, current = ap_wanted_channel(), ap_conf_channel()
+        # Retune only for a real, fully associated uplink whose channel stayed stable.
+        # With no uplink (the normal field case), leave the healthy AP untouched: it
+        # keeps beaconing, serving DHCP and exposing the Pi at 10.42.0.1.
+        wanted, current = confirmed_uplink_channel(), ap_conf_channel()
         if wanted and current and wanted != current and now - last_fix >= backoff:
             last_fix = now
             print(f"[netctl] watchdog: retuning {AP_SERVICE} "

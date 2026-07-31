@@ -33,7 +33,7 @@ class World:
     """The Pi's networking as the mocked commands see it."""
 
     def __init__(self, networks, passwords, profiles=(), active=None, ap_active=True,
-                 ap_failures=0, ap_recovering=False):
+                 ap_failures=0, ap_recovering=False, link_freqs=()):
         self.networks = networks            # [{ssid, security, chan, signal}]
         self.passwords = passwords          # {ssid: right psk}
         self.profiles = [dict(p) for p in profiles]
@@ -42,6 +42,7 @@ class World:
         self.ap_restarts = 0
         self.ap_failures = ap_failures
         self.ap_recovering = ap_recovering
+        self.link_freqs = list(link_freqs)
         self.scan_visible = {n["ssid"] for n in networks}
         self.log = []
 
@@ -87,6 +88,8 @@ def make_run(w: World):
             w.active = None
             return 0, "Device 'wlan0' successfully disconnected."
         if a[:1] == ["dev"] and len(a) >= 2 and a[1] == "show":
+            if getfield == "GENERAL.STATE":
+                return 0, "100 (connected)" if w.active else "30 (disconnected)"
             return 0, "GENERAL.CONNECTION:" + (w.active or "--")
         if a[:1] == ["dev"]:
             st = "connected" if w.active else "disconnected"
@@ -217,6 +220,13 @@ def make_run(w: World):
                 return 0, ""
             return 0, ""
         if a[0] == "iw":
+            if a[-1] == "link":
+                freq = w.link_freqs.pop(0) if w.link_freqs else None
+                if freq is None:
+                    return 0, "Not connected."
+                return 0, ("Connected to aa:bb:cc:dd:ee:ff (on wlan0)\n"
+                           "\tSSID: TestNet\n"
+                           f"\tfreq: {freq}\n")
             if "station" in a:
                 return 0, ""
             if "info" in a:
@@ -435,6 +445,30 @@ w = World(HOME, PW, ap_active=False, ap_recovering=True)
 setup(w)
 netctl.ensure_ap("test")
 check(w.ap_restarts == 0, "an activating AP attempt is left alone")
+
+print("\nS. watchdog channel checks must preserve the AP without a stable uplink")
+w = World(HOME, PW, profiles=[dict(good)], active=None)
+setup(w)
+check(netctl.confirmed_uplink_channel(0) == "",
+      "no uplink produces no retune channel (field AP stays on 10.42.0.1)")
+
+w = World(HOME, PW, profiles=[dict(good)], active="preconfigured",
+          link_freqs=[2442, None])
+setup(w)
+check(netctl.confirmed_uplink_channel(0) == "",
+      "a link that disappears between checks is not a channel change")
+
+w = World(HOME, PW, profiles=[dict(good)], active="preconfigured",
+          link_freqs=[2442, 2437])
+setup(w)
+check(netctl.confirmed_uplink_channel(0) == "",
+      "a changing uplink channel is not acted on yet")
+
+w = World(HOME, PW, profiles=[dict(good)], active="preconfigured",
+          link_freqs=[2442, 2442])
+setup(w)
+check(netctl.confirmed_uplink_channel(0) == "7",
+      "two stable connected observations confirm channel 7")
 
 print()
 if FAILS:

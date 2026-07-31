@@ -1,10 +1,20 @@
 ---
-title: DJI Link v0.8.8 — Pi AP lifeline hardening
-version: 0.8.8
+title: DJI Link v0.8.9 — Stable uplink verification
+version: 0.8.9
 prerelease: true
 ---
 
 ## Changed
+
+- **The AP watchdog now verifies the uplink before changing channels.** It requires
+  NetworkManager to report `wlan0` connected, `iw link` to report a real SSID/frequency,
+  and the same channel to be observed twice. A transient scan/reassociation is no longer
+  mistaken for a switch to the channel-6 fallback.
+
+- **No uplink now explicitly means no AP retune.** In the field, with no external Wi-Fi
+  or internet, `PI_DJI_LINK-*` remains serving DHCP and the Pi remains reachable at
+  `10.42.0.1`; the watchdog does not restart a healthy local AP just because `wlan0` is
+  disconnected.
 
 - **Pi-side Wi-Fi/AP hardening plus beta test-client compatibility updates.** The
   release is still centered on the Raspberry Pi networking layer: `ap.sh`, `netctl.py`
@@ -111,9 +121,9 @@ prerelease: true
 
 <!--
 Release checklist:
-  1. Keep "version" above equal to the tag you push (tag v0.8.8 => version: 0.8.8).
+  1. Keep "version" above equal to the tag you push (tag v0.8.9 => version: 0.8.9).
   2. Commit UPDATE.md.
-  3. git tag v0.8.8 && git push origin v0.8.8
+  3. git tag v0.8.9 && git push origin v0.8.9
 Everything below the second "---" (except this comment) becomes the GitHub Release body.
 These binaries are unsigned, so first launch shows a Gatekeeper (macOS) / SmartScreen
 (Windows) warning — expected for a pre-release.
