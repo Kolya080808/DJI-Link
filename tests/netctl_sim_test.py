@@ -23,25 +23,19 @@ spec = importlib.util.spec_from_file_location(
 netctl = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(netctl)
 
-assert not netctl.AP_OFF_FLAG.startswith("/run/dji-ap/"), \
-    "hotspot-off flag must survive removal of dji-ap.service's RuntimeDirectory"
-
 KEYMGMT_ERR = "Error: 802-11-wireless-security.key-mgmt: property is missing."
 
 
 class World:
     """The Pi's networking as the mocked commands see it."""
 
-    def __init__(self, networks, passwords, profiles=(), active=None, ap_active=True,
-                 ap_failures=0, ap_recovering=False):
+    def __init__(self, networks, passwords, profiles=(), active=None, ap_active=True):
         self.networks = networks            # [{ssid, security, chan, signal}]
         self.passwords = passwords          # {ssid: right psk}
         self.profiles = [dict(p) for p in profiles]
         self.active = active                # profile name active on wlan0
         self.ap_active = ap_active
         self.ap_restarts = 0
-        self.ap_failures = ap_failures
-        self.ap_recovering = ap_recovering
         self.scan_visible = {n["ssid"] for n in networks}
         self.log = []
 
@@ -193,8 +187,6 @@ def make_run(w: World):
             return nmcli(a[1:])
         if a[0] == "systemctl":
             if a[1] == "is-active":
-                if w.ap_recovering:
-                    return 3, "activating"
                 return (0, "active") if w.ap_active else (3, "inactive")
             if a[1] in ("restart", "start"):
                 w.ap_restarts += 1
@@ -210,11 +202,6 @@ def make_run(w: World):
                 return (0, "ok") if w.ap_active else (1, "dji-ap is not active")
             if sub == "chan":
                 return 0, "g 6"
-            if sub == "failures":
-                return 0, str(w.ap_failures)
-            if sub == "reset-failures":
-                w.ap_failures = 0
-                return 0, ""
             return 0, ""
         if a[0] == "iw":
             if "station" in a:
@@ -421,20 +408,6 @@ r = netctl.connect("ASUS_65", None)
 check(not r["ok"], "refused")
 check("needs a password" in r["output"], f"clear message: {r['output']}")
 check(not w.profiles, "no profile left behind")
-
-print("\nQ. netctl must not add a tight loop to systemd's low-rate AP recovery")
-w = World(HOME, PW, ap_active=False, ap_failures=3)
-setup(w)
-netctl.ensure_ap("test")
-check(w.ap_restarts == 0, "watchdog restart is suppressed after three short failures")
-netctl.hotspot(True)
-check(w.ap_failures == 0, "an explicit operator retry clears the failure latch")
-
-print("\nR. netctl must not interrupt systemd while an AP attempt is activating")
-w = World(HOME, PW, ap_active=False, ap_recovering=True)
-setup(w)
-netctl.ensure_ap("test")
-check(w.ap_restarts == 0, "an activating AP attempt is left alone")
 
 print()
 if FAILS:

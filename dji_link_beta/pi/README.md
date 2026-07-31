@@ -127,35 +127,15 @@ uses that as a second, completely separate way in.
 
 ### Single radio: what actually happens on a channel change
 
-The AP has to share a channel with the uplink. A udev rule creates `uap0` at the
-`phy0` add event, before NetworkManager creates BCM43430's P2P device; creating the AP
-interface later can make the firmware reject even a valid channel. `dji-ap.service`
-starts hostapd after NetworkManager, when the uplink channel is known. `ap.sh` then
-picks from the channels the kernel reports this radio may **beacon** on (`iw phy … info`, minus
+The AP has to share a channel with the uplink. `ap.sh` picks that channel from the
+channels the kernel reports this radio may **beacon** on (`iw phy … info`, minus
 `disabled` / `no IR` / `radar detection`), so it never writes a config hostapd will
 refuse: a 5 GHz uplink channel on the 2.4 GHz-only Zero 2 W radio, or channel 12/13
 under the world regulatory domain (`00`), fall back to a safe channel instead of taking
-the AP down. The live uplink channel always wins because one radio cannot beacon elsewhere. Without
-an uplink, the AP uses a safe 2.4 GHz fallback channel.
-
-`brcmfmac`/cfg80211 can temporarily reject that valid shared channel while regulatory
-state is still settling at boot. `dji-ap.service` therefore retries every 15 seconds
-until hostapd succeeds; it never permanently gives up after an arbitrary number of
-attempts. The retry path reuses `uap0` and never disconnects `wlan0`, so LAN/SSH remains
-available while the lifeline AP recovers. netctl's separate watchdog still backs off
-after repeated failures and does not add a second tight restart loop.
-
-The BCM43430 AP is deliberately configured as 802.11g (`ieee80211n=0`). On the tested
-kernel, enabling 802.11n/HT made cfg80211 reject the correct shared channel during boot
-with `(extension) channel is disabled`; non-HT mode starts immediately and still gives
-far more bandwidth than control and telemetry need.
-
-An explicit `hotspot off` request is kept in `/run/dji-link-hotspot-off`, outside the
-service's `RuntimeDirectory`. It survives stopping `dji-ap.service`, so the watchdog
-respects the request, but disappears on reboot so a field boot always restores the AP.
-The off path leaves the early-created `uap0` object reserved but down and addressless;
-the next hotspot-on can therefore reuse the correct interface order instead of creating
-a new virtual interface after NetworkManager's P2P device.
+the AP down. While hostapd is healthy, the AP follows a usable live uplink channel. Two
+short hostapd runs in a row switch back to the v0.8.4 recovery behavior: `ap.sh pre`
+disconnects `wlan0`, then pins hostapd to a safe fallback channel. That may temporarily
+drop the uplink, but it keeps the Pi's own `PI_DJI_LINK-*` access point reachable.
 
 `netctl.py` restarts `dji-ap` only when the channel it must use actually changed, or
 when the AP is unhealthy. Joining a network that is already on the AP's channel, and
