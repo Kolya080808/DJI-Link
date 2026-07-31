@@ -31,7 +31,7 @@ from diag_codes import motor_fail_text, FLYC_STATE
 DJI_VID = 0x2CA3
 PID_DRONE = 0x001E
 PID_RC = 0x0008
-PC = 0x0A
+PC = 0x02
 
 # Receiver devices (dev_type)
 FC, CAM, GIMBAL, RC, BATT = 0x03, 0x01, 0x04, 0x06, 0x0D

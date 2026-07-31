@@ -36,7 +36,7 @@ def find_dji_port():
     return None
 
 # DUML device types (address = type | index<<5). index=0.
-PC = 0x0A            # groundstation / app (sender)
+PC = 0x02            # app sender; 0x0A makes the FC treat us like DJI Assistant
 TARGETS = {
     "any": 0x1F,     # broadcast by type — let anyone answer
     "RC": 0x06,      # remote controller

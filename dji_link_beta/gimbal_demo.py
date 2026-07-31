@@ -62,9 +62,9 @@ def main() -> int:
     # 1) wake the drone's serial mode (the Mini doesn't activate it on the first GetVersion)
     print(f"[+] {port}: waking the drone's serial with a repeated GetVersion...")
     for i in range(50):
-        t.send(DumlPacket(sender=0x0a, receiver=0x1f, cmd_set=0, cmd_id=1,
+        t.send(DumlPacket(sender=0x02, receiver=0x1f, cmd_set=0, cmd_id=1,
                           seq=1 + i, cmd_type=0x40).encode())
-        t.send(DumlPacket(sender=0x0a, receiver=0x03, cmd_set=0, cmd_id=1,
+        t.send(DumlPacket(sender=0x02, receiver=0x03, cmd_set=0, cmd_id=1,
                           seq=100 + i, cmd_type=0x40).encode())
         time.sleep(0.1)
         if seen_any:

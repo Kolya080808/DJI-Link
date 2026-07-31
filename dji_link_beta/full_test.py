@@ -52,11 +52,14 @@ class Harness:
         self.lock = threading.Lock()
         self.running = True
         self.video_units = 0
+        self.media = None
         if mode == "pi":
             import composite
+            import media
             self.demux = composite.CompositeDemux(
                 on_duml=self._feed_duml,
                 on_video=self._count_video)
+            self.media = media.MediaClient(self.d, receiver=0x01)
         else:
             self.demux = None
 
@@ -69,6 +72,11 @@ class Harness:
                 if p.sender != 0x02:
                     self.recent[(p.cmd_set, p.cmd_id)] = time.time()
             self.tele.feed_packet(p)
+            if self.media:
+                if p.cmd_set == 0x02 and p.cmd_id == 0x80:
+                    self.media.note_camera_state(p.payload)
+                elif p.cmd_set == 0x00 and p.cmd_id == 0x27:
+                    self.media.on_push(p.payload)
 
     def start_rx(self):
         threading.Thread(target=self._rx, daemon=True).start()
@@ -227,6 +235,17 @@ def run_tests(h: Harness):
     if not conn:
         diagnose_no_telemetry(h)
 
+    print("\n▶ TEST: GPS/SATS telemetry (10s observe)")
+    for _ in range(10):
+        time.sleep(1)
+        st = h.tele.state
+        gps = st.gps_level if st.gps_level is not None else "-"
+        sats = st.satellites if st.satellites is not None else "-"
+        pos = (st.drone_lat is not None and st.drone_lon is not None)
+        print(f"   GPS level={gps}  sats={sats}  pos={'yes' if pos else 'no'}")
+    ok = st.gps_level is not None or st.satellites is not None
+    results.append(("GPS/SATS telemetry", "ok" if ok else "FAIL: no GPS/SATS OSD"))
+
     # --- camera/gimbal (safe) ---
     test("Camera: photo", d.take_photo, watch="photo indicator/sound", expect=(0x02, 0x01))
     test("Camera: start recording", d.start_record, watch="recording started?", expect=(0x02, 0x02),
@@ -237,10 +256,38 @@ def run_tests(h: Harness):
     test("Gimbal: up", lambda: [d.gimbal_speed(30) or time.sleep(0.1) for _ in range(15)] and d.gimbal_speed(0),
          watch="camera tilted UP?")
 
-    # --- limits: max altitude/distance WITHOUT the param hash (0x03/0x2D) ---
-    test("Set max altitude 120 m", lambda: d.set_max_altitude(120), expect=(0x03, 0x2D),
-         on_fail=lambda h: "FC didn't ACK SetLimits — WM160 may want the hashed param instead")
-    test("Set max distance 500 m", lambda: d.set_max_distance(500), expect=(0x03, 0x2D))
+    # --- limits: max altitude/distance via hashed FC params (0x03/0xF9) ---
+    test("Set max altitude 120 m", lambda: d.set_max_altitude(120), expect=(0x03, 0xF9),
+         on_fail=lambda h: "FC didn't ACK the hashed max-height param write")
+    test("Set max distance 500 m", lambda: d.set_max_distance(500), expect=(0x03, 0xF9))
+    test("Home: set to aircraft/current GPS", d.set_home_to_current_location,
+         watch="home point accepted/recorded in telemetry?", expect=(0x03, 0x31))
+
+    # --- media (AOA only): keep this visible even while the protocol is still under test ---
+    if h.mode == "pi" and h.media:
+        print("\n▶ TEST: Media: list SD card")
+        try:
+            before = len(h.media.files)
+            h.media.request_list(playback_first=True)
+            time.sleep(6)
+            files = h.media.files
+            note = h.media.last_note or "no media note"
+            delta = len(files) - before
+            print(f"   files={len(files)} delta={delta} note={note}")
+            if files:
+                for mf in files[:5]:
+                    print(f"   - {mf.file_index}: {mf.file_name}")
+            results.append(("Media list", "ok" if files else "sent"))
+        except Exception as e:
+            print(f"   ✗ media list error: {e}")
+            results.append(("Media list", f"FAIL: {e}"))
+        finally:
+            try:
+                h.media.exit_playback()
+                d.start_liveview()
+                d.request_i_frame()
+            except Exception:
+                pass
 
     # --- video (AOA only): confirm HEVC payloads actually arrive ---
     if h.mode == "pi":

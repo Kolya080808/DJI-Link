@@ -33,7 +33,7 @@ def gimbal_speed_payload(pitch_dps: float) -> bytes:
 DJI_VID = 0x2CA3
 PID_RC = 0x0008
 PID_DRONE = 0x001E
-PC = 0x0A
+PC = 0x02
 # addresses we poll: any + aircraft (FC/camera/gimbal/battery) + remote controller
 POLL_RECEIVERS = (0x1F, 0x03, 0x01, 0x04, 0x0B, 0x06)
 

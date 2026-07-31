@@ -177,6 +177,9 @@ class Client:
         self.return_to_menu = False  # set by "Exit to main menu": run_ui ends, main() re-shows menu
         self.show_hud = True         # F3 toggles the telemetry overlay (clean video when off)
         self.last_msg = ""
+        self.gps_check_text = "GPS/SATS: waiting"
+        self.gps_check_level = "warn"  # ok | warn | bad
+        self.gps_check_at = 0.0
         self.fullscreen = True
         self.param_sets = {}
         self.params_logged = False
@@ -213,6 +216,39 @@ class Client:
             while self.running:
                 time.sleep(5)
                 log(f"[stats] {self.stats()}")
+        threading.Thread(target=loop, daemon=True).start()
+
+    def start_gps_checks(self):
+        """Every 10 seconds summarize GPS/SAT state for the flight HUD and log."""
+        def loop():
+            while self.running:
+                st = self.tele.state
+                sats = st.satellites
+                gps = st.gps_level
+                has_pos = st.drone_lat is not None and st.drone_lon is not None
+
+                if sats is None and gps is None and not has_pos:
+                    level = "bad"
+                    text = "GPS/SATS: no OSD yet"
+                else:
+                    gps_ok = gps is not None and gps >= 4
+                    sats_ok = sats is not None and sats >= 8
+                    if gps_ok and sats_ok and has_pos:
+                        level = "ok"
+                    elif gps_ok or sats_ok or has_pos:
+                        level = "warn"
+                    else:
+                        level = "bad"
+                    pos = "pos" if has_pos else "no-pos"
+                    text = (f"GPS/SATS: {sats if sats is not None else '-'} sats · "
+                            f"lvl {gps if gps is not None else '-'} · {pos}")
+
+                self.gps_check_text = text
+                self.gps_check_level = level
+                self.gps_check_at = time.time()
+                log(f"[gps-check] {level.upper()} {text}")
+                time.sleep(10)
+
         threading.Thread(target=loop, daemon=True).start()
 
     # receive
@@ -618,7 +654,9 @@ def run_console_cmd(cli: Client, line: str):
                 cli.msg("control on blocked: take off first (virtual stick only after motors start)")
             else:
                 cli.control = want
-                (d.request_control() if cli.control else d.release_control()); cli.msg(f"control={cli.control}")
+                cli.gs = want
+                d.enable_virtual_stick(want)
+                cli.msg(f"virtual-stick={cli.control} (control+ground_station)")
         elif c in ("gs", "groundstation"): cli.gs = args and args[0] == "on"; \
             d.set_ground_station_mode(cli.gs); cli.msg(f"ground_station={cli.gs}")
         elif c == "gimbal":
@@ -626,13 +664,24 @@ def run_console_cmd(cli: Client, line: str):
             else: d.gimbal_angle(float(args[0])); cli.msg(f"gimbal angle {args[0]}")
         elif c == "recenter": d.gimbal_recenter(); cli.msg("gimbal recenter")
         elif c == "home":
-            if args and args[0] == "here":
+            if args and args[0] in ("status", "st"):
+                st = cli.tele.state
+                cli.msg(f"home recorded={st.home_recorded}  gps={st.gps_level} sats={st.satellites} "
+                        f"pos={st.drone_lat},{st.drone_lon}")
+            elif args and args[0] in ("here", "current", "aircraft"):
                 d.set_home_to_current_location(); cli.msg("home -> current location (needs GPS>=4); watch home= on HUD")
             elif len(args) >= 2:
                 d.set_home_point(float(args[0]), float(args[1]))
                 cli.msg(f"home -> {args[0]},{args[1]} (must be within ~30m of current home); watch home= on HUD")
             else:
-                cli.msg("usage: home here   |   home <lat> <lon>")
+                cli.msg("usage: home status | home here/current/aircraft | home <lat> <lon>")
+        elif c in ("gps", "gpsstatus", "sat", "sats", "satellites"):
+            st = cli.tele.state
+            if c in ("sat", "sats", "satellites"):
+                cli.msg(f"satellites={st.satellites} gps_level={st.gps_level}")
+            else:
+                cli.msg(f"gps_level={st.gps_level} satellites={st.satellites} "
+                        f"lat={st.drone_lat} lon={st.drone_lon} home_recorded={st.home_recorded}")
         elif c in ("setalt", "maxalt"):
             d.set_max_altitude(int(args[0])); cli.msg(f"max alt {args[0]} m (verify: rp height)")
         elif c in ("setdist", "maxdist"):
@@ -691,7 +740,7 @@ def run_console_cmd(cli: Client, line: str):
                 cli.msg("fetchmedia: done — liveview restored, check media_downloads/ + [media] log")
             _t.Thread(target=_sweep, daemon=True).start()
         elif c == "help":
-            cli.msg("takeoff land rth control on|off gs on|off home here|<lat> <lon> setalt <m> setdist <m> rthalt <m> rp height|radius gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> fetchmedia <from> <to> [delay] raw <set> <id> <hex> [recv]")
+            cli.msg("takeoff land rth control on|off gs on|off gps sats home status|here|<lat> <lon> setalt <m> setdist <m> rthalt <m> rp height|radius gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> fetchmedia <from> <to> [delay] raw <set> <id> <hex> [recv]")
         else:
             cli.msg(f"unknown command: {c} (help)")
     except Exception as e:
@@ -1210,7 +1259,7 @@ def _draw_flight_hud(screen, cli):
     # ---------- top-left status card ----------
     X, Y, W = 16, 16, 300
     pad = 14
-    card_h = 232
+    card_h = 252
     card = pygame.Surface((W, card_h), pygame.SRCALPHA)
     pygame.draw.rect(card, (18, 20, 26, 205), card.get_rect(), border_radius=12)
     screen.blit(card, (X, Y))
@@ -1277,7 +1326,9 @@ def _draw_flight_hud(screen, cli):
     left(F["small"], f"GPS {_gps}  ·  home {_home}", _g.MUTED, lx, y + 6)
     left(F["small"], f"alt≤{_g_(st.max_height_m)}  ·  dist≤{_g_(st.max_distance_m)}  ·  RTH {_g_(st.rth_altitude_m)}",
          _g.MUTED, lx, y + 24)
-    left(F["small"], "F1 help · Esc settings · F3 hide", (110, 116, 130), lx, y + 42)
+    check_col = {"ok": _g.GOOD, "warn": _g.WARN, "bad": _g.BAD}.get(cli.gps_check_level, _g.MUTED)
+    left(F["small"], cli.gps_check_text, check_col, lx, y + 42)
+    left(F["small"], "F1 help · Esc settings · F3 hide", (110, 116, 130), lx, y + 60)
 
     # motor-start failure (only when relevant) — a red banner under the card
     if st.motor_fail_code:
@@ -1651,6 +1702,47 @@ def discover_pi() -> tuple[str | None, int]:
     return host, netfind.BRIDGE_PORT
 
 
+def run_wifi_setup(args) -> int:
+    """Headless Pi Wi-Fi setup, same flow as the GUI setup button."""
+    import netfind
+
+    log("[wifi] finding the Pi for Wi-Fi setup...")
+    r = netfind.discover(allow_ap_join=True)
+    host = r.get("host")
+    if not host:
+        log("[wifi] no Pi found")
+        return 2
+    log(f"[wifi] Pi at {host} via {r.get('via')}")
+
+    ssid = args.wifi_ssid
+    psk = args.wifi_psk or ""
+    if not ssid:
+        nets = netfind.pi_scan_wifi(host)
+        if not nets:
+            log("[wifi] the Pi reported no visible Wi-Fi networks")
+            return 2
+        for i, n in enumerate(nets[:20]):
+            print(f"  {i:2d}) {n.get('signal', 0):3d}%  {n.get('security',''):10s} {n.get('ssid','')}")
+        sel = input("network number: ").strip()
+        if not sel.isdigit() or int(sel) >= len(nets):
+            log("[wifi] cancelled")
+            return 1
+        ssid = nets[int(sel)]["ssid"]
+    if psk == "" and args.wifi_psk is None:
+        psk = input(f"password for {ssid} (blank for open/saved): ").strip()
+
+    res = netfind.pi_connect_wifi(host, ssid, psk)
+    ok = bool(res.get("ok"))
+    log(f"[wifi] {'connected' if ok else 'failed'}: {res.get('output','')[:180]}")
+    st = netfind.wait_for_pi(host, timeout_s=30) or netfind.wait_for_pi(netfind.AP_GATEWAY, timeout_s=15)
+    if st:
+        log(f"[wifi] Pi reachable; internet={st.get('internet')} "
+            f"uplink={st.get('uplink_ssid') or st.get('uplink')}")
+    else:
+        log("[wifi] Pi did not answer after Wi-Fi setup; reconnect to PI_DJI_LINK-* if needed")
+    return 0 if ok else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="DJI Mavic Mini 1 PC client")
     # No arguments = the normal case: find the Pi, connect, fly. Everything below is an
@@ -1669,6 +1761,12 @@ def main() -> int:
                     help="append raw OSD/battery packets over time (for offset calibration)")
     ap.add_argument("--dump-raw", metavar="FILE",
                     help="append every non-video composite unit (to see media/DUML replies)")
+    ap.add_argument("--wifi", action="store_true",
+                    help="only run Pi Wi-Fi setup, then exit")
+    ap.add_argument("--wifi-ssid", metavar="SSID",
+                    help="SSID to connect the Pi uplink to in --wifi mode")
+    ap.add_argument("--wifi-psk", metavar="PSK",
+                    help="password for --wifi-ssid (blank means open/saved)")
     args = ap.parse_args()
 
     global VERBOSE, _LOG
@@ -1676,6 +1774,9 @@ def main() -> int:
     _LOG = applog.setup(verbose=args.verbose)   # latest.log + dated archive + weekly cleanup
     log(f"[log] logging to {applog.LATEST}")
     live = not args.dry and not args.sim      # flight enabled by default; ARM still gates motors
+
+    if args.wifi:
+        return run_wifi_setup(args)
 
     from transport import NetTransport, CompositeTransport, LogTransport, SerialTransport
     import pygame, gui, netfind
@@ -1731,7 +1832,7 @@ def main() -> int:
       if args.dump_raw:
           cli.raw_dump_f = open(args.dump_raw, "w")
           log(f"[dump-raw] logging non-video composite units to {args.dump_raw}")
-      cli.start_rx(); cli.start_sender()
+      cli.start_rx(); cli.start_sender(); cli.start_gps_checks()
       if not args.no_video:
           cli.start_video()
       cli.start_stats()

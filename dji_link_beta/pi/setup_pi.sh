@@ -233,6 +233,8 @@ Wants=NetworkManager.service
 
 [Service]
 Type=simple
+RuntimeDirectory=dji-ap
+StateDirectory=dji-ap
 # ap.sh pre creates uap0 + IP + NAT + dnsmasq and writes the hostapd config (on a
 # channel this radio is actually allowed to beacon on); hostapd is the foreground main
 # process; ap.sh post stops dnsmasq and records how long the run lasted.

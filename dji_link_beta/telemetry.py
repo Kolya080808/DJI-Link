@@ -116,11 +116,12 @@ class OsdState:
         parts = [
             f"mode={m}",
             f"satellites={self.satellites}", f"gps={self.gps_level}",
+            f"pos={None if self.drone_lat is None else f'{self.drone_lat:.6f},{self.drone_lon:.6f}'}",
             f"battery={self.battery_pct}%",
             f"altitude={self.altitude_m}m", f"climb={self.vz}m/s",
             f"remain_time={self.remaining_flight_time_s}s",
             f"flying={self.is_flying}", f"motors={self.motors_on}",
-            f"home={self.home_set}",
+            f"home={self.home_recorded}",
         ]
         if self.motor_fail_code:
             parts.append(f"!MOTOR_START_FAIL_CAUSE={self.motor_fail_reason}({self.motor_fail_code})")

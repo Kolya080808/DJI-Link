@@ -64,7 +64,7 @@ def getch_factory():
 
 def ping_fc(ser, stream) -> bool:
     """GetVersion to FC (0x03). True if the drone/FC is reachable (drone on and bound)."""
-    f = DumlPacket(sender=0x0a, receiver=DEV_FC, cmd_set=0x00, cmd_id=0x01,
+    f = DumlPacket(sender=0x02, receiver=DEV_FC, cmd_set=0x00, cmd_id=0x01,
                    seq=1, cmd_type=0x40).encode()
     ser.reset_input_buffer()
     ser.write(f)

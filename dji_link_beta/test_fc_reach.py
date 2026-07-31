@@ -22,7 +22,7 @@ import time
 from duml import DumlPacket, DumlStream
 from probe_serial import find_dji_port
 
-PC = 0x0A
+PC = 0x02
 FC = 0x03
 KNOWN_RC = {0x06, 0x1b}          # already known — this is the remote controller and its subsystem
 

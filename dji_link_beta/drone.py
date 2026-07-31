@@ -58,6 +58,8 @@ class Drone:
         # (DJI Assistant 2) path uses plaintext — set False for serial.
         self.encrypt_config = True
         self._seq = 0
+        self._tx_lock = threading.Lock()
+        self._alive = True
         self._shutter_denom = None   # last user-set 1/N shutter (None = auto); see set_iso/set_shutter
         self._stream = DumlStream()
         self._rx_thread: threading.Thread | None = None
@@ -71,20 +73,26 @@ class Drone:
 
     def _cmd(self, cmd_set: int, cmd_id: int, payload: bytes = b"",
              receiver: int = DEV_FC, ack: bool = True) -> None:
-        pkt = DumlPacket(
-            sender=DEV_APP, receiver=receiver,
-            cmd_set=cmd_set, cmd_id=cmd_id,
-            seq=self._next_seq(),
-            cmd_type=0x40 if ack else 0x00,
-            payload=payload,
-        )
-        frame = pkt.encode()
-        # FLYC config/param commands (0x03/0xF0, 0xF7-0xFA) must be SIMPLE-encrypted or the
-        # FC silently drops them; flight/OSD 0x03 commands stay plaintext.
-        if self.encrypt_config and cmd_set == 0x03 and cmd_id in (0xF0, 0xF7, 0xF8, 0xF9, 0xFA):
-            from duml import encrypt_frame
-            frame = encrypt_frame(frame)
-        self.t.send(frame)
+        if not self._alive:
+            return
+        # Matches the C++ v0.8.6 Drone transport contract: one complete DUML frame per
+        # write, serialized across UI/worker/media threads so seq/frame bytes never
+        # interleave on the Pi bridge socket.
+        with self._tx_lock:
+            pkt = DumlPacket(
+                sender=DEV_APP, receiver=receiver,
+                cmd_set=cmd_set, cmd_id=cmd_id,
+                seq=self._next_seq(),
+                cmd_type=0x40 if ack else 0x00,
+                payload=payload,
+            )
+            frame = pkt.encode()
+            # FLYC config/param commands (0x03/0xF0, 0xF7-0xFA) must be SIMPLE-encrypted or the
+            # FC silently drops them; flight/OSD 0x03 commands stay plaintext.
+            if self.encrypt_config and cmd_set == 0x03 and cmd_id in (0xF0, 0xF7, 0xF8, 0xF9, 0xFA):
+                from duml import encrypt_frame
+                frame = encrypt_frame(frame)
+            self.t.send(frame)
 
     # ---- background telemetry reception ----
     def start_rx(self) -> None:
@@ -93,6 +101,7 @@ class Drone:
         self._rx_thread.start()
 
     def stop(self) -> None:
+        self._alive = False
         self._running = False
 
     def _rx_loop(self) -> None:

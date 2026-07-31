@@ -265,13 +265,13 @@ class Screen:
 # ============================================================ screens
 
 class MenuScreen(Screen):
-    """Start menu. result is one of: 'connect', 'serial', 'sim', 'quit'."""
+    """Start menu. result is one of: 'connect', 'wifi', 'serial', 'sim', 'quit'."""
     def __init__(self, surf, clock):
         super().__init__(surf, clock, "DJI Mavic Mini 1 — PC control")
         w, h = surf.get_size()
         cx = w // 2
         bw, bh, gap = 340, 56, 16
-        y = h // 2 - 90
+        y = h // 2 - 124
         self.sub = Label((40, 78, w - 80, 26),
                          "Control the drone from your PC. Pick how to connect.",
                          size=18, col=MUTED)
@@ -281,9 +281,11 @@ class MenuScreen(Screen):
                    lambda: self.finish("connect"), primary=True),
             Button((cx - bw // 2, y + (bh+gap),  bw, bh), "Connect via serial (RC cable)",
                    lambda: self.finish("serial")),
-            Button((cx - bw // 2, y + 2*(bh+gap),bw, bh), "Simulator (no hardware)",
+            Button((cx - bw // 2, y + 2*(bh+gap),bw, bh), "Pi Wi-Fi setup",
+                   lambda: self.finish("wifi")),
+            Button((cx - bw // 2, y + 3*(bh+gap),bw, bh), "Simulator (no hardware)",
                    lambda: self.finish("sim")),
-            Button((cx - bw // 2, y + 3*(bh+gap),bw, bh), "Quit",
+            Button((cx - bw // 2, y + 4*(bh+gap),bw, bh), "Quit",
                    lambda: self.finish("quit")),
         ]
 
@@ -300,11 +302,12 @@ class DiscoveryScreen(Screen):
 
     result: (host, port) on success, None on back, 'quit' on window close.
     """
-    def __init__(self, surf, clock, netfind, log_lines, saved_host=None):
-        super().__init__(surf, clock, "Finding the Raspberry Pi")
+    def __init__(self, surf, clock, netfind, log_lines, saved_host=None, force_wifi=False):
+        super().__init__(surf, clock, "Pi Wi-Fi setup" if force_wifi else "Finding the Raspberry Pi")
         self.nf = netfind
         self.log_lines = log_lines          # callable -> list[str] (shared app log tail)
         self.saved_host = saved_host        # Pi address from earlier this session (fast re-connect)
+        self.force_wifi = force_wifi
         self.state = "scanning"             # scanning | wifi | ready | done | failed
         self.host = None
         self.port = netfind.BRIDGE_PORT
@@ -395,11 +398,14 @@ class DiscoveryScreen(Screen):
                 else:
                     self.status.text = f"Found the Pi at {self.host}."
                 self.status.col = GOOD
-                if self.disc.get("needs_internet_prompt"):
+                if self.force_wifi or self.disc.get("needs_internet_prompt"):
                     self.state = "wifi"
                     self.wifi_list.visible = True
                     self.pw.visible = True
-                    self.status.text += " It has no internet — pick a Wi-Fi for it (or skip)."
+                    if self.force_wifi:
+                        self.status.text += " Pick an uplink Wi-Fi for the Pi."
+                    else:
+                        self.status.text += " It has no internet — pick a Wi-Fi for it (or skip)."
                     self.btn_primary.text = "Connect Wi-Fi"; self.btn_primary.on_click = self._connect_wifi
                     self.btn_primary.primary = False; self.btn_primary.visible = True
                     self.btn_back.text = "Skip"
@@ -414,7 +420,8 @@ class DiscoveryScreen(Screen):
             self.status.col = GOOD
             self.status.text = ("Pi ready. Now: 1) turn on the RC  2) plug the RC into the Pi  "
                                 "3) turn on the drone and let it link. Then start flying.")
-            self.btn_primary.text = "Start flying"; self.btn_primary.primary = True
+            self.btn_primary.text = "Done" if self.force_wifi else "Start flying"
+            self.btn_primary.primary = True
             self.btn_primary.on_click = lambda: self.finish((self.host, self.port))
             self.btn_primary.visible = True
             self.btn_back.text = "Back"; self.btn_back.on_click = lambda: self.finish(None)
@@ -483,6 +490,12 @@ def preflight(surf, clock, netfind, log_tail, default_serial="", saved_host=None
             if port:
                 return {"mode": "serial", "port": port}
             continue     # back to menu
+        if choice == "wifi":
+            res = DiscoveryScreen(surf, clock, netfind, log_tail,
+                                  saved_host=saved_host, force_wifi=True).run()
+            if res == "quit":
+                return {"mode": "quit"}
+            continue     # Wi-Fi setup is not a flight connection by itself.
         if choice == "connect":
             res = DiscoveryScreen(surf, clock, netfind, log_tail, saved_host=saved_host).run()
             if res == "quit":

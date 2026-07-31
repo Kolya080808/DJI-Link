@@ -25,7 +25,7 @@ from duml import DumlPacket, DumlStream
 DJI_VID = 0x2CA3
 PID_DRONE = 0x001E
 PID_RC = 0x0008
-PC = 0x0A
+PC = 0x02
 CAM, DM368 = 0x01, 0x08
 
 

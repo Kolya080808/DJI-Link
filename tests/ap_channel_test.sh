@@ -28,10 +28,11 @@ export PATH
 fails=0
 run_case() {
     local desc="$1" want="$2"; shift 2
-    local got rundir
+    local got rundir statedir
     rundir="$(mktemp -d)"
-    got="$(env DJI_AP_RUN_DIR="$rundir" "$@" bash "$AP_SH" chan 2>/dev/null)"
-    rm -rf "$rundir"
+    statedir="$(mktemp -d)"
+    got="$(env DJI_AP_RUN_DIR="$rundir" DJI_AP_STATE_DIR="$statedir" "$@" bash "$AP_SH" chan 2>/dev/null)"
+    rm -rf "$rundir" "$statedir"
     if [ "$got" = "$want" ]; then
         printf '  ok    %-46s -> %s\n' "$desc" "$got"
     else
@@ -42,11 +43,12 @@ run_case() {
 
 run_failed_case() {
     local desc="$1" want="$2"; shift 2
-    local got rundir
+    local got rundir statedir
     rundir="$(mktemp -d)"
-    printf '11\n' > "$rundir/consecutive-failures"
-    got="$(env DJI_AP_RUN_DIR="$rundir" "$@" bash "$AP_SH" chan 2>/dev/null)"
-    rm -rf "$rundir"
+    statedir="$(mktemp -d)"
+    printf '11\n' > "$statedir/consecutive-failures"
+    got="$(env DJI_AP_RUN_DIR="$rundir" DJI_AP_STATE_DIR="$statedir" "$@" bash "$AP_SH" chan 2>/dev/null)"
+    rm -rf "$rundir" "$statedir"
     if [ "$got" = "$want" ]; then
         printf '  ok    %-46s -> %s\n' "$desc" "$got"
     else

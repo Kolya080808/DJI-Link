@@ -40,7 +40,8 @@
 #
 # The Pi Zero 2 W has ONE radio, so the AP has to share a channel with any uplink the
 # station interface (wlan0) has joined; netctl.py restarts this unit after joining an
-# uplink, but only when the channel actually changed. With no uplink it uses channel 6.
+# uplink, but only when the channel actually changed. With no uplink, no saved Wi-Fi and
+# no internet at all, it uses channel 6 and still brings up the local PI_DJI_LINK-* AP.
 #
 # Not using `set -e`: half of the commands here (iptables -C, killing a stale daemon)
 # are expected to fail benignly. Only a failure to create/address uap0 is fatal, and
@@ -58,10 +59,11 @@ AP_PSK=raspberry
 NETCTL_PORT=9911
 BRIDGE_PORT=9910
 RUN_DIR="${DJI_AP_RUN_DIR:-/run/dji-ap}"
+STATE_DIR="${DJI_AP_STATE_DIR:-/var/lib/dji-ap}"
 HOSTAPD_CONF="$RUN_DIR/hostapd.conf"
 DNSMASQ_PID="$RUN_DIR/dnsmasq.pid"
 STARTED_AT="$RUN_DIR/started-at"
-FAILS="$RUN_DIR/consecutive-failures"
+FAILS="$STATE_DIR/consecutive-failures"
 
 # Channels to fall back to, in order, when the uplink's channel cannot be used. 1/6/11
 # are the non-overlapping 2.4 GHz set and are legal in every regulatory domain, so one
@@ -91,6 +93,21 @@ sta_phy() {
     [ -n "$p" ] && { printf 'phy%s' "$p"; return 0; }
     p="$(ls -1 /sys/class/ieee80211 2>/dev/null | head -n1)"
     printf '%s' "${p:-phy0}"
+}
+
+iface_exists() {
+    ip link show "$1" >/dev/null 2>&1
+}
+
+iface_is_ap() {
+    iw dev "$1" info 2>/dev/null | grep -q '^[[:space:]]*type[[:space:]]\+AP'
+}
+
+radio_sanity() {
+    rfkill unblock wifi 2>/dev/null || rfkill unblock all 2>/dev/null || true
+    modprobe brcmfmac 2>/dev/null || true
+    iw dev "$STA_IFACE" set power_save off 2>/dev/null || true
+    iw dev "$AP_IFACE" set power_save off 2>/dev/null || true
 }
 
 # Every channel this radio may BEACON on right now, one "<freq> <chan>" per line.
@@ -170,6 +187,19 @@ fail_count() {
     printf '%s' "$n"
 }
 
+record_fail() {
+    local why="$1" fails
+    mkdir -p "$STATE_DIR"
+    fails="$(fail_count)"
+    echo $(( fails + 1 )) > "$FAILS"
+    echo "[ap] $why (failure $(( fails + 1 ))/$MAX_FAILS)" >&2
+}
+
+clear_fail_count() {
+    mkdir -p "$STATE_DIR"
+    echo 0 > "$FAILS"
+}
+
 # Echo "hw_mode channel".
 #
 # Follow the live uplink while the AP is healthy, and only when the kernel says this
@@ -180,6 +210,20 @@ pick_hw_channel() {
     local want fails
     fails="$(fail_count)"
     want="$(sta_channel)"
+    if [ -z "$want" ]; then
+        local c
+        for c in $SAFE_CHANNELS; do
+            if chan_is_usable "$c"; then printf 'g %s' "$c"; return 0; fi
+        done
+        c="$(usable_channels | awk '$1 < 3000 { print $2; exit }')"
+        [ -n "$c" ] && { printf 'g %s' "$c"; return 0; }
+        c="$(usable_channels | awk 'NR == 1 { print $2 }')"
+        if [ -n "$c" ]; then printf '%s %s' "$(chan_to_hw "$c")" "$c"; return 0; fi
+        # On a headless field boot the important thing is that hostapd gets a sane local
+        # 2.4 GHz config even if iw cannot report the phy yet.
+        printf 'g 6'
+        return 0
+    fi
     if [ "$fails" -lt "$MAX_FAILS" ] && [ -n "$want" ] && chan_is_usable "$want"; then
         printf '%s %s' "$(chan_to_hw "$want")" "$want"
         return 0
@@ -189,7 +233,6 @@ pick_hw_channel() {
     fi
     [ "$fails" -ge "$MAX_FAILS" ] && \
         echo "[ap] $fails failed starts in a row — pinning the AP to a safe channel" >&2
-    local c
     for c in $SAFE_CHANNELS; do
         if chan_is_usable "$c"; then printf 'g %s' "$c"; return 0; fi
     done
@@ -218,15 +261,29 @@ drop_uplink_for_recovery_ap() {
 }
 
 ensure_iface() {
-    if ! iw dev 2>/dev/null | grep -q "Interface $AP_IFACE"; then
-        # Right after boot the driver may not have registered wlan0 yet.
-        for _ in 1 2 3 4 5; do
-            iw dev "$STA_IFACE" interface add "$AP_IFACE" type __ap 2>/dev/null && break
-            iw phy "$(sta_phy)" interface add "$AP_IFACE" type __ap 2>/dev/null && break
+    local phy
+    radio_sanity
+
+    if iface_exists "$AP_IFACE" && ! iface_is_ap "$AP_IFACE"; then
+        echo "[ap] $AP_IFACE exists but is not AP type; recreating it" >&2
+        ip link set "$AP_IFACE" down 2>/dev/null || true
+        iw dev "$AP_IFACE" del 2>/dev/null || true
+    fi
+
+    if ! iface_exists "$AP_IFACE"; then
+        # Right after boot the driver may not have registered wlan0/phy yet.
+        for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            radio_sanity
+            if iface_exists "$STA_IFACE"; then
+                iw dev "$STA_IFACE" interface add "$AP_IFACE" type __ap 2>/dev/null && break
+            fi
+            phy="$(sta_phy)"
+            [ -n "$phy" ] && iw phy "$phy" interface add "$AP_IFACE" type __ap 2>/dev/null && break
             sleep 1
         done
     fi
-    iw dev 2>/dev/null | grep -q "Interface $AP_IFACE" || return 1
+    iface_exists "$AP_IFACE" || return 1
+    iface_is_ap "$AP_IFACE" || return 1
 
     # Do NOT reassign the MAC that brcmfmac gave the AP interface. The driver already
     # derives it from wlan0's with the locally-administered bit set, and forcing one
@@ -299,7 +356,8 @@ teardown_nat() {
 dnsmasq_alive() {
     local pid
     pid="$(cat "$DNSMASQ_PID" 2>/dev/null || true)"
-    [ -n "$pid" ] && [ -d "/proc/$pid" ]
+    [ -n "$pid" ] && [ -d "/proc/$pid" ] || return 1
+    tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "dnsmasq.*--interface=$AP_IFACE"
 }
 
 start_dnsmasq() {
@@ -367,8 +425,14 @@ write_hostapd_conf() {
 
 cmd_pre() {
     mkdir -p "$RUN_DIR"
+    mkdir -p "$STATE_DIR"
+    # If the previous starts failed, release the one-radio STA side before even trying to
+    # create uap0. On brcmfmac, adding a virtual AP while associated is one of the common
+    # boot/reconnect failure modes.
+    drop_uplink_for_recovery_ap
     if ! ensure_iface; then
         echo "[ap] could not create/address $AP_IFACE" >&2
+        record_fail "could not create/address $AP_IFACE"
         return 1
     fi
     # BCM43430 firmware crashes much more often with power saving enabled while running
@@ -376,7 +440,6 @@ cmd_pre() {
     # and benign on other chips. Failures are non-fatal (some kernels ignore the request).
     iw dev "$STA_IFACE" set power_save off 2>/dev/null || true
     iw dev "$AP_IFACE" set power_save off 2>/dev/null || true
-    drop_uplink_for_recovery_ap
     write_hostapd_conf
     setup_nat
     start_dnsmasq
@@ -401,13 +464,13 @@ cmd_post() {
         # systemd sets SERVICE_RESULT for ExecStopPost; "success" means we asked for this
         # stop (a retune, `hotspot off`, an upgrade). Never counted as a failure — the
         # channel we were following is not what ended the run.
-        echo 0 > "$FAILS"
+        clear_fail_count
     elif [ "$start" -gt 0 ] && [ "$ran" -lt "$MIN_GOOD_RUN" ]; then
-        echo $(( fails + 1 )) > "$FAILS"
-        echo "[ap] hostapd ran only ${ran}s, result=${SERVICE_RESULT:-unknown}" \
-             "(failure $(( fails + 1 ))/$MAX_FAILS)" >&2
+        record_fail "hostapd ran only ${ran}s, result=${SERVICE_RESULT:-unknown}"
+    elif [ "$start" -le 0 ]; then
+        echo "[ap] no successful pre-start timestamp; keeping failure counter at $fails" >&2
     else
-        echo 0 > "$FAILS"
+        clear_fail_count
     fi
     rm -f "$STARTED_AT"
     # dnsmasq belongs to this hostapd instance; uap0, its address and the NAT rules do
@@ -448,7 +511,10 @@ cmd_health() {
         # Informational: brcmfmac moves the AP to the station's channel by itself.
         echo "note: beaconing on $live_ch, configured $conf_ch"
     fi
-    [ "$rc" = 0 ] && echo "ok"
+    if [ "$rc" = 0 ]; then
+        clear_fail_count
+        echo "ok"
+    fi
     return "$rc"
 }
 

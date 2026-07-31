@@ -28,7 +28,7 @@ from duml import DumlPacket, DumlStream, crc8, crc16
 import aoa
 
 # DUML roles (device addresses). Approximate values, from public DUML dumps.
-DEV_APP = 0x0a      # mobile app / PC
+DEV_APP = 0x02      # mobile app / PC; 0x0a is the Assistant-style sender
 DEV_RC = 0x02       # remote controller
 DEV_FC = 0x03       # flight controller
 

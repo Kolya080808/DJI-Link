@@ -28,7 +28,7 @@ import struct
 from duml import DumlPacket
 
 # DUML addresses
-DEV_APP = 0x0a      # us (PC / app)
+DEV_APP = 0x02      # us as the mobile app; 0x0a looks like DJI Assistant to the FC
 DEV_FC = 0x03       # flight controller
 
 

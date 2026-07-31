@@ -1,30 +1,29 @@
 #!/usr/bin/env python3
 """
-netfind.py — locate the Pi jump-host from the PC, following this flow:
+netfind.py — locate the Pi jump-host from the PC.
 
-  1. Is the Pi already reachable on the network I'm on? (mDNS raspberrypi.local, a saved
-     host, or a quick sweep of the local /24). If so, use it and DO NOT touch Wi-Fi —
-     the Pi is acting as a repeater and there is already internet.
-  2. If not, is there a Pi access point in range (SSID starts with "PI_DJI_LINK-")? Join
-     it with the default password, then the caller asks the user whether internet is
-     needed; if yes, the caller tells the Pi (via netctl on :9911) to join a Wi-Fi.
-
-Only the discovery/join primitives live here; the "ask the user" and "tell the Pi to go
-online" decisions belong to the client UI. Wi-Fi control is Windows-only (netsh); on
-other platforms discovery still works, only auto-join is skipped.
+Discovery only accepts a host as the Pi after the netctl /status endpoint returns the
+DJI-Link status shape. An open TCP port is not enough: Windows boxes and stale services
+can otherwise look like a Pi while the real board is off.
 """
 
 from __future__ import annotations
 
+import html
+import ipaddress
+import json
+import os
+import re
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 
 AP_PREFIX = "PI_DJI_LINK-"
 AP_DEFAULT_PSK = "raspberry"
-AP_GATEWAY = "10.42.0.1"        # the Pi's address on its own AP
+AP_GATEWAY = "10.42.0.1"
 BRIDGE_PORT = 9910
 NETCTL_PORT = 9911
 
@@ -37,43 +36,123 @@ def _port_open(host: str, port: int, timeout: float = 0.4) -> bool:
         return False
 
 
-def find_on_lan(saved_host: str | None = None) -> str | None:
-    """Return the Pi's address if the netctl control port answers on the current network.
+def _netctl(host: str, path: str, body: dict | None = None, timeout: float = 8.0):
+    url = f"http://{host}:{NETCTL_PORT}{path}"
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read())
 
-    Liveness is probed on NETCTL_PORT, not BRIDGE_PORT: netctl (Wi-Fi/AP API) is always
-    up, but the bridge only opens :9910 once an RC/UDC is plugged in — which happens
-    AFTER discovery — so keying off the bridge made a controller-less Pi look unreachable.
-    """
-    candidates = []
+
+def _looks_like_pi_status(st: object) -> bool:
+    if not isinstance(st, dict):
+        return False
+    if st.get("service") == "dji-link-netctl":
+        return True
+    ap = st.get("ap")
+    uplink = st.get("uplink")
+    return (
+        ("internet" in st and isinstance(st.get("internet"), bool)) and
+        isinstance(st.get("addresses"), list) and
+        (isinstance(ap, dict) or ap is None) and
+        (isinstance(uplink, dict) or uplink is None) and
+        isinstance(st.get("ap_ssid"), str) and
+        st.get("ap_ssid", "").startswith(AP_PREFIX)
+    )
+
+
+def pi_status(host: str) -> dict | None:
+    try:
+        st = _netctl(host, "/status", timeout=2.5)
+    except Exception:
+        return None
+    return st if _looks_like_pi_status(st) else None
+
+
+def is_pi_host(host: str) -> bool:
+    return pi_status(host) is not None
+
+
+def find_on_lan(saved_host: str | None = None) -> str | None:
+    """Return the Pi address if a real netctl endpoint answers on the current network."""
+    candidates: list[str] = []
     if saved_host:
         candidates.append(saved_host)
     candidates += ["raspberrypi.local", AP_GATEWAY]
+    seen: set[str] = set()
     for host in candidates:
         try:
             ip = socket.gethostbyname(host)
         except OSError:
             continue
-        if _port_open(ip, NETCTL_PORT):
+        if ip in seen:
+            continue
+        seen.add(ip)
+        if is_pi_host(ip):
             return ip
     return None
 
 
-def sweep_lan(port: int = NETCTL_PORT) -> str | None:
-    """Fallback: probe every host on our own /24 for the netctl control port, in parallel.
-    Cheap on a home LAN, and it finds the Pi even when mDNS is blocked."""
-    import concurrent.futures
+def _candidate_local_ipv4s() -> list[str]:
+    ips: set[str] = set()
+
     try:
-        my_ip = socket.gethostbyname(socket.gethostname())
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.add(info[4][0])
     except OSError:
-        return None
-    if my_ip.startswith("127."):
-        return None
-    base = my_ip.rsplit(".", 1)[0]
-    hosts = [f"{base}.{i}" for i in range(1, 255)]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=64) as ex:
-        for host, ok in zip(hosts, ex.map(lambda h: _port_open(h, port, 0.3), hosts)):
-            if ok:
-                return host
+        pass
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            ips.add(s.getsockname()[0])
+        finally:
+            s.close()
+    except OSError:
+        pass
+
+    if sys.platform.startswith("win"):
+        cmds = (["ipconfig"],)
+    else:
+        cmds = (["hostname", "-I"], ["ip", "-4", "-o", "addr"])
+    for cmd in cmds:
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=4).stdout
+        except Exception:
+            continue
+        for m in re.finditer(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", out):
+            ips.add(m.group(0))
+
+    return sorted(ip for ip in ips
+                  if not ip.startswith(("127.", "169.254."))
+                  and ipaddress.ip_address(ip).is_private)
+
+
+def sweep_lan(port: int = NETCTL_PORT) -> str | None:
+    """Probe local /24 networks for a real netctl endpoint."""
+    import concurrent.futures
+
+    hosts: list[str] = []
+    seen: set[str] = set()
+    for my_ip in _candidate_local_ipv4s():
+        base = my_ip.rsplit(".", 1)[0]
+        for i in range(1, 255):
+            host = f"{base}.{i}"
+            if host != my_ip and host not in seen:
+                hosts.append(host)
+                seen.add(host)
+
+    def probe(host: str) -> str | None:
+        if not _port_open(host, port, 0.25):
+            return None
+        return host if is_pi_host(host) else None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=96) as ex:
+        for hit in ex.map(probe, hosts):
+            if hit:
+                return hit
     return None
 
 
@@ -87,85 +166,58 @@ def scan_ap() -> list[str]:
     if not _is_windows():
         return []
     try:
-        out = subprocess.run(["netsh", "wlan", "show", "networks"],
-                             capture_output=True, text=True).stdout
-    except FileNotFoundError:
+        out = subprocess.run(["netsh", "wlan", "show", "networks", "mode=bssid"],
+                             capture_output=True, text=True, timeout=15).stdout
+    except Exception:
         return []
-    found = []
-    for line in out.splitlines():
-        line = line.strip()
-        if line.startswith("SSID") and ":" in line:
-            ssid = line.split(":", 1)[1].strip()
-            if ssid.startswith(AP_PREFIX):
-                found.append(ssid)
+    found: list[str] = []
+    for m in re.finditer(r"^\s*SSID\s+\d+\s*:\s*(.+?)\s*$", out, re.M):
+        ssid = m.group(1).strip()
+        if ssid.startswith(AP_PREFIX) and ssid not in found:
+            found.append(ssid)
     return found
 
 
 def join_ap(ssid: str, psk: str = AP_DEFAULT_PSK) -> bool:
-    """Join a Pi AP on Windows by generating a one-shot WLAN profile.
-
-    netsh can only connect to a profile that already exists, so we add one first. The
-    profile is named after the SSID and left in place for next time.
-    """
+    """Join a Pi AP on Windows by generating a one-shot WLAN profile."""
     if not _is_windows():
         return False
     profile = f"""<?xml version="1.0"?>
 <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
-  <name>{ssid}</name>
-  <SSIDConfig><SSID><name>{ssid}</name></SSID></SSIDConfig>
+  <name>{html.escape(ssid)}</name>
+  <SSIDConfig><SSID><name>{html.escape(ssid)}</name></SSID></SSIDConfig>
   <connectionType>ESS</connectionType>
   <connectionMode>manual</connectionMode>
   <MSM><security>
     <authEncryption><authentication>WPA2PSK</authentication>
       <encryption>AES</encryption><useOneX>false</useOneX></authEncryption>
     <sharedKey><keyType>passPhrase</keyType>
-      <protected>false</protected><keyMaterial>{psk}</keyMaterial></sharedKey>
+      <protected>false</protected><keyMaterial>{html.escape(psk)}</keyMaterial></sharedKey>
   </security></MSM>
 </WLANProfile>"""
-    import os
-    import tempfile
     fd, path = tempfile.mkstemp(suffix=".xml")
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(profile)
         subprocess.run(["netsh", "wlan", "add", "profile", f"filename={path}"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, timeout=15)
     finally:
-        os.unlink(path)
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
     r = subprocess.run(["netsh", "wlan", "connect", f"name={ssid}", f"ssid={ssid}"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, timeout=15)
     if r.returncode != 0:
         return False
-    # Wait for the interface to actually get the AP's gateway. Probe the always-up netctl
-    # control port, not the bridge (which needs an RC/UDC plugged in only later).
-    for _ in range(20):
+    for _ in range(30):
         time.sleep(0.5)
-        if _port_open(AP_GATEWAY, NETCTL_PORT):
+        if is_pi_host(AP_GATEWAY):
             return True
     return False
 
 
 # ---------------------------------------------------------------- Pi netctl API
-def _netctl(host: str, path: str, body: dict | None = None, timeout: float = 8.0):
-    url = f"http://{host}:{NETCTL_PORT}{path}"
-    data = None
-    if body is not None:
-        import json
-        data = json.dumps(body).encode()
-    req = urllib.request.Request(url, data=data,
-                                 headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        import json
-        return json.loads(r.read())
-
-
-def pi_status(host: str) -> dict | None:
-    try:
-        return _netctl(host, "/status")
-    except Exception:
-        return None
-
-
 def pi_scan_wifi(host: str) -> list[dict]:
     try:
         return _netctl(host, "/scan").get("networks", [])
@@ -174,17 +226,11 @@ def pi_scan_wifi(host: str) -> list[dict]:
 
 
 def pi_connect_wifi(host: str, ssid: str, psk: str) -> dict:
-    return _netctl(host, "/connect", {"ssid": ssid, "psk": psk}, timeout=30)
+    return _netctl(host, "/connect", {"ssid": ssid, "psk": psk}, timeout=60)
 
 
 def discover(saved_host: str | None = None, allow_ap_join: bool = True) -> dict:
-    """Full discovery. Returns:
-        {"host": ip or None, "via": "lan"|"sweep"|"ap"|None,
-         "joined_ap": ssid or None, "needs_internet_prompt": bool}
-    needs_internet_prompt is True only when we had to join a Pi AP (case 2), i.e. the
-    moment it makes sense to ask the user about internet. Reaching the Pi over an
-    existing LAN never prompts.
-    """
+    """Full discovery result for the GUI/CLI."""
     host = find_on_lan(saved_host)
     if host:
         return {"host": host, "via": "lan", "joined_ap": None,
@@ -198,22 +244,31 @@ def discover(saved_host: str | None = None, allow_ap_join: bool = True) -> dict:
     if allow_ap_join:
         for ssid in scan_ap():
             if join_ap(ssid):
-                # The Pi may already have an uplink (it was left connected to a Wi-Fi):
-                # if it reports internet, everything already works — do not prompt.
                 st = pi_status(AP_GATEWAY)
-                has_net = bool(st and st.get("internet"))
+                if not st:
+                    continue
+                has_net = bool(st.get("internet"))
                 return {"host": AP_GATEWAY, "via": "ap", "joined_ap": ssid,
                         "needs_internet_prompt": not has_net}
     return {"host": None, "via": None, "joined_ap": None,
             "needs_internet_prompt": False}
 
 
+def wait_for_pi(host: str = AP_GATEWAY, timeout_s: float = 45.0) -> dict | None:
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        st = pi_status(host)
+        if st:
+            return st
+        time.sleep(0.5)
+    return None
+
+
 def main() -> int:
     r = discover(sys.argv[1] if len(sys.argv) > 1 else None)
     print(r)
     if r["host"]:
-        st = pi_status(r["host"])
-        print("pi status:", st)
+        print("pi status:", pi_status(r["host"]))
     return 0 if r["host"] else 1
 
 

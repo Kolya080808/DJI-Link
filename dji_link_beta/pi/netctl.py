@@ -771,7 +771,8 @@ def status() -> dict:
             "ap_healthy": healthy, "ap_detail": why,
             "ap_channel": ap_live_channel() or ap_conf_channel(),
             "ap_clients": ap_clients() if hostapd_mode() else 0,
-            "uplink_ssid": _uplink_ssid(), "uplink_ip": _uplink_ip()}
+            "uplink_ssid": _uplink_ssid(), "uplink_ip": _uplink_ip(),
+            "service": "dji-link-netctl"}
 
 
 def doctor() -> dict:
@@ -895,6 +896,14 @@ def ap_watchdog() -> None:
             systemctl("restart", AP_SERVICE)
             continue
         backoff = 30.0
+
+        wanted, current = ap_wanted_channel(), ap_conf_channel()
+        if wanted and current and wanted != current and now - last_fix >= backoff:
+            last_fix = now
+            print(f"[netctl] watchdog: retuning {AP_SERVICE} "
+                  f"for uplink channel {current} -> {wanted}", flush=True)
+            systemctl("restart", AP_SERVICE)
+            continue
 
         n = ap_clients()
         if n:

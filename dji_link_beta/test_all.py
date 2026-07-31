@@ -103,7 +103,7 @@ class Tester:
                                      (0x0D, 0x0D, 0x02)):
                     self.seq += 1
                     try:
-                        self.t.send(DumlPacket(sender=0x0A, receiver=rcv, cmd_set=cs,
+                        self.t.send(DumlPacket(sender=0x02, receiver=rcv, cmd_set=cs,
                                     cmd_id=cid, seq=self.seq, cmd_type=0x40).encode())
                     except Exception:
                         pass
@@ -133,7 +133,7 @@ class Tester:
         print("[*] waking the drone's serial...")
         for i in range(40):
             self.seq += 1
-            self.t.send(DumlPacket(sender=0x0A, receiver=0x1F, cmd_set=0, cmd_id=1,
+            self.t.send(DumlPacket(sender=0x02, receiver=0x1F, cmd_set=0, cmd_id=1,
                                    seq=self.seq, cmd_type=0x40).encode())
             time.sleep(0.1)
             with self.lock:
@@ -249,7 +249,7 @@ def main() -> int:
         # ---------- SAFE PART ----------
         print("### SAFE PART (we don't touch the motors) ###")
         tt.step("Identification (GetVersion)",
-                lambda: tt.t.send(DumlPacket(sender=0x0A, receiver=0x1F, cmd_set=0,
+                lambda: tt.t.send(DumlPacket(sender=0x02, receiver=0x1F, cmd_set=0,
                                   cmd_id=1, seq=1, cmd_type=0x40).encode()),
                 expect=(0x00, 0x01))
 
