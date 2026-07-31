@@ -10,6 +10,7 @@ prerelease: true
   C++ client and `dji-link-beta` run `netsh wlan disconnect`, then retry connection to
   the same per-device `PI_DJI_LINK-*` profile until the Pi answers again. This avoids
   Windows keeping a stale association after the Pi's single radio changes channel.
+  Missing `netsh`/`ipconfig` stdout is also handled as an empty scan instead of crashing.
 
 - **A successful Pi uplink join now ends with one predictable AP refresh.** `netctl.py`
   schedules the refresh after its HTTP response can leave the Pi; failed uplink joins

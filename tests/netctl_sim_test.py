@@ -513,6 +513,12 @@ def fake_run(args, **kwargs):
     return FakeCompleted()
 
 netfind._is_windows = lambda: True
+class FakeNoStdout:
+    returncode = 0
+    stdout = None
+
+netfind.subprocess.run = lambda *args, **kwargs: FakeNoStdout()
+check(netfind.scan_ap() == [], "a Windows command with stdout=None is treated as empty output")
 netfind.subprocess.run = fake_run
 netfind.time.sleep = lambda _seconds: None
 netfind.is_pi_host = lambda host: host == netfind.AP_GATEWAY

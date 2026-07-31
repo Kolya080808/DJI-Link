@@ -129,7 +129,7 @@ def _candidate_local_ipv4s() -> list[str]:
         cmds = (["hostname", "-I"], ["ip", "-4", "-o", "addr"])
     for cmd in cmds:
         try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=4).stdout
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=4).stdout or ""
         except Exception:
             continue
         for m in re.finditer(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", out):
@@ -176,8 +176,8 @@ def scan_ap() -> list[str]:
     if not _is_windows():
         return []
     try:
-        out = subprocess.run(["netsh", "wlan", "show", "networks", "mode=bssid"],
-                             capture_output=True, text=True, timeout=15).stdout
+        out = (subprocess.run(["netsh", "wlan", "show", "networks", "mode=bssid"],
+                              capture_output=True, text=True, timeout=15).stdout or "")
     except Exception:
         return []
     found: list[str] = []
