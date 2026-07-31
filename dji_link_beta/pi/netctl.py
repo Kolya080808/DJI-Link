@@ -202,12 +202,8 @@ def _set_ap_off_flag(off: bool) -> None:
 
 
 def ap_health() -> tuple[bool, str]:
-    """(healthy, reason) for the local lifeline only.
-
-    NAT/internet is deliberately not part of this result. A missing uplink or forwarding
-    rule must never make the watchdog restart an AP that still serves DHCP and the Pi at
-    10.42.0.1.
-    """
+    """(healthy, reason). Covers the whole AP, not just 'is the process alive': the
+    interface, its address, hostapd, dnsmasq and the NAT rule."""
     if not hostapd_mode():
         return True, "nm-fallback"
     if not ap_should_run():
@@ -823,7 +819,7 @@ def have_internet() -> bool:
 
 
 def refresh_internet() -> bool:
-    """Probe the optional uplink and publish the result for future /status calls."""
+    """Probe the optional uplink and cache the result for future /status calls."""
     global _internet_cache
     rc, _ = run("ping", "-c", "1", "-W", "1", "-I", STA_IFACE, "1.1.1.1", timeout=4)
     with _internet_lock:
@@ -832,14 +828,13 @@ def refresh_internet() -> bool:
 
 
 def internet_monitor() -> None:
-    """Keep internet state fresh without coupling Pi reachability to the uplink."""
     while True:
         refresh_internet()
         time.sleep(5)
 
 
 def healthz() -> dict:
-    """A command-free identity response used to discover the Pi on an offline AP."""
+    """Command-free Pi identity used for discovery when the uplink is offline."""
     return {"ok": True, "service": "dji-link-netctl", "address": AP_ADDR,
             "ap_ssid": AP_SSID}
 
@@ -920,7 +915,7 @@ def doctor() -> dict:
 
 # ---------------------------------------------------------------- HTTP API
 class Handler(BaseHTTPRequestHandler):
-    server_version = "netctl/0.8.10"
+    server_version = "netctl/0.8.2"
 
     def _send(self, obj, code=200):
         body = json.dumps(obj).encode()
@@ -975,9 +970,7 @@ def ap_watchdog() -> None:
     turn into a second restart loop on top of systemd. The service itself retries at a
     low rate without deleting uap0 or disconnecting wlan0.
 
-    A healthy AP is never restarted merely because it has no clients or no uplink. Such
-    speculative restarts are especially harmful on BCM43430: they can leave a visible
-    SSID whose data path is wedged until the next reboot.
+    A healthy AP is never restarted merely because it has no clients or no uplink.
     """
     if not hostapd_mode():
         return
@@ -1013,10 +1006,6 @@ def ap_watchdog() -> None:
             continue
         failure_latched = False
         backoff = 30.0
-
-        # Forwarding is optional and may be flushed independently of hostapd. Repair it
-        # in place; never bounce the local AP just to restore internet sharing.
-        ap_sh("repair-network")
 
         # Retune only for a real, fully associated uplink whose channel stayed stable.
         # With no uplink (the normal field case), leave the healthy AP untouched: it

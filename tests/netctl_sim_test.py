@@ -380,8 +380,8 @@ check(body.find('"state"', ap_at) < body.find('"uplink"'), '"ap" carries the fir
 check('"internet"' in body and '"ap_ssid"' in body and '"ap_psk"' in body, "required keys present")
 check(netctl.healthz()["service"] == "dji-link-netctl", "/healthz identifies the Pi without commands")
 check(w.ping_calls == 0, "/status never waits for an internet probe")
-check(netctl.refresh_internet(), "the background/doctor probe can update internet state")
-check(w.ping_calls == 1 and netctl.have_internet(), "cached internet state is returned immediately")
+check(netctl.refresh_internet(), "the background/doctor probe updates internet state")
+check(w.ping_calls == 1 and netctl.have_internet(), "cached internet state is immediate")
 
 
 # ------------------------------------------------------------------ the reported cycle
@@ -475,6 +475,29 @@ w = World(HOME, PW, profiles=[dict(good)], active="preconfigured",
 setup(w)
 check(netctl.confirmed_uplink_channel(0) == "7",
       "two stable connected observations confirm channel 7")
+
+print("\nT. PC discovery must accept an offline Pi through /healthz")
+nf_spec = importlib.util.spec_from_file_location(
+    "netfind", os.path.join(HERE, "..", "dji_link_beta", "netfind.py"))
+netfind = importlib.util.module_from_spec(nf_spec)
+nf_spec.loader.exec_module(netfind)
+nf_calls = []
+
+def fake_netctl(host, path, body=None, timeout=8.0):
+    nf_calls.append(path)
+    if path == "/healthz":
+        return {"ok": True, "service": "dji-link-netctl", "address": "10.42.0.1"}
+    if path == "/status":
+        raise TimeoutError("offline status")
+    raise AssertionError(path)
+
+netfind._netctl = fake_netctl
+check(netfind.is_pi_host("10.42.0.1"), "offline /healthz is enough to identify the Pi")
+check(nf_calls == ["/healthz"], "discovery does not wait for detailed status")
+nf_calls.clear()
+check(netfind.pi_status("10.42.0.1") is not None,
+      "detailed status falls back to the local health endpoint")
+check(nf_calls == ["/status", "/healthz"], "status fallback uses /healthz")
 
 print()
 if FAILS:

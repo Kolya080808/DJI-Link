@@ -6,23 +6,15 @@ prerelease: true
 
 ## Changed
 
-- **Pi discovery no longer depends on internet.** The PC client now confirms
-  `10.42.0.1` through a command-free `/healthz` endpoint. Detailed `/status` and its
-  uplink state are optional, so an offline Pi is still accepted immediately.
+- **Pi discovery no longer depends on internet.** `pc_client.py` now identifies the Pi
+  through a command-free `/healthz` response at `10.42.0.1`; detailed uplink status is
+  optional and cannot make an offline Pi look unreachable.
 
-- **Internet checks no longer block the local control API.** They run in a background
-  thread and `/status` only reads the cached result. With no uplink, the API, bridge and
-  SSH path remain independent of the failed internet probe.
+- **Internet checks no longer block `/status`.** They run in the background and the
+  local API returns the cached result immediately when no uplink exists.
 
-- **A healthy AP is never restarted because its last client disconnected.** The old
-  60-second speculative restart was unsafe on BCM43430 and could leave a visible SSID
-  with a wedged data path. AP restarts now require an actual local health failure or a
-  confirmed uplink channel change.
-
-- **Local AP health is independent from NAT.** DHCP, the `10.42.0.0/24` route and local
-  services are the lifeline. Missing forwarding rules are repaired in place and cannot
-  trigger a hostapd restart; firewall allow rules are inserted ahead of later reject
-  policies.
+- **A healthy AP is not restarted after its last client disconnects.** AP restarts now
+  require a real health failure or a confirmed uplink channel change.
 
 - **The AP watchdog now verifies the uplink before changing channels.** It requires
   NetworkManager to report `wlan0` connected, `iw link` to report a real SSID/frequency,
@@ -139,9 +131,9 @@ prerelease: true
 
 <!--
 Release checklist:
-  1. Keep "version" above equal to the tag you push (tag v0.8.10 => version: 0.8.10).
+  1. Keep "version" above equal to the tag you push (tag v0.9.0 => version: 0.9.0).
   2. Commit UPDATE.md.
-  3. git tag v0.8.10 && git push origin v0.8.10
+  3. git tag v0.9.0 && git push origin v0.9.0
 Everything below the second "---" (except this comment) becomes the GitHub Release body.
 These binaries are unsigned, so first launch shows a Gatekeeper (macOS) / SmartScreen
 (Windows) warning — expected for a pre-release.

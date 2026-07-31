@@ -69,8 +69,6 @@ def pi_status(host: str) -> dict | None:
         st = None
     if _looks_like_pi_status(st):
         return st
-    # Detailed status may be busy scanning or changing uplinks. Pi identity and local
-    # reachability do not depend on those operations or on internet availability.
     return pi_health(host)
 
 

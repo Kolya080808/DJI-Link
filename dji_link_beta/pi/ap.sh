@@ -346,11 +346,11 @@ setup_nat() {
     # Route AP clients out through whatever uplink exists. "! -o uap0" rather than
     # "-o wlan0" so the rule keeps working if the uplink is ever ethernet or a dongle.
     iptables -t nat -C POSTROUTING -s "$AP_SUBNET" ! -o "$AP_IFACE" -j MASQUERADE 2>/dev/null \
-        || iptables -t nat -I POSTROUTING 1 -s "$AP_SUBNET" ! -o "$AP_IFACE" -j MASQUERADE
+        || iptables -t nat -A POSTROUTING -s "$AP_SUBNET" ! -o "$AP_IFACE" -j MASQUERADE
     iptables -C FORWARD -i "$AP_IFACE" -s "$AP_SUBNET" -j ACCEPT 2>/dev/null \
-        || iptables -I FORWARD 1 -i "$AP_IFACE" -s "$AP_SUBNET" -j ACCEPT
+        || iptables -A FORWARD -i "$AP_IFACE" -s "$AP_SUBNET" -j ACCEPT
     iptables -C FORWARD -o "$AP_IFACE" -d "$AP_SUBNET" -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null \
-        || iptables -I FORWARD 1 -o "$AP_IFACE" -d "$AP_SUBNET" -m state --state RELATED,ESTABLISHED -j ACCEPT
+        || iptables -A FORWARD -o "$AP_IFACE" -d "$AP_SUBNET" -m state --state RELATED,ESTABLISHED -j ACCEPT
     # Reaching the Pi ITSELF from its own AP is a separate path from reaching the
     # internet through it, and it must survive anything the uplink does. On a stock
     # Raspberry Pi OS the INPUT policy is ACCEPT and these are no-ops; they are here so
@@ -359,14 +359,14 @@ setup_nat() {
     local port
     for port in 67 53; do
         iptables -C INPUT -i "$AP_IFACE" -p udp --dport "$port" -j ACCEPT 2>/dev/null \
-            || iptables -I INPUT 1 -i "$AP_IFACE" -p udp --dport "$port" -j ACCEPT
+            || iptables -A INPUT -i "$AP_IFACE" -p udp --dport "$port" -j ACCEPT
     done
     for port in 53 "$NETCTL_PORT" "$BRIDGE_PORT" 22; do
         iptables -C INPUT -i "$AP_IFACE" -p tcp --dport "$port" -j ACCEPT 2>/dev/null \
-            || iptables -I INPUT 1 -i "$AP_IFACE" -p tcp --dport "$port" -j ACCEPT
+            || iptables -A INPUT -i "$AP_IFACE" -p tcp --dport "$port" -j ACCEPT
     done
     iptables -C INPUT -i "$AP_IFACE" -p icmp -j ACCEPT 2>/dev/null \
-        || iptables -I INPUT 1 -i "$AP_IFACE" -p icmp -j ACCEPT
+        || iptables -A INPUT -i "$AP_IFACE" -p icmp -j ACCEPT
 }
 
 teardown_nat() {
@@ -398,7 +398,7 @@ start_dnsmasq() {
     stop_dnsmasq
     mkdir -p "$RUN_DIR"
     if ! dnsmasq --interface="$AP_IFACE" --bind-dynamic --except-interface=lo \
-        --conf-file=/dev/null --no-resolv --no-hosts --dhcp-authoritative \
+        --no-resolv --no-hosts --dhcp-authoritative \
         --dhcp-range="$DHCP_LO,$DHCP_HI,255.255.255.0,12h" \
         --dhcp-option=option:router,"$AP_ADDR" \
         --dhcp-option=option:dns-server,"$AP_ADDR" \
@@ -547,12 +547,10 @@ cmd_health() {
     fi
     ip -4 addr show dev "$AP_IFACE" 2>/dev/null | grep -q "inet $AP_CIDR" \
         || { echo "$AP_IFACE has no $AP_CIDR"; rc=1; }
-    ip -4 route show dev "$AP_IFACE" 2>/dev/null | grep -q "^$AP_SUBNET" \
-        || { echo "$AP_IFACE has no local $AP_SUBNET route"; rc=1; }
     pgrep -f "hostapd $HOSTAPD_CONF" >/dev/null 2>&1 || { echo "hostapd not running"; rc=1; }
     dnsmasq_alive || { echo "dnsmasq not running"; rc=1; }
     iptables -t nat -C POSTROUTING -s "$AP_SUBNET" ! -o "$AP_IFACE" -j MASQUERADE 2>/dev/null \
-        || echo "note: NAT rule missing; local 10.42.0.1 access is still healthy"
+        || { echo "NAT rule missing"; rc=1; }
     conf_ch="$(sed -n 's/^channel=\([0-9]\+\)$/\1/p' "$HOSTAPD_CONF" 2>/dev/null | head -n1)"
     live_ch="$(iw dev "$AP_IFACE" info 2>/dev/null | sed -n 's/.*channel[[:space:]]\+\([0-9]\+\).*/\1/p' | head -n1)"
     if [ -z "$live_ch" ]; then
@@ -574,12 +572,11 @@ case "${1:-}" in
     post)   cmd_post ;;
     down)   cmd_down ;;
     health) cmd_health ;;
-    repair-network) setup_nat ;;
     failures) fail_count; echo ;;
     reset-failures) clear_fail_count ;;
     conf)   write_hostapd_conf; cat "$HOSTAPD_CONF" ;;
     # stdout is exactly "<hw_mode> <channel>" and nothing else: netctl.py reads this to
     # decide whether the AP has to be retuned, and it merges stderr into what it reads.
     chan)   pick_hw_channel 2>/dev/null; echo ;;
-    *) echo "usage: ap.sh pre|run|post|down|health|repair-network|failures|reset-failures|conf|chan" >&2; exit 2 ;;
+    *) echo "usage: ap.sh pre|run|post|down|health|failures|reset-failures|conf|chan" >&2; exit 2 ;;
 esac
