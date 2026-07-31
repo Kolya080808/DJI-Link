@@ -30,10 +30,11 @@
 #     channel the world regulatory domain (00) marks NO-IR. hostapd refuses to start
 #     in both cases, systemd restarts it, and the Pi has no network at all.
 #   * Two failed runs in a row and `pick_channel` stops trying to follow the uplink
-#     and pins the AP to a known-good 2.4 GHz channel (the v0.8.4 behaviour). In that
-#     recovery mode `pre` also disconnects wlan0 first, so the one-radio AP can really
-#     move to the safe channel. Losing uplink is acceptable here; losing the Pi's own AP
-#     is not.
+#     and pins the AP to a known-good 2.4 GHz channel (the v0.8.4 behaviour). The AP
+#     unit itself NEVER disconnects wlan0 during boot/restart: doing that can kill the
+#     normal LAN/SSH path exactly when the operator is trying to recover the Pi. If the
+#     station side must be temporarily released for a new uplink, netctl.py does it only
+#     inside an explicit Wi-Fi connect operation and starts the AP again afterwards.
 #   * `post` does NOT delete uap0. Creating/destroying a brcmfmac virtual interface
 #     every few seconds wedges the firmware and takes the station interface down with
 #     it. The interface is created once and reused; only hostapd restarts.
@@ -204,8 +205,8 @@ clear_fail_count() {
 #
 # Follow the live uplink while the AP is healthy, and only when the kernel says this
 # radio may beacon on that channel. After repeated instant hostapd failures, stop
-# following the uplink and choose a safe channel; cmd_pre disconnects wlan0 first so the
-# one-radio AP is not forced to fight the station side for a different channel.
+# following the uplink and choose a safe channel. It does not disconnect wlan0; the AP is
+# allowed to fail/retry rather than silently cutting the Pi's existing LAN path.
 pick_hw_channel() {
     local want fails
     fails="$(fail_count)"
@@ -244,20 +245,6 @@ pick_hw_channel() {
     if [ -n "$c" ]; then printf '%s %s' "$(chan_to_hw "$c")" "$c"; return 0; fi
     # `iw` missing or the phy told us nothing — channel 6 is the safest blind guess.
     printf 'g 6'
-}
-
-drop_uplink_for_recovery_ap() {
-    local fails want
-    fails="$(fail_count)"
-    [ "$fails" -ge "$MAX_FAILS" ] || return 0
-    want="$(sta_channel)"
-    [ -n "$want" ] || return 0
-
-    echo "[ap] $fails failed starts in a row; disconnecting $STA_IFACE from channel $want so the AP can recover" >&2
-    nmcli dev disconnect "$STA_IFACE" >/dev/null 2>&1 \
-        || iw dev "$STA_IFACE" disconnect >/dev/null 2>&1 \
-        || true
-    sleep 1
 }
 
 ensure_iface() {
@@ -426,10 +413,6 @@ write_hostapd_conf() {
 cmd_pre() {
     mkdir -p "$RUN_DIR"
     mkdir -p "$STATE_DIR"
-    # If the previous starts failed, release the one-radio STA side before even trying to
-    # create uap0. On brcmfmac, adding a virtual AP while associated is one of the common
-    # boot/reconnect failure modes.
-    drop_uplink_for_recovery_ap
     if ! ensure_iface; then
         echo "[ap] could not create/address $AP_IFACE" >&2
         record_fail "could not create/address $AP_IFACE"
@@ -452,9 +435,9 @@ cmd_post() {
     # Count how long hostapd actually stayed up. A run that ends immediately means the
     # config was rejected (bad channel for this regulatory domain, 5 GHz on a 2.4 GHz
     # radio, …); after $MAX_FAILS of those, pick_hw_channel stops following the uplink
-    # and pins a channel that works. cmd_pre disconnects wlan0 in that recovery mode so
-    # the one-radio AP can actually move there. A run that lasted is a normal restart
-    # and clears the counter.
+    # and pins a channel that works. It still does not disconnect wlan0 here: boot-time
+    # recovery must not destroy the Pi's existing LAN/SSH path. A run that lasted is a
+    # normal restart and clears the counter.
     local start now ran fails
     start="$(cat "$STARTED_AT" 2>/dev/null || echo 0)"
     now="$(date +%s)"

@@ -73,9 +73,8 @@ run_case "5 GHz uplink on a DFS channel"      "g 6"  IW_LINK_FREQ=5260 IW_BAND5=
 # Odd regulatory domains: fall back to something, never to nothing.
 run_case "channel 6 not allowed, 1 is"        "g 1"  IW_LINK_FREQ= IW_BAND24="1 2 3 4 5"
 run_case "only channel 4 allowed"             "g 4"  IW_LINK_FREQ= IW_BAND24="4"
-# If earlier bad starts pinned the AP, recover the lifeline AP first. cmd_pre disconnects
-# wlan0 in this mode before hostapd starts, so the safe channel is no longer fighting an
-# active station interface.
+# If earlier bad starts pinned the AP, channel selection falls back to the lifeline
+# channel. The service must not disconnect wlan0 from ap.sh's boot/restart path.
 run_failed_case "failed starts, uplink on channel 7" "g 6" IW_LINK_FREQ=2442
 
 if [ "$fails" -ne 0 ]; then

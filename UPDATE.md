@@ -1,6 +1,6 @@
 ---
-title: DJI Link v0.8.7 — Pi AP lifeline hardening
-version: 0.8.7
+title: DJI Link v0.8.8 — Pi AP lifeline hardening
+version: 0.8.8
 prerelease: true
 ---
 
@@ -25,6 +25,11 @@ prerelease: true
   reloads `brcmfmac` if available, disables Wi-Fi power save, waits longer for `wlan0` /
   phy registration, verifies that `uap0` is really an AP interface, and recreates it if it
   was left in the wrong state.
+
+- **The AP boot path no longer disconnects `wlan0`.** A previous recovery path could
+  cut the normal LAN/SSH uplink while trying to recover the Pi AP. The AP service now
+  starts before NetworkManager on boot, owns `uap0` creation itself, and never drops the
+  station interface from `ap.sh` during ordinary service restarts.
 
 - **Uplink changes no longer have to come from the PC client.** If NetworkManager
   reconnects `wlan0` after boot by itself, the `netctl.py` watchdog notices when the AP

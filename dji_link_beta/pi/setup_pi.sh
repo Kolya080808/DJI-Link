@@ -215,21 +215,19 @@ wifi.powersave = 2
 wifi.scan-rand-mac-address = no
 EOF
 
-    # Create the AP interface as soon as the radio appears, before NetworkManager has
-    # used wlan0 for anything. Adding a virtual AP interface to a brcmfmac phy that is
-    # already associated is the step that most often knocks the station connection over;
-    # doing it at phy-registration time avoids that entirely. ap.sh copes either way, so
-    # a failure here is not fatal.
-    cat > /etc/udev/rules.d/90-dji-uap0.rules <<'EOF'
-ACTION=="add", SUBSYSTEM=="ieee80211", KERNEL=="phy0", RUN+="/sbin/iw phy %k interface add uap0 type __ap"
-EOF
+    # Older installers tried to create uap0 from an udev RUN rule. That was racy on
+    # reboot: the path to iw differs between images, and udev can race NetworkManager's
+    # first wlan0 association. dji-ap.service now owns uap0 creation before
+    # NetworkManager starts, so remove the obsolete rule on upgrades.
+    rm -f /etc/udev/rules.d/90-dji-uap0.rules
     udevadm control --reload 2>/dev/null || true
 
     cat > /etc/systemd/system/dji-ap.service <<EOF
 [Unit]
 Description=DJI Link Wi-Fi access point (hostapd + dnsmasq on uap0)
-After=NetworkManager.service
-Wants=NetworkManager.service
+After=systemd-modules-load.service systemd-udev-trigger.service
+Before=NetworkManager.service
+Wants=systemd-udev-trigger.service
 
 [Service]
 Type=simple
@@ -314,8 +312,11 @@ EOF
     systemctl enable dji-netctl.service
     systemctl enable dji-bridge.service
     systemctl enable dji-update.timer
-    # Restart NM first so it reloads the uap0-unmanaged rule before the AP creates uap0.
-    systemctl restart NetworkManager.service 2>/dev/null || true
+    # Do not restart NetworkManager here: on an SSH install that tears down the uplink
+    # we are currently using. Reload the config and mark uap0 unmanaged directly; the
+    # boot ordering below makes a full NM restart unnecessary on the next reboot too.
+    systemctl reload NetworkManager.service 2>/dev/null || nmcli general reload 2>/dev/null || true
+    nmcli dev set uap0 managed no 2>/dev/null || true
     systemctl restart dji-ap.service || true
     systemctl restart dji-netctl.service || true
     systemctl restart dji-bridge.service || true
