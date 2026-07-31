@@ -43,6 +43,7 @@ class World:
         self.ap_failures = ap_failures
         self.ap_recovering = ap_recovering
         self.link_freqs = list(link_freqs)
+        self.ping_calls = 0
         self.scan_visible = {n["ssid"] for n in networks}
         self.log = []
 
@@ -233,6 +234,7 @@ def make_run(w: World):
                 return 0, "channel 6 (2437 MHz)"
             return 0, ""
         if a[0] == "ping":
+            w.ping_calls += 1
             return (0, "") if w.active else (1, "")
         if a[0] == "hostname":
             return 0, "10.42.0.1 192.168.1.55"
@@ -376,6 +378,10 @@ ap_at, up_at = body.find('"ap"'), body.find('"uplink"')
 check(ap_at != -1 and up_at != -1 and ap_at < up_at, '"ap" comes before "uplink"')
 check(body.find('"state"', ap_at) < body.find('"uplink"'), '"ap" carries the first "state"')
 check('"internet"' in body and '"ap_ssid"' in body and '"ap_psk"' in body, "required keys present")
+check(netctl.healthz()["service"] == "dji-link-netctl", "/healthz identifies the Pi without commands")
+check(w.ping_calls == 0, "/status never waits for an internet probe")
+check(netctl.refresh_internet(), "the background/doctor probe can update internet state")
+check(w.ping_calls == 1 and netctl.have_internet(), "cached internet state is returned immediately")
 
 
 # ------------------------------------------------------------------ the reported cycle

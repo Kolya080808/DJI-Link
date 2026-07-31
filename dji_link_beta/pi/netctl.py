@@ -202,8 +202,12 @@ def _set_ap_off_flag(off: bool) -> None:
 
 
 def ap_health() -> tuple[bool, str]:
-    """(healthy, reason). Covers the whole AP, not just 'is the process alive': the
-    interface, its address, hostapd, dnsmasq and the NAT rule."""
+    """(healthy, reason) for the local lifeline only.
+
+    NAT/internet is deliberately not part of this result. A missing uplink or forwarding
+    rule must never make the watchdog restart an AP that still serves DHCP and the Pi at
+    10.42.0.1.
+    """
     if not hostapd_mode():
         return True, "nm-fallback"
     if not ap_should_run():
@@ -813,19 +817,31 @@ _internet_lock = threading.Lock()
 
 
 def have_internet() -> bool:
-    """Cached: /status is polled every second or two by the PC client and a ping with no
-    route out costs the full timeout, which used to make the whole API feel dead."""
-    global _internet_cache
+    """Return the last probe result immediately; never block the local control API."""
     with _internet_lock:
-        when, val = _internet_cache
-        if time.monotonic() - when < 10:
-            return val
-    rc, _ = run("ping", "-c", "1", "-W", "2", "-I", STA_IFACE, "1.1.1.1", timeout=8)
-    if rc != 0:
-        rc, _ = run("ping", "-c", "1", "-W", "2", "1.1.1.1", timeout=8)
+        return _internet_cache[1]
+
+
+def refresh_internet() -> bool:
+    """Probe the optional uplink and publish the result for future /status calls."""
+    global _internet_cache
+    rc, _ = run("ping", "-c", "1", "-W", "1", "-I", STA_IFACE, "1.1.1.1", timeout=4)
     with _internet_lock:
         _internet_cache = (time.monotonic(), rc == 0)
     return rc == 0
+
+
+def internet_monitor() -> None:
+    """Keep internet state fresh without coupling Pi reachability to the uplink."""
+    while True:
+        refresh_internet()
+        time.sleep(5)
+
+
+def healthz() -> dict:
+    """A command-free identity response used to discover the Pi on an offline AP."""
+    return {"ok": True, "service": "dji-link-netctl", "address": AP_ADDR,
+            "ap_ssid": AP_SSID}
 
 
 def status() -> dict:
@@ -898,13 +914,13 @@ def doctor() -> dict:
     add("NAT", "MASQUERADE" in out, out)
     rc, out = run("sysctl", "-n", "net.ipv4.ip_forward")
     add("ip_forward", out.strip() == "1", out)
-    add("internet", have_internet(), "ping 1.1.1.1")
+    add("internet", refresh_internet(), "ping 1.1.1.1 through wlan0")
     return {"ok": all(c["ok"] for c in checks), "checks": checks}
 
 
 # ---------------------------------------------------------------- HTTP API
 class Handler(BaseHTTPRequestHandler):
-    server_version = "netctl/0.8.2"
+    server_version = "netctl/0.8.10"
 
     def _send(self, obj, code=200):
         body = json.dumps(obj).encode()
@@ -920,7 +936,9 @@ class Handler(BaseHTTPRequestHandler):
         print(f"[netctl] {self.address_string()} {fmt % a}", flush=True)
 
     def do_GET(self):
-        if self.path.startswith("/status"):
+        if self.path.startswith("/healthz"):
+            self._send(healthz())
+        elif self.path.startswith("/status"):
             self._send(status())
         elif self.path.startswith("/scan"):
             self._send({"networks": scan()})
@@ -957,17 +975,14 @@ def ap_watchdog() -> None:
     turn into a second restart loop on top of systemd. The service itself retries at a
     low rate without deleting uap0 or disconnecting wlan0.
 
-    It also clears the BCM43430 (Pi Zero 2 W) state where hostapd stops accepting new
-    associations after the last client disassociates — but only while nobody is
-    connected, and off the real association list rather than off stale DHCP leases.
+    A healthy AP is never restarted merely because it has no clients or no uplink. Such
+    speculative restarts are especially harmful on BCM43430: they can leave a visible
+    SSID whose data path is wedged until the next reboot.
     """
     if not hostapd_mode():
         return
     CHECK_S = 15
-    IDLE_S = 60
     backoff, last_fix = 30.0, 0.0
-    had_clients = False
-    idle_since: float | None = None
     failure_latched = False
 
     while True:
@@ -999,6 +1014,10 @@ def ap_watchdog() -> None:
         failure_latched = False
         backoff = 30.0
 
+        # Forwarding is optional and may be flushed independently of hostapd. Repair it
+        # in place; never bounce the local AP just to restore internet sharing.
+        ap_sh("repair-network")
+
         # Retune only for a real, fully associated uplink whose channel stayed stable.
         # With no uplink (the normal field case), leave the healthy AP untouched: it
         # keeps beaconing, serving DHCP and exposing the Pi at 10.42.0.1.
@@ -1010,21 +1029,6 @@ def ap_watchdog() -> None:
             systemctl("restart", AP_SERVICE)
             continue
 
-        n = ap_clients()
-        if n:
-            had_clients, idle_since = True, None
-        elif had_clients:
-            if idle_since is None:
-                idle_since = now
-                print(f"[netctl] watchdog: last client left — clearing the AP in {IDLE_S}s "
-                      "if nobody reconnects", flush=True)
-            elif now - idle_since >= IDLE_S:
-                print("[netctl] watchdog: restarting dji-ap to clear BCM43430 state",
-                      flush=True)
-                systemctl("restart", AP_SERVICE)
-                had_clients, idle_since = False, None
-
-
 def serve():
     _wifi_radio_on()
     # systemd starts and persistently recovers dji-ap independently. Do not turn netctl
@@ -1032,6 +1036,7 @@ def serve():
     if not hostapd_mode():
         hotspot(True)
     threading.Thread(target=ap_watchdog, daemon=True).start()
+    threading.Thread(target=internet_monitor, daemon=True).start()
     # Threaded: /scan takes seconds and /connect tens of seconds. On the old
     # single-threaded server either one blocked /status, and the PC client read that as
     # "the Pi stopped answering" in the middle of a perfectly good operation.

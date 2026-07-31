@@ -125,6 +125,12 @@ internet on top of that the moment `wlan0` joins a network. When the Pi does hav
 uplink it is *also* reachable on that LAN — the PC client's `find_on_lan` / `sweep_lan`
 uses that as a second, completely separate way in.
 
+Discovery first calls `http://10.42.0.1:9911/healthz`, which returns the Pi identity
+without running NetworkManager, radio or internet checks. The detailed `/status`
+endpoint reads a background internet result and never waits for a failed ping. NAT is
+repaired in place by the watchdog, but it is not part of local AP health: losing the
+uplink cannot cause a working hostapd/DHCP/`10.42.0.1` path to be restarted.
+
 ### Single radio: what actually happens on a channel change
 
 The AP has to share a channel with the uplink. A udev rule creates `uap0` at the
@@ -159,7 +165,8 @@ a new virtual interface after NetworkManager's P2P device.
 
 `netctl.py` restarts `dji-ap` only when the channel it must use actually changed, or
 when the AP is unhealthy. Joining a network that is already on the AP's channel, and
-every `disconnect`, leave the laptop's association alone.
+every `disconnect`, leave the laptop's association alone. It also never restarts a
+healthy AP just because the last client left.
 
 Set the WLAN country (`sudo raspi-config` -> System Options -> Wireless LAN) if your
 router uses channel 12 or 13 — without it the kernel forbids beaconing there and the AP
@@ -220,7 +227,7 @@ Re-running the installer afterwards removes the rescue AP and hands the job back
 release you want is marked pre-release:
 
 ```bash
-curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/download/v0.8.2/install-pi.sh | sudo bash
+curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/download/v0.8.10/install-pi.sh | sudo bash
 ```
 
 If the AP won't start (e.g. hostapd rejects the channel), the older NetworkManager AP

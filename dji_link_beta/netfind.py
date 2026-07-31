@@ -64,14 +64,26 @@ def _looks_like_pi_status(st: object) -> bool:
 
 def pi_status(host: str) -> dict | None:
     try:
-        st = _netctl(host, "/status", timeout=2.5)
+        st = _netctl(host, "/status", timeout=3.0)
+    except Exception:
+        st = None
+    if _looks_like_pi_status(st):
+        return st
+    # Detailed status may be busy scanning or changing uplinks. Pi identity and local
+    # reachability do not depend on those operations or on internet availability.
+    return pi_health(host)
+
+
+def pi_health(host: str) -> dict | None:
+    try:
+        st = _netctl(host, "/healthz", timeout=1.0)
     except Exception:
         return None
-    return st if _looks_like_pi_status(st) else None
+    return st if isinstance(st, dict) and st.get("service") == "dji-link-netctl" else None
 
 
 def is_pi_host(host: str) -> bool:
-    return pi_status(host) is not None
+    return pi_health(host) is not None
 
 
 def find_on_lan(saved_host: str | None = None) -> str | None:
@@ -244,9 +256,7 @@ def discover(saved_host: str | None = None, allow_ap_join: bool = True) -> dict:
     if allow_ap_join:
         for ssid in scan_ap():
             if join_ap(ssid):
-                st = pi_status(AP_GATEWAY)
-                if not st:
-                    continue
+                st = pi_status(AP_GATEWAY) or {}
                 has_net = bool(st.get("internet"))
                 return {"host": AP_GATEWAY, "via": "ap", "joined_ap": ssid,
                         "needs_internet_prompt": not has_net}

@@ -126,6 +126,14 @@ check_source "hostapd retries do not hammer firmware" 'RestartSec=15'
 check_ap_source "stable non-HT mode avoids BCM43430 boot race" 'echo "ieee80211n=0"'
 check_source "dnsmasq starts in the main service lifecycle" 'ExecStart=/bin/bash ${PI_DIR}/ap.sh run'
 check_source "new interface order defers AP until reboot" 'dji-link-ap-reboot-required'
+check_ap_source "offline local route is part of AP health" 'has no local $AP_SUBNET route'
+check_ap_source "NAT failure does not fail local AP health" 'local 10.42.0.1 access is still healthy'
+if grep -Fq 'last client left' "$HERE/../dji_link_beta/pi/netctl.py"; then
+    echo "  FAIL  watchdog still restarts a healthy AP after its last client leaves"
+    fails=$(( fails + 1 ))
+else
+    echo "  ok    no speculative restart after the last AP client leaves"
+fi
 if grep -Fq 'cat > /etc/systemd/system/dji-ap-iface.service' "$SETUP_SH"; then
     echo "  FAIL  late dji-ap-iface.service generator is still present"
     fails=$(( fails + 1 ))
