@@ -189,7 +189,7 @@ def scan_ap() -> list[str]:
 
 
 def join_ap(ssid: str, psk: str = AP_DEFAULT_PSK) -> bool:
-    """Join a Pi AP on Windows by generating a one-shot WLAN profile."""
+    """Explicitly rejoin a Pi AP on Windows and verify the Pi identity endpoint."""
     if not _is_windows():
         return False
     profile = f"""<?xml version="1.0"?>
@@ -216,14 +216,23 @@ def join_ap(ssid: str, psk: str = AP_DEFAULT_PSK) -> bool:
             os.unlink(path)
         except OSError:
             pass
-    r = subprocess.run(["netsh", "wlan", "connect", f"name={ssid}", f"ssid={ssid}"],
-                       capture_output=True, text=True, timeout=15)
-    if r.returncode != 0:
+    # A channel retune can leave Windows claiming it is still connected while packets
+    # use the dead association. Force a real state transition, then retry because the
+    # Pi intentionally restarts hostapd shortly after replying to /connect.
+    try:
+        subprocess.run(["netsh", "wlan", "disconnect"], capture_output=True,
+                       text=True, timeout=15)
+        time.sleep(0.8)
+        deadline = time.monotonic() + 45.0
+        while time.monotonic() < deadline:
+            subprocess.run(["netsh", "wlan", "connect", f"name={ssid}", f"ssid={ssid}"],
+                           capture_output=True, text=True, timeout=15)
+            for _ in range(4):
+                time.sleep(0.5)
+                if is_pi_host(AP_GATEWAY):
+                    return True
+    except Exception:
         return False
-    for _ in range(30):
-        time.sleep(0.5)
-        if is_pi_host(AP_GATEWAY):
-            return True
     return False
 
 
@@ -236,7 +245,46 @@ def pi_scan_wifi(host: str) -> list[dict]:
 
 
 def pi_connect_wifi(host: str, ssid: str, psk: str) -> dict:
-    return _netctl(host, "/connect", {"ssid": ssid, "psk": psk}, timeout=60)
+    via_ap = host == AP_GATEWAY
+    before = pi_status(host) if via_ap else None
+    pi_ap_ssid = (before or {}).get("ap_ssid", "")
+    if via_ap and not pi_ap_ssid.startswith(AP_PREFIX):
+        visible = scan_ap()
+        if len(visible) == 1:
+            pi_ap_ssid = visible[0]
+
+    try:
+        result = _netctl(host, "/connect", {"ssid": ssid, "psk": psk}, timeout=60)
+    except Exception as e:
+        # A successful radio retune can tear down this HTTP response. Reconnection and
+        # /status below are authoritative in that case.
+        result = {"ok": False, "output": f"connect response was interrupted: {e}"}
+
+    explicit_failure = isinstance(result, dict) and result.get("ok") is False \
+        and not str(result.get("output", "")).startswith("connect response was interrupted:")
+    if not via_ap or explicit_failure or not _is_windows():
+        return result
+    if not pi_ap_ssid.startswith(AP_PREFIX):
+        return {"ok": False, "output": ("Pi uplink may have connected, but the client could not "
+                                         "identify the PI_DJI_LINK-* AP to rejoin")}
+
+    time.sleep(1.0)  # let netctl's delayed hostapd restart begin
+    if not join_ap(pi_ap_ssid, AP_DEFAULT_PSK):
+        return {"ok": False, "output": (f"Pi uplink may have connected, but Windows could not "
+                                         f"rejoin '{pi_ap_ssid}'")}
+
+    after = pi_status(host) or {}
+    uplink = after.get("uplink") or {}
+    actual_ssid = after.get("uplink_ssid") or uplink.get("connection", "")
+    profile_matches = actual_ssid == ssid or str(actual_ssid).endswith("-" + ssid)
+    if profile_matches:
+        result["ok"] = True
+        result.setdefault("output", f"connected to '{ssid}'")
+        result["ap_reconnected"] = True
+    elif not result.get("ok"):
+        result["output"] = (result.get("output", "connect failed") +
+                            "; Pi AP reconnected, but the requested uplink is not active")
+    return result
 
 
 def discover(saved_host: str | None = None, allow_ap_join: bool = True) -> dict:

@@ -37,7 +37,7 @@ std::optional<std::string> sweep_lan(int port = NETCTL_PORT);
 // SSIDs in range whose name marks them as a Pi AP (netsh / nmcli / airport).
 std::vector<std::string> scan_ap();
 
-// Join a Pi AP and wait until its gateway answers on the netctl control port.
+// Join a Pi AP and wait for netctl; Windows first forces a disconnect/rejoin cycle.
 bool join_ap(const std::string& ssid, const std::string& psk = AP_DEFAULT_PSK);
 
 // GET http://host:9911<path> — the Pi netctl API. Body only, nullopt on failure.
@@ -90,8 +90,8 @@ PiActionResult parse_action(const std::string& json);
 // only thing that can scan here — the PC's own radio is busy holding the AP link).
 std::vector<WifiNet> pi_scan_wifi(const std::string& host);
 
-// Join / leave an uplink on the Pi. Joining retunes the AP to the uplink's channel
-// (one radio), so the PC's own association to the Pi AP may drop and re-form.
+// Join / leave an uplink on the Pi. On Windows a successful join explicitly restores
+// the PC's association to the Pi AP after the single radio retunes/restarts it.
 PiActionResult pi_connect_wifi(const std::string& host, const std::string& ssid,
                                const std::string& psk);
 PiActionResult pi_disconnect_wifi(const std::string& host);
@@ -99,8 +99,9 @@ PiActionResult pi_disconnect_wifi(const std::string& host);
 // Full /status, or nullopt when the Pi does not answer.
 std::optional<PiNetStatus> pi_status(const std::string& host);
 
-// Block until the Pi answers /status again, up to timeout_s. Called after a connect:
-// the AP restart drops the PC for a few seconds and the link comes back on its own.
+// Block until the Pi answers /status again, up to timeout_s. Called after a connect;
+// joining on Windows already forces reassociation, while other platforms may reconnect
+// automatically after the AP restart.
 bool wait_for_pi(const std::string& host, double timeout_s = 40.0);
 
 struct DiscoverResult {

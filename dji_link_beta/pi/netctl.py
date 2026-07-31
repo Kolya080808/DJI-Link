@@ -21,9 +21,10 @@ with wps_state=0 is a plain WPA2 network every OS joins with just the password. 
 dji-ap is absent (a Pi not yet re-set-up) we fall back to NM's ipv4.method=shared AP.
 
 The chip requires AP and client to share a channel, so joining an uplink can retune the
-AP and clients then reconnect — hardware, not a bug. It is only done when the channel
-really changes, so a join on the AP's own channel, and any disconnect, are invisible to
-the laptop.
+AP and clients then reconnect — hardware, not a bug. Every successful uplink join ends
+with one delayed, clean AP restart. That gives Windows a predictable disconnect event;
+the PC client then explicitly re-associates instead of relying on Windows auto-reconnect.
+Disconnecting or failing to join an uplink still leaves a healthy AP untouched.
 
 Usage (on the Pi):
     sudo python3 netctl.py status
@@ -674,15 +675,14 @@ def _build_profile(name: str, ssid: str, psk: str | None,
     return rc == 0, out
 
 
-def _finish_ap_for_uplink() -> str:
+def _finish_ap_for_uplink(force_reconnect: bool = False) -> str:
     """Leave the access point in the right state after the uplink changed; return the
     note the PC client shows the user.
 
-    The AP is restarted for exactly two reasons — it is broken, or the channel it must
-    beacon on has changed. Not "because a connect happened": one radio means the AP has
-    to share the station's channel, but when the new uplink is already on the channel
-    the AP is using (and always when the uplink went away) there is nothing to do, and
-    restarting anyway would drop every laptop on the Pi's own network for no reason.
+    A successful join deliberately requests one clean restart even when the channel did
+    not change. brcmfmac can retune the virtual AP without making Windows notice that its
+    old association is unusable; an explicit AP cycle plus the PC-side reconnect avoids
+    that half-connected state. Failed joins and uplink disconnects do not force a cycle.
     """
     run("iw", "dev", STA_IFACE, "set", "power_save", "off", timeout=15)
     if not hostapd_mode():
@@ -701,6 +701,11 @@ def _finish_ap_for_uplink() -> str:
         systemctl("reset-failed", AP_SERVICE)
         _restart_ap_async(f"channel {current} -> {wanted}")
         return "AP retunes to the uplink channel — reconnect the laptop if it dropped"
+    if force_reconnect:
+        reset_ap_failures()
+        systemctl("reset-failed", AP_SERVICE)
+        _restart_ap_async("uplink connected; refreshing AP for client reassociation")
+        return "AP is refreshing — the PC client will reconnect to it"
     return "AP unchanged — the laptop stays connected"
 
 
@@ -731,9 +736,10 @@ def connect(ssid: str, psk: str | None) -> dict:
                 continue
             rc, out = nmcli("--wait", "45", "con", "up", "uuid", p.uuid)
             if rc == 0:
-                _finish_ap_for_uplink()
+                ap_note = _finish_ap_for_uplink(True)
                 return {"ok": True, "output": out,
-                        "note": f"reconnected using the saved password for '{ssid}'"}
+                        "note": (f"reconnected using the saved password for '{ssid}'; "
+                                 f"{ap_note}")}
         ensure_ap("reconnect without a password failed")
         return {"ok": False,
                 "output": f"'{ssid}' needs a password and none is saved for it"}
@@ -788,7 +794,7 @@ def connect(ssid: str, psk: str | None) -> dict:
         if "Secrets were required" in out or "no secrets" in out.lower():
             out += "  (wrong password?)"
 
-    return {"ok": ok, "output": out, "note": _finish_ap_for_uplink()}
+    return {"ok": ok, "output": out, "note": _finish_ap_for_uplink(ok)}
 
 
 def disconnect() -> dict:

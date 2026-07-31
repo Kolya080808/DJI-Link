@@ -276,6 +276,7 @@ check(w.active == "ASUS_65", f"profile is renamed to the SSID (active={w.active}
 p = w.find(name="ASUS_65")[0]
 check(p["key_mgmt"] == "wpa-psk", f"key-mgmt is set explicitly ({p['key_mgmt']!r})")
 check(p["hidden"] == "no", "not marked hidden (it was in the scan)")
+check(w.ap_restarts == 1, "a successful join schedules one clean AP reassociation cycle")
 
 print("\nB. rejoin with a stale key-mgmt-less profile in the way (the reported bug)")
 stale = {"uuid": "stale-uuid", "name": "netplan-wlan0-ASUS_65",
@@ -302,6 +303,7 @@ check(w.find(name="preconfigured")[0]["autoconnect"] == "yes", "its autoconnect 
 check(w.active == "preconfigured", f"the Pi is back on its old network (active={w.active})")
 check(not w.find(name="dji-uplink-ASUS_65"), "the failed profile was cleaned up")
 check("wrong password" in r["output"], "the error names the likely cause")
+check(w.ap_restarts == 0, "a failed join does not interrupt a healthy field AP")
 
 print("\nD. open network")
 w = World(HOME, PW)
@@ -498,6 +500,39 @@ nf_calls.clear()
 check(netfind.pi_status("10.42.0.1") is not None,
       "detailed status falls back to the local health endpoint")
 check(nf_calls == ["/status", "/healthz"], "status fallback uses /healthz")
+
+print("\nU. Windows explicitly disconnects before rejoining the Pi AP")
+nf_commands = []
+
+class FakeCompleted:
+    returncode = 0
+    stdout = "ok"
+
+def fake_run(args, **kwargs):
+    nf_commands.append(list(args))
+    return FakeCompleted()
+
+netfind._is_windows = lambda: True
+netfind.subprocess.run = fake_run
+netfind.time.sleep = lambda _seconds: None
+netfind.is_pi_host = lambda host: host == netfind.AP_GATEWAY
+check(netfind.join_ap("PI_DJI_LINK-test"), "Windows AP rejoin reaches the Pi")
+disconnect_at = next((i for i, c in enumerate(nf_commands) if c[:3] == ["netsh", "wlan", "disconnect"]), -1)
+connect_at = next((i for i, c in enumerate(nf_commands) if c[:3] == ["netsh", "wlan", "connect"]), -1)
+check(0 <= disconnect_at < connect_at, "netsh disconnect happens before netsh connect")
+
+print("\nV. beta uplink setup reconnects and verifies the requested SSID")
+statuses = [
+    {"ap_ssid": "PI_DJI_LINK-test"},
+    {"uplink_ssid": "ASUS_65", "uplink": {"connection": "ASUS_65"}},
+]
+rejoined = []
+netfind.pi_status = lambda host: statuses.pop(0)
+netfind._netctl = lambda host, path, body=None, timeout=8.0: {"ok": True, "output": "joined"}
+netfind.join_ap = lambda ssid, psk=netfind.AP_DEFAULT_PSK: rejoined.append(ssid) or True
+r = netfind.pi_connect_wifi(netfind.AP_GATEWAY, "ASUS_65", "hunter2")
+check(r.get("ok") and r.get("ap_reconnected"), "successful uplink restores the Windows AP link")
+check(rejoined == ["PI_DJI_LINK-test"], "the same per-device Pi AP is rejoined")
 
 print()
 if FAILS:

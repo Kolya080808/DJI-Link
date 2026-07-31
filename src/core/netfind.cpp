@@ -488,9 +488,26 @@ bool join_ap(const std::string& ssid, const std::string& psk) {
     std::error_code ec;
     fs::remove(path, ec);
     applog::info("[netfind] netsh add profile: " + trim(add_out));
-    std::string conn_out =
-        run_capture("netsh wlan connect name=" + shell_quote(ssid) + " ssid=" + shell_quote(ssid));
-    applog::info("[netfind] netsh connect: " + trim(conn_out));
+    // After a shared-radio channel retune Windows can keep reporting the old, unusable
+    // association. Force a state transition and keep reconnecting while the Pi's delayed
+    // hostapd restart completes.
+    applog::info("[netfind] netsh disconnect: " + trim(run_capture("netsh wlan disconnect")));
+    std::this_thread::sleep_for(std::chrono::milliseconds(800));
+    const std::string connect_cmd =
+        "netsh wlan connect name=" + shell_quote(ssid) + " ssid=" + shell_quote(ssid);
+    for (int attempt = 1; attempt <= 22; ++attempt) {
+        const std::string conn_out = run_capture(connect_cmd);
+        if (attempt == 1 || attempt % 5 == 0)
+            applog::info("[netfind] netsh connect attempt " + std::to_string(attempt) + ": " +
+                         trim(conn_out));
+        for (int probe = 0; probe < 4; ++probe) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            if (port_open(AP_GATEWAY, NETCTL_PORT))
+                return true;
+        }
+    }
+    applog::info("[netfind] Windows could not reassociate with '" + ssid + "'");
+    return false;
 #elif defined(__APPLE__)
     run_quiet("networksetup -setairportnetwork en0 " + shell_quote(ssid) + " " + shell_quote(psk));
 #else
@@ -795,6 +812,19 @@ PiActionResult action_from(const std::optional<std::string>& body, const char* w
 PiActionResult pi_connect_wifi(const std::string& host, const std::string& ssid,
                                const std::string& psk) {
     applog::info("[netctl] asking the Pi to join '" + ssid + "'");
+#ifdef _WIN32
+    const bool via_ap = host == AP_GATEWAY;
+    std::string pi_ap_ssid;
+    if (via_ap) {
+        if (auto before = pi_status(host))
+            pi_ap_ssid = before->ap_ssid;
+        if (pi_ap_ssid.rfind(AP_PREFIX, 0) != 0) {
+            const auto visible = scan_ap();
+            if (visible.size() == 1)
+                pi_ap_ssid = visible.front();
+        }
+    }
+#endif
     std::string body = "{\"ssid\":" + json_quote(ssid);
     if (!psk.empty())
         body += ",\"psk\":" + json_quote(psk);
@@ -803,6 +833,35 @@ PiActionResult pi_connect_wifi(const std::string& host, const std::string& ssid,
     // once both are done, so this request is deliberately long-lived.
     auto resp = netctl_post(host, "/connect", body, 60.0);
     auto r = action_from(resp, "connect");
+
+    // The Pi responds before its delayed AP refresh. If the response was interrupted,
+    // it may still have joined successfully; reconnect and let /status decide. A clear
+    // negative response means no AP cycle was scheduled, so preserve the current link.
+#ifdef _WIN32
+    if (via_ap && (!resp || r.ok)) {
+        if (pi_ap_ssid.rfind(AP_PREFIX, 0) != 0) {
+            r.ok = false;
+            r.output = "Pi uplink may have connected, but the PI_DJI_LINK-* AP to rejoin "
+                       "could not be identified";
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            if (!join_ap(pi_ap_ssid, AP_DEFAULT_PSK)) {
+                r.ok = false;
+                r.output = "Pi uplink may have connected, but Windows could not rejoin '" +
+                           pi_ap_ssid + "'";
+            } else if (auto after = pi_status(host);
+                       after && (after->uplink_name == ssid ||
+                                 after->uplink_name.find(ssid) != std::string::npos)) {
+                r.ok = true;
+                if (!resp)
+                    r.output = "connected to '" + ssid + "'; Pi AP reconnected";
+            } else {
+                r.ok = false;
+                r.output = "Pi AP reconnected, but uplink '" + ssid + "' is not active";
+            }
+        }
+    }
+#endif
     applog::info(std::string("[netctl] connect ") + (r.ok ? "ok" : "failed") + ": " +
                  r.output.substr(0, 200));
     return r;
@@ -816,9 +875,8 @@ PiActionResult pi_disconnect_wifi(const std::string& host) {
 }
 
 bool wait_for_pi(const std::string& host, double timeout_s) {
-    // Joining an uplink retunes the single radio and restarts the AP, so this PC's
-    // association drops. Windows/NetworkManager re-join on their own; we just wait for
-    // the control port to answer again instead of declaring the Pi lost.
+    // join_ap() explicitly restores Windows' association. This remains useful for
+    // non-Windows clients and callers that want a final identity check.
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::milliseconds(static_cast<int>(timeout_s * 1000));
     while (std::chrono::steady_clock::now() < deadline) {

@@ -1457,6 +1457,7 @@ void call(Client& cli, std::function<void()> fn, const std::string& msg) {
 
 struct Settings {
     bool open = false;
+    int dragging_slider = -1;
     int max_alt = 120;
     int max_dist = 500;
     int rth_alt = 30;
@@ -1467,9 +1468,49 @@ struct Settings {
     std::vector<int> isos{0, 100, 200, 400, 800, 1600, 3200};
     std::vector<int> shutters{0, 1000, 500, 250, 125, 60, 30, 15, 8, 4};
 
+    static SDL_Rect panel(int sw, int sh) {
+        return {std::max(24, (sw - 700) / 2), std::max(20, (sh - 560) / 2), std::min(700, sw - 48),
+                std::min(560, sh - 40)};
+    }
+
+    static SDL_Rect slider_track(const SDL_Rect& p, int row) {
+        return {p.x + 250, p.y + 78 + row * 48 + 15, std::max(100, p.w - 385), 8};
+    }
+
+    void set_slider(int row, int mouse_x, const SDL_Rect& p) {
+        const SDL_Rect track = slider_track(p, row);
+        const int lo = row == 0 ? 15 : (row == 1 ? 15 : 20);
+        const int hi = row == 1 ? 5000 : 500;
+        const int step = row == 1 ? 50 : 5;
+        const double t = std::clamp((mouse_x - track.x) / static_cast<double>(track.w), 0.0, 1.0);
+        const double raw = lo + t * (hi - lo);
+        const int value = std::clamp(static_cast<int>(std::lround(raw / step)) * step, lo, hi);
+        if (row == 0)
+            max_alt = value;
+        else if (row == 1)
+            max_dist = value;
+        else
+            rth_alt = value;
+    }
+
+    void commit_slider(int row, Client& cli) {
+        if (row == 0) {
+            call(
+                cli, [&cli, v = max_alt] { cli.drone().set_max_altitude(v); },
+                "max alt " + std::to_string(max_alt) + " m");
+        } else if (row == 1) {
+            call(
+                cli, [&cli, v = max_dist] { cli.drone().set_max_distance(v); },
+                "max dist " + std::to_string(max_dist) + " m");
+        } else if (row == 2) {
+            call(
+                cli, [&cli, v = rth_alt] { cli.drone().set_rth_altitude(v); },
+                "RTH alt " + std::to_string(rth_alt) + " m");
+        }
+    }
+
     void draw(SDL_Renderer* r, Client& cli, int sw, int sh, int mx, int my) {
-        SDL_Rect p{std::max(24, (sw - 700) / 2), std::max(20, (sh - 560) / 2),
-                   std::min(700, sw - 48), std::min(560, sh - 40)};
+        SDL_Rect p = panel(sw, sh);
         fill_round(r, p, 14, PANEL);
         outline_round(r, p, 14, PANEL_HI);
         text(r, p.x + 24, p.y + 24, "Flight settings", 3, ACCENT);
@@ -1477,6 +1518,20 @@ struct Settings {
 
         std::vector<Button> b;
         int y = p.y + 78;
+        auto slider_row = [&](const std::string& label, int value, int lo, int hi, int row) {
+            text(r, p.x + 26, y + 12, label, 2, TEXT);
+            SDL_Rect track = slider_track(p, row);
+            fill_round(r, track, 4, Color{50, 55, 68, 255});
+            const double t = std::clamp((value - lo) / static_cast<double>(hi - lo), 0.0, 1.0);
+            const int knob_x = track.x + static_cast<int>(std::lround(t * track.w));
+            if (knob_x > track.x)
+                fill_round(r, SDL_Rect{track.x, track.y, knob_x - track.x, track.h}, 4, ACCENT);
+            const bool hot = dragging_slider == row ||
+                             inside(SDL_Rect{track.x - 8, track.y - 10, track.w + 16, 28}, mx, my);
+            fill_round(r, SDL_Rect{knob_x - 8, track.y - 4, 16, 16}, 8, hot ? ACCENT_HI : ACCENT);
+            text(r, p.x + p.w - 105, y + 12, std::to_string(value) + " M", 2, ACCENT_HI);
+            y += 48;
+        };
         auto row = [&](const std::string& label, const std::string& val, auto minus, auto plus) {
             text(r, p.x + 26, y + 12, label, 2, TEXT);
             text(r, p.x + 395, y + 12, val, 2, ACCENT_HI);
@@ -1484,48 +1539,9 @@ struct Settings {
             b.push_back({{p.x + p.w - 92, y, 46, 38}, "+", false, true, plus});
             y += 48;
         };
-        row(
-            "MAX ALTITUDE", std::to_string(max_alt) + " M",
-            [&] {
-                max_alt = std::max(15, max_alt - 5);
-                call(
-                    cli, [&cli, v = max_alt] { cli.drone().set_max_altitude(v); },
-                    "max alt " + std::to_string(max_alt) + " m");
-            },
-            [&] {
-                max_alt = std::min(500, max_alt + 5);
-                call(
-                    cli, [&cli, v = max_alt] { cli.drone().set_max_altitude(v); },
-                    "max alt " + std::to_string(max_alt) + " m");
-            });
-        row(
-            "MAX DISTANCE", std::to_string(max_dist) + " M",
-            [&] {
-                max_dist = std::max(15, max_dist - 50);
-                call(
-                    cli, [&cli, v = max_dist] { cli.drone().set_max_distance(v); },
-                    "max dist " + std::to_string(max_dist) + " m");
-            },
-            [&] {
-                max_dist = std::min(5000, max_dist + 50);
-                call(
-                    cli, [&cli, v = max_dist] { cli.drone().set_max_distance(v); },
-                    "max dist " + std::to_string(max_dist) + " m");
-            });
-        row(
-            "RTH ALTITUDE", std::to_string(rth_alt) + " M",
-            [&] {
-                rth_alt = std::max(20, rth_alt - 5);
-                call(
-                    cli, [&cli, v = rth_alt] { cli.drone().set_rth_altitude(v); },
-                    "RTH alt " + std::to_string(rth_alt) + " m");
-            },
-            [&] {
-                rth_alt = std::min(500, rth_alt + 5);
-                call(
-                    cli, [&cli, v = rth_alt] { cli.drone().set_rth_altitude(v); },
-                    "RTH alt " + std::to_string(rth_alt) + " m");
-            });
+        slider_row("MAX ALTITUDE", max_alt, 15, 500, 0);
+        slider_row("MAX DISTANCE", max_dist, 15, 5000, 1);
+        slider_row("RTH ALTITUDE", rth_alt, 20, 500, 2);
         row(
             "EV", (ev > 0 ? "+" : "") + std::to_string(ev),
             [&] {
@@ -1621,14 +1637,34 @@ struct Settings {
         if (!open)
             return false;
         if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+            dragging_slider = -1;
             open = false;
+            return true;
+        }
+        SDL_Rect p = panel(sw, sh);
+        if (e.type == SDL_MOUSEMOTION && dragging_slider >= 0) {
+            set_slider(dragging_slider, e.motion.x, p);
+            return true;
+        }
+        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT &&
+            dragging_slider >= 0) {
+            const int row = dragging_slider;
+            set_slider(row, e.button.x, p);
+            dragging_slider = -1;
+            commit_slider(row, cli);
             return true;
         }
         if (e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT)
             return true;
         int mx = e.button.x, my = e.button.y;
-        SDL_Rect p{std::max(24, (sw - 700) / 2), std::max(20, (sh - 560) / 2),
-                   std::min(700, sw - 48), std::min(560, sh - 40)};
+        for (int row = 0; row < 3; ++row) {
+            const SDL_Rect track = slider_track(p, row);
+            if (inside(SDL_Rect{track.x - 8, track.y - 10, track.w + 16, 28}, mx, my)) {
+                dragging_slider = row;
+                set_slider(row, mx, p);
+                return true;
+            }
+        }
         int y = p.y + 78;
         auto in_minus = [&](int row) {
             SDL_Rect rc{p.x + p.w - 150, p.y + 78 + row * 48, 46, 38};
@@ -1649,51 +1685,6 @@ struct Settings {
             }
             return false;
         };
-        if (row_action(
-                0,
-                [&] {
-                    max_alt = std::max(15, max_alt - 5);
-                    call(
-                        cli, [&cli, v = max_alt] { cli.drone().set_max_altitude(v); },
-                        "max alt " + std::to_string(max_alt) + " m");
-                },
-                [&] {
-                    max_alt = std::min(500, max_alt + 5);
-                    call(
-                        cli, [&cli, v = max_alt] { cli.drone().set_max_altitude(v); },
-                        "max alt " + std::to_string(max_alt) + " m");
-                }))
-            return true;
-        if (row_action(
-                1,
-                [&] {
-                    max_dist = std::max(15, max_dist - 50);
-                    call(
-                        cli, [&cli, v = max_dist] { cli.drone().set_max_distance(v); },
-                        "max dist " + std::to_string(max_dist) + " m");
-                },
-                [&] {
-                    max_dist = std::min(5000, max_dist + 50);
-                    call(
-                        cli, [&cli, v = max_dist] { cli.drone().set_max_distance(v); },
-                        "max dist " + std::to_string(max_dist) + " m");
-                }))
-            return true;
-        if (row_action(
-                2,
-                [&] {
-                    rth_alt = std::max(20, rth_alt - 5);
-                    call(
-                        cli, [&cli, v = rth_alt] { cli.drone().set_rth_altitude(v); },
-                        "RTH alt " + std::to_string(rth_alt) + " m");
-                },
-                [&] {
-                    rth_alt = std::min(500, rth_alt + 5);
-                    call(
-                        cli, [&cli, v = rth_alt] { cli.drone().set_rth_altitude(v); },
-                        "RTH alt " + std::to_string(rth_alt) + " m");
-                }))
-            return true;
         if (row_action(
                 3,
                 [&] {
