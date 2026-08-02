@@ -1,9 +1,9 @@
 // DJI Mavic Mini (WM160) telemetry decoder, ported from telemetry.py.
 //
-// NOTE (per project scope): ALL GPS parsing is intentionally left out for now —
-// no satellite count, no GPS level, no drone_lat/lon, no home coordinates — matching
-// the Python beta where that path is still unfinished. The "home recorded" yes/no
-// flag DOES work and is parsed. See memory: cpp-client-goal.
+// GPS coordinate parsing (drone_lat/lon, home coordinates) is intentionally left out —
+// but the satellite count and GPS signal level ARE decoded (0x43 @0x24 / (u32@0x20 >> 18) & 0xF)
+// exactly as the beta does, because they are the HUD's "can I fly / is the fix good" cue.
+// The "home recorded" yes/no flag also works and is parsed. See memory: cpp-client-goal.
 #pragma once
 
 #include "core/bytes.hpp"
@@ -53,6 +53,8 @@ struct OsdState {
     std::optional<double> max_distance_m; // read via param 0xF8
     std::optional<double> rth_altitude_m; // read via param 0xF8
     std::optional<bool> home_recorded;
+    std::optional<int> satellites;  // u8 @0x24 (getGpsNum) — count of locked satellites
+    std::optional<int> gps_level;   // (u32@0x20 >> 18) & 0xF (getGpsLevel), 0..5
 
     std::string summary() const;
 };

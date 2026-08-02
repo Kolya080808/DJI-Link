@@ -82,6 +82,12 @@ public:
     void add_mouse_dx(double dx);
     double take_mouse_dx();
 
+    // Read the accumulator WITHOUT clearing it. The HUD's yaw pad uses this to show
+    // mouse-derived yaw that the sender loop has not folded in yet, at the same
+    // kMouseYawSens scale the sender applies — the pads would otherwise ignore the
+    // mouse entirely (set_axes carries keyboard axes only).
+    double peek_mouse_dx() const;
+
     // one-line status message for the HUD (thread-safe).
     void set_msg(const std::string& s);
     std::string msg() const;

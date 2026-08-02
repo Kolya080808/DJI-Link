@@ -85,7 +85,9 @@ std::string OsdState::summary() const {
        << "  remain_time=" << opt_str(remaining_flight_time_s) << "s"
        << "  flying=" << (is_flying ? (*is_flying ? "True" : "False") : "None")
        << "  motors=" << (motors_on ? (*motors_on ? "True" : "False") : "None")
-       << "  home=" << (home_set ? (*home_set ? "True" : "False") : "None");
+       << "  home=" << (home_set ? (*home_set ? "True" : "False") : "None")
+       << "  sats=" << (satellites ? std::to_string(*satellites) : std::string("-"))
+       << "  gps_lvl=" << (gps_level ? std::to_string(*gps_level) : std::string("-"));
     if (motor_fail_code && *motor_fail_code) {
         os << "  !MOTOR_START_FAIL_CAUSE=" << (motor_fail_reason ? *motor_fail_reason : "") << "("
            << *motor_fail_code << ")";
@@ -162,9 +164,12 @@ void Telemetry::parse_osd(const Bytes& p) {
     if (auto w = get_u32(p, 0x20)) {
         st.is_flying = ((*w >> 1) & 3) == 2; // groundOrSky==2 = flying
         st.motors_on = ((*w >> 3) & 1) != 0;
-        // GPS level (bits 18..21) intentionally not parsed — see header note.
+        st.gps_level = static_cast<int>((*w >> 18) & 0xF); // getGpsLevel, 0..5
     }
-    // Satellite count (@0x24) intentionally not parsed — all GPS parsing is out for now.
+    // Satellite count: 1 BYTE @0x24 (getGpsNum). The app's "Short" is boxing, not width —
+    // a u16 read inflates the count whenever p[0x25]!=0 (see TELEMETRY_TRUTH.md §7).
+    if (auto sats = get_u8(p, 0x24))
+        st.satellites = *sats;
     if (auto vps = get_s8(p, 0x29))
         st.vps_height_m = *vps * 0.1;
     if (auto ft = get_u16(p, 0x2a))

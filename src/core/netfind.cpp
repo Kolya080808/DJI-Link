@@ -509,8 +509,19 @@ bool join_ap(const std::string& ssid, const std::string& psk) {
     applog::info("[netfind] Windows could not reassociate with '" + ssid + "'");
     return false;
 #elif defined(__APPLE__)
+    // The Pi restarts hostapd ~2.5 s after it answers; an immediate connect can bind to
+    // the dying AP and never re-associate. Drop the current association first, wait out
+    // the Pi's scheduled restart, then connect.
+    run_quiet("networksetup -setairportpower en0 off");
+    std::this_thread::sleep_for(std::chrono::milliseconds(4000));
+    run_quiet("networksetup -setairportpower en0 on");
+    std::this_thread::sleep_for(std::chrono::milliseconds(800));
     run_quiet("networksetup -setairportnetwork en0 " + shell_quote(ssid) + " " + shell_quote(psk));
 #else
+    // Same reasoning as the macOS branch: without a forced disconnect+wait nmcli may
+    // keep the stale association and the fresh AP's beacon gets ignored.
+    run_quiet("nmcli dev disconnect wlan0");
+    std::this_thread::sleep_for(std::chrono::milliseconds(4000));
     run_quiet("nmcli dev wifi connect " + shell_quote(ssid) + " password " + shell_quote(psk));
 #endif
     // Wait for the interface to actually get the AP's gateway. Probe the netctl control
@@ -844,7 +855,18 @@ PiActionResult pi_connect_wifi(const std::string& host, const std::string& ssid,
             r.output = "Pi uplink may have connected, but the PI_DJI_LINK-* AP to rejoin "
                        "could not be identified";
         } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            // netctl's /connect schedules the AP restart with a ~0.7 s pre-flush delay
+            // (_restart_ap_async) and dji-ap's hostapd+dnsmasq bring-up takes a few
+            // seconds more. With only ~1 s here the explicit disconnect ran into a still
+            // breathing AP, Windows stayed glued to its stale Association, the first
+            // connect retries felt no break and kept a dead session, and we gave up
+            // before the fresh AP even existed. Hold for the AP to go down, force a
+            // disconnect Windows cannot miss, then let join_ap re-associate.
+            applog::info("[netctl] waiting for the Pi's delayed AP refresh");
+            std::this_thread::sleep_for(std::chrono::milliseconds(4500));
+            applog::info("[netctl] netsh disconnect before rejoining the refreshed AP: " +
+                         run_capture("netsh wlan disconnect"));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
             if (!join_ap(pi_ap_ssid, AP_DEFAULT_PSK)) {
                 r.ok = false;
                 r.output = "Pi uplink may have connected, but Windows could not rejoin '" +

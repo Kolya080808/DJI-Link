@@ -307,13 +307,16 @@ def reset_ap_failures() -> None:
     ap_sh("reset-failures")
 
 
-def _restart_ap_async(reason: str, delay: float = 0.7) -> None:
+def _restart_ap_async(reason: str, delay: float = 2.5) -> None:
     """Restart dji-ap off the request thread.
 
     `systemctl restart` takes the AP down before it returns, tearing down the very TCP
     connection this reply has to travel over: without the thread the PC client always
-    sees "the Pi did not answer", even on a successful join. The small delay lets the
-    response flush first.
+    sees "the Pi did not answer", even on a successful join. The delay lets the response
+    flush first AND gives the client (Windows) time to notice the AP is really gone
+    before the fresh one appears — an immediate bounce leaves Windows glued to the
+    old association while the Pi is already mid-restart, so the client's explicit
+    reconnect either runs against nothing or fights a half-dead link.
     """
     def work() -> None:
         time.sleep(delay)

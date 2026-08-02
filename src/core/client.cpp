@@ -91,6 +91,10 @@ double Client::take_mouse_dx() {
     mouse_dx_ = 0.0;
     return d;
 }
+double Client::peek_mouse_dx() const {
+    std::lock_guard<std::mutex> lk(axes_mu_);
+    return mouse_dx_;
+}
 void Client::post(std::function<void()> fn, std::string msg) {
     {
         std::lock_guard<std::mutex> lk(cmd_mu_);

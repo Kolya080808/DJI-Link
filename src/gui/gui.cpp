@@ -1815,7 +1815,8 @@ void stick_pad(SDL_Renderer* r, int cx, int cy, int half, double x, double y,
 // Faithful port of the beta's _draw_flight_hud (pc_client.py): top-left status card
 // (title + mode chip, battery bar, ARMED/CTRL/FC chips, altitude/fly-time/mode grid,
 // home + limits + hint), a top-right REC badge and twin bottom-right stick pads. The
-// satellite / GPS-position readouts from beta are intentionally left out for now.
+// satellite count / GPS level cell is shown like the beta; only the GPS *position*
+// readout (lat/lon) from the beta is intentionally left out for now.
 void draw_hud(SDL_Renderer* r, Client& cli, int sw, int sh) {
     if (!cli.show_hud.load())
         return;
@@ -1900,7 +1901,14 @@ void draw_hud(SDL_Renderer* r, Client& cli, int sw, int sh) {
     cell(c0, "ALTITUDE", alt);
     cell(c1, "FLY TIME", ft);
     y += 40;
-    cell(c0, "MODE", st.flight_mode_name.value_or("-"));
+    // SATS · GPS — parity with the beta's _draw_flight_hud: satellite count (@0x24) and
+    // GPS level (bits 18..21 of the u32 @0x20, 0..5) share one row with MODE, exactly
+    // like pc_client.py does (`_hud_cell(c0, "SATS · GPS", ...)` next to MODE at c1).
+    const std::string sats_gps =
+        (st.satellites ? std::to_string(*st.satellites) : std::string("-")) + " · " +
+        (st.gps_level ? std::to_string(*st.gps_level) : std::string("-"));
+    cell(c0, "SATS · GPS", sats_gps);
+    cell(c1, "MODE", st.flight_mode_name.value_or("-"));
     y += 42;
 
     // home + limits + hint
@@ -1935,11 +1943,15 @@ void draw_hud(SDL_Renderer* r, Client& cli, int sw, int sh) {
 
     // bottom-right twin stick pads
     const Sticks a = cli.axes();
+    // Yaw from the mouse lives in the pending accumulator until the 20 Hz sender loop
+    // folds it in; blend it in for display so the pad reacts to mouse movement too
+    // (same scale the sender applies: Client::kMouseYawSens).
+    const double yaw = std::clamp(a.yaw + cli.peek_mouse_dx() * Client::kMouseYawSens, -1.0, 1.0);
     const int half = 42, gap = 24;
     const int base_y = sh - half - 34;
     const int rpad_cx = sw - 16 - half;
     const int lpad_cx = rpad_cx - half * 2 - gap;
-    stick_pad(r, lpad_cx, base_y, half, a.yaw, a.throttle, "yaw / thr");
+    stick_pad(r, lpad_cx, base_y, half, yaw, a.throttle, "yaw / thr");
     stick_pad(r, rpad_cx, base_y, half, a.roll, a.pitch, "roll / pitch");
 }
 
