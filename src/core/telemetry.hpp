@@ -53,8 +53,8 @@ struct OsdState {
     std::optional<double> max_distance_m; // read via param 0xF8
     std::optional<double> rth_altitude_m; // read via param 0xF8
     std::optional<bool> home_recorded;
-    std::optional<int> satellites;  // u8 @0x24 (getGpsNum) — count of locked satellites
-    std::optional<int> gps_level;   // (u32@0x20 >> 18) & 0xF (getGpsLevel), 0..5
+    std::optional<int> satellites; // u8 @0x24 (getGpsNum) — count of locked satellites
+    std::optional<int> gps_level;  // (u32@0x20 >> 18) & 0xF (getGpsLevel), 0..5
 
     std::string summary() const;
 };

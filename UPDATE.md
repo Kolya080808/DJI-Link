@@ -1,16 +1,28 @@
 ---
-title: DJI Link v0.9.1 — Reliable Windows AP rejoin
-version: 0.9.1
+title: DJI Link v0.9.2 — Mouse stick pads, GPS/SATS HUD, slower AP rejoin
+version: 0.9.2
 prerelease: true
 ---
 
 ## Changed
 
-- **Windows now explicitly reconnects to the Pi AP after an uplink change.** Both the
-  C++ client and `dji-link-beta` run `netsh wlan disconnect`, then retry connection to
-  the same per-device `PI_DJI_LINK-*` profile until the Pi answers again. This avoids
-  Windows keeping a stale association after the Pi's single radio changes channel.
-  Missing `netsh`/`ipconfig` stdout is also handled as an empty scan instead of crashing.
+- **The yaw stick pad now reacts to mouse movement.** The bottom-right stick pads
+  already visualized keyboard input (WASDEQ); the yaw pad now also tracks mouse
+  movement with the same sensitivity used for actual yaw control, without consuming
+  the accumulated mouse delta that flight control relies on.
+
+- **PC-to-AP rejoin after a Pi uplink change is now deliberately slow.** The C++
+  client disconnects first, waits several seconds, and only then reconnects, on all
+  platforms: Windows (`netsh wlan disconnect`, then join), macOS (airport power
+  off/on), and Linux (`nmcli dev disconnect`, then `wifi connect`). The Pi-side
+  `netctl.py` pause between AP teardown and bring-up grew from 0.7 s to 2.5 s, so a
+  too-fast disconnect/reconnect can no longer leave the client on a stale
+  association.
+
+- **The flight HUD now shows SATS · GPS like the beta.** Satellite count (u8 at
+  OSD offset 0x24) and GPS level (bits 18..21 of the u32 at 0x20, 0..5) are decoded
+  from the OSD push and displayed next to flight mode in the top-left card, matching
+  the beta client's layout. GPS coordinates (lat/lon) remain out of scope.
 
 - **A successful Pi uplink join now ends with one predictable AP refresh.** `netctl.py`
   schedules the refresh after its HTTP response can leave the Pi; failed uplink joins
@@ -148,9 +160,9 @@ prerelease: true
 
 <!--
 Release checklist:
-  1. Keep "version" above equal to the tag you push (tag v0.9.1 => version: 0.9.1).
+  1. Keep "version" above equal to the tag you push (tag v0.9.2 => version: 0.9.2).
   2. Commit UPDATE.md.
-  3. git tag v0.9.1 && git push origin v0.9.1
+  3. git tag v0.9.2 && git push origin v0.9.2
 Everything below the second "---" (except this comment) becomes the GitHub Release body.
 These binaries are unsigned, so first launch shows a Gatekeeper (macOS) / SmartScreen
 (Windows) warning — expected for a pre-release.
