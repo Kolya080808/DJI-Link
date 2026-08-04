@@ -121,7 +121,7 @@ if ! grep -qx 'pi/setup_pi.sh' "$LIST"; then
     exit 1
 fi
 
-# Stop first: a running bridge.py holds the old code in memory, so restarting the
+# Stop first: a running dji-bridge holds the old code in memory, so restarting the
 # services afterwards is what actually makes an upgrade take effect.
 if [ -d "$PREFIX/pi" ]; then
     echo "[install] stopping services for the upgrade"
@@ -206,7 +206,35 @@ if [ -f "$PI_DIR/ap.sh" ]; then
             bash "$PI_DIR/ap.sh" health 2>&1 | sed 's/^/       /' || true
             journalctl -u dji-ap -n 20 --no-pager 2>/dev/null | sed 's/^/       /' || true
             if [ -d "$PREFIX/pi.old" ]; then
-                echo "!! rolling back to the previous bundle so the Pi stays reachable"
+            # Old bundles (< v0.9.4) shipped netctl as a Python script, and their
+            # installed dji-netctl.service still ExecStarts `python3 netctl.py`;
+            # the new bundle carries bin/dji-netctl instead. Overwrite the old unit
+            # with a tiny compatibility wrapper BEFORE setup_pi.sh reinstalls the
+            # service, and whether setup_pi.sh succeeds or not — the wrapper must
+            # also run during the health gate below and survive a rollback to the
+            # old bundle in pi.old.
+            if [ -f /etc/systemd/system/dji-netctl.service ] && \
+               ! grep -q 'bin/dji-netctl' /etc/systemd/system/dji-netctl.service; then
+                echo "[install] migrating legacy dji-netctl.service (python3) to the C++ binary"
+                cat > /etc/systemd/system/dji-netctl-wrapper <<EOF
+#!/bin/sh
+if [ -x "$PREFIX/pi/bin/dji-netctl" ]; then
+    exec "$PREFIX/pi/bin/dji-netctl" "\$@"
+elif [ -f "$PREFIX/pi/netctl.py" ]; then
+    exec /usr/bin/python3 "$PREFIX/pi/netctl.py" "\$@"
+elif [ -f "$PREFIX/pi.old/netctl.py" ]; then
+    exec /usr/bin/python3 "$PREFIX/pi.old/netctl.py" "\$@"
+fi
+echo "dji-netctl wrapper: no netctl found in $PREFIX" >&2
+exit 1
+EOF
+                chmod +x /etc/systemd/system/dji-netctl-wrapper
+                sed -i 's|^ExecStart=.*|ExecStart=/etc/systemd/system/dji-netctl-wrapper serve|' \
+                    /etc/systemd/system/dji-netctl.service
+                systemctl daemon-reload
+            fi
+
+            echo "!! rolling back to the previous bundle so the Pi stays reachable"
                 rm -rf "$PREFIX/pi.new-failed"
                 mv "$PREFIX/pi" "$PREFIX/pi.new-failed"
                 mv "$PREFIX/pi.old" "$PREFIX/pi"
@@ -223,7 +251,7 @@ if [ -f "$PI_DIR/ap.sh" ]; then
                 exit 1
             fi
             echo "   no previous bundle to roll back to; diagnose with:"
-            echo "   sudo python3 $PI_DIR/netctl.py doctor"
+            echo "   sudo $PI_DIR/bin/dji-netctl doctor"
         fi
     fi
 fi

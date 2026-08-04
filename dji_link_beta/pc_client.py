@@ -847,7 +847,7 @@ class SettingsPanel:
             self.cli.msg("media: download in progress — not exiting playback yet")
             return
         # Exit if the flag says playback OR the camera actually reports PLAYBACK mode.
-        in_playback = self.cli.playback or (self.cli.media and self.cli.media._cam_mode == 2)
+        in_playback = self.cli.playback or (self.cli.media and self.cli.media._cam_mode == 3)
         if in_playback:
             try:
                 log("[media] restore: exit_playback → start_liveview → i-frame")

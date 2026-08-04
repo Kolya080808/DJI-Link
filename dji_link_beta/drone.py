@@ -245,10 +245,12 @@ class Drone:
         self.set_param("fc_dark_need_gps_0", bytes([0 if unlock else 1]))
 
     # --- camera working mode: liveview (flight) vs playback (media) ---
-    # The camera can't do both; media list/download only answer in playback mode.
+    # The camera can't do both; media list/download only answer in media-download mode.
+    # DEX (CameraWorkMode, classes_0451d00c): PLAYBACK=2, MEDIA_DOWNLOAD=3. Media ops need 3.
     def enter_playback(self) -> None:
-        # 1. Switch camera to PLAYBACK mode (CameraWorkMode=2).
-        self._cmd(0x02, 0x10, bytes([2]), receiver=DEV_CAMERA)
+        # 1. Switch camera to MEDIA_DOWNLOAD mode (CameraWorkMode=3) — required for media ops.
+        #    (Plain PLAYBACK=2 shows the playback UI but answers media FileChannel with nothing.)
+        self._cmd(0x02, 0x10, bytes([3]), receiver=DEV_CAMERA)
         # 2. Subscribe to PLAYBACK_PARAMETER (msgID 0x1772) so the camera starts
         #    pushing 0x02/0x82 with total_num + current mode.
         #    Without this subscribe the camera never sends 0x82 (confirmed hardware).

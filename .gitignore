@@ -37,3 +37,12 @@ video.bin
 # runtime logs (latest.log + dated archives, Beat Saber style; cleaned weekly)
 logs/
 *.log
+
+# build output
+build/
+
+# local snapshot archives
+project_full_snapshot.tar.gz
+changed_files.tar.gz
+decompiled.zip
+reversing.zip

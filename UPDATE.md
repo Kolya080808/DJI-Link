@@ -1,10 +1,85 @@
 ---
-title: DJI Link v0.9.2 — Mouse stick pads, GPS/SATS HUD, slower AP rejoin
-version: 0.9.2
+title: DJI Link v0.9.4 — Pi services migrated to C++
+version: 0.9.4
 prerelease: true
 ---
 
 ## Changed
+
+- **The Pi jump-host services are now C++ binaries, not Python scripts.**
+  `bridge.py`, `aoa_device.py`, `raw_gadget.py` and `netctl.py` were ported
+  one-to-one (same mechanics, same retry timings, same wire behavior) to
+  `src/pi/` (`dji-bridge`: the raw_gadget AOA↔TCP bridge on `:9910`;
+  `dji-netctl`: the Wi-Fi/AP HTTP API on `:9911` plus the CLI). The release
+  workflow cross-compiles both for aarch64 with a static link
+  (`cmake/pi-aarch64.toolchain.cmake`) and ships them in the Pi bundle under
+  `pi/bin/`; the Pi no longer needs Python for the services themselves.
+  - `dji-netctl`'s `/status` replies stayed byte-compatible with the Python
+    service — the PC client's discovery screen (`tests/netctl_parse_test.cpp`
+    pins the JSON shape) does not tell the difference;
+  - the bridge keeps its restart-on-suspend / 2 s AOA-retry /
+    stale-frame-drop semantics, including the deliberate "restart the whole
+    process on a dirty USB disconnect" move (via `execv("/proc/self/exe")`),
+    exactly as the Python version did it;
+  - existing Pi's upgrade themselves: `install-pi.sh` detects an old
+    `python3 netctl.py` systemd unit and swaps it for a tiny
+    `dji-netctl-wrapper` shim pointing at the new binary, which also keeps a
+    rolled-back old bundle working, so the unattended health gate cannot
+    strand the Pi without its Wi-Fi API;
+  - `setup_pi.sh` now generates services that exec `bin/dji-bridge` /
+    `bin/dji-netctl` directly.
+
+> Everything below from **v0.9.3** is kept verbatim as stack context; this release only
+> supersedes how the Pi-side services are built and packaged.
+
+---
+
+---
+title: DJI Link v0.9.3 — Media protocol truth from DJI Fly DEX (beta client)
+version: 0.9.3
+prerelease: true
+---
+
+## Changed
+
+- **Beta media protocol now matches what the DEX actually proves.** The beta client's
+  media stack (`dji_link_beta/media.py`, `drone.py`, `pc_client.py`) previously entered
+  camera mode `PLAYBACK(2)` and described itself from older, mutually contradictory
+  reverse notes. A fresh static decompile of DJI Fly v1.21.4 (`jadx` over the 16 dex
+  files under `dji_link_beta/reverse_docs/unpacked_app_dex/`) shows the real state of
+  play:
+
+  - entry into the media work mode is `cmdset=0x02 CAMERA, cmd=0x10 SetMode,
+    payload=0x03` (`CameraWorkMode.MEDIA_DOWNLOAD=3`), not `PLAYBACK(2)` — the
+    FileChannel LIST/DOWNLOAD answers only after that, which is why plain playback
+    looked like "the camera ignores us";
+  - the legacy 10-byte FileChannel header and the LIST / DOWNLOAD inner layouts in
+    `media.py` match `FileSendPack` / `DataRequestList` / `DataRequestFile` exactly —
+    those parts were already correct;
+  - `DELETE` on `CmdIdCommon 0x28` is implemented only inside `libcrossplayback.so` —
+    no Java packer exists in the dex — so the best-known `count u16 + indices u32`
+    layout remains **capture-pending** until a wire trace on real hardware confirms it;
+  - the camera answers FileChannel on `0x00/0x27` with a receive-side length split
+    (`total = u16 >> 12`, `len = u16 & 0xFFF`) that is now documented for the next
+    debugging session;
+  - no standalone COUNT command exists in v1.21.4 — paging terminates on the
+    `isPageLastFile` flag inside each record.
+
+- **New reference note.** `dji_link_beta/reverse_docs/MEDIA_PROTOCOL_DEX_TRUTH.md`
+  collects the byte-accurate findings with their dex/class provenance, and clearly
+  separates what is statically proven from what still needs a wire capture.
+
+- **`pc_client.py` gate display now tracks MEDIA_DOWNLOAD(3).** The beta UI treats
+  mode 3 (not 2) as the media-ready state, matching the new entry command.
+
+> Everything below from **v0.9.2** is kept verbatim as stack context; this release only
+> supersedes the beta media-facing behaviour.
+
+---
+
+### v0.9.2 — Mouse stick pads, GPS/SATS HUD, slower AP rejoin
+
+#### Changed
 
 - **The yaw stick pad now reacts to mouse movement.** The bottom-right stick pads
   already visualized keyboard input (WASDEQ); the yaw pad now also tracks mouse
@@ -153,10 +228,9 @@ prerelease: true
 - Restore the uplink and confirm AP clients regain internet.
 - Pull Pi power during an uplink reconnect, then boot again and confirm the AP returns.
 
-## Not changed
+### Not changed
 
-- Media protocol behavior is not part of this prerelease; the existing media list check
-  is only kept visible in beta tests.
+- Media protocol behavior in v0.9.2 was not touched; v0.9.3 above superseded it.
 
 <!--
 Release checklist:

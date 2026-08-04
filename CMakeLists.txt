@@ -88,6 +88,30 @@ endif()
 
 install(TARGETS dji-link RUNTIME DESTINATION bin BUNDLE DESTINATION .)
 
+# ---------------------------------------------------------- Pi services (C++)
+# The Raspberry Pi jump-host daemons, ported 1:1 from dji_link_beta/pi/*.py:
+#   dji-bridge — AOA <-> TCP bridge on :9910 (raw_gadget USB gadget)
+#   dji-netctl — Wi-Fi/AP HTTP API on :9911 + CLI (port of netctl.py)
+# POSIX-only, so they build solely on Linux (natively on the Pi, or crossed for
+# aarch64 via cmake/pi-aarch64.toolchain.cmake in the release workflow). They are
+# intentionally NOT installed/packaged with the PC client — release.yml's
+# pi-installer job copies the binaries into the pi/ bundle itself.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(dji-bridge
+        src/pi/bridge.cpp
+        src/pi/aoa_device.cpp
+        src/pi/raw_gadget.cpp
+    )
+    target_include_directories(dji-bridge PRIVATE src)
+
+    add_executable(dji-netctl src/pi/netctl.cpp)
+
+    foreach(pi_target dji-bridge dji-netctl)
+        target_compile_features(${pi_target} PRIVATE cxx_std_20)
+        target_link_libraries(${pi_target} PRIVATE Threads::Threads)
+    endforeach()
+endif()
+
 # --------------------------------------------------------------------- tests
 # Built and run by ci.yml's `ctest` step on every platform in the matrix. Only
 # display-free, network-free core logic is covered here, so it runs everywhere.

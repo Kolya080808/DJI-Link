@@ -38,7 +38,7 @@ sudo modprobe raw_gadget || {
 echo "[3/4] checking the UDC"
 if ls /sys/class/udc/ 2>/dev/null | grep -q .; then
     echo "   UDC found: $(ls /sys/class/udc/)"
-    echo "   -> pass this name to bridge.py --udc"
+    echo "   -> pass this name to dji-bridge --udc"
 else
     echo "!! no UDC visible. Most likely a reboot is needed (dwc2 was just enabled),"
     echo "   and the Pi must be plugged by its data port into the host (on the Zero, the 'USB' port, not 'PWR')."
@@ -53,5 +53,5 @@ if [ "${NEED_REBOOT:-0}" = "1" ]; then
     echo ">>> Reboot the Pi (sudo reboot), then run this script again."
 else
     echo
-    echo ">>> Done. Start the bridge with:  sudo python3 bridge.py --udc <name_from_/sys/class/udc>"
+    echo ">>> Done. Start the bridge with:  sudo bin/dji-bridge --udc <name_from_/sys/class/udc>"
 fi

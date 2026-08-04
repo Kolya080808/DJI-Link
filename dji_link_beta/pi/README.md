@@ -15,13 +15,15 @@ receives telemetry/video over Wi-Fi; the Pi only forwards bytes.
 | `install.sh` | stamped GitHub Release bootstrap published as `install-pi.sh` |
 | `setup_pi.sh` | full Pi bring-up: packages, `dwc2`, `raw_gadget`, services |
 | `update_pi.sh` | non-interactive updater run by `dji-update.timer` when internet is available |
-| `netctl.py` | Wi-Fi/AP HTTP API on `:9911` used by the C++ discovery screen |
+| `bin/dji-netctl` | Wi-Fi/AP HTTP API on `:9911` used by the C++ discovery screen (C++ port of the former `netctl.py`, built in the release from `src/pi/netctl.cpp`) |
 | `ap.sh` | brings the Wi-Fi AP up/down with hostapd + dnsmasq (run by `dji-ap.service`) |
 | `rescue.sh` | standalone repair for a Pi that has lost all networking (see below) |
-| `bridge.py` | AOA ↔ TCP bridge on `:9910`; TCP listens immediately, AOA retries in the background |
-| `aoa_device.py` | AOA device emulator: 51/52/53 handshake, re-enumeration, bulk endpoints |
-| `raw_gadget.py` | wrapper over `/dev/raw-gadget` |
+| `bin/dji-bridge` | AOA ↔ TCP bridge on `:9910`; TCP listens immediately, AOA retries in the background (C++ port of the former `bridge.py` / `aoa_device.py` / `raw_gadget.py`, built in the release from `src/pi/`) |
 | `build_raw_gadget.sh` / `setup_gadget.sh` | low-level gadget helpers used by setup/debugging |
+
+The release pipeline cross-compiles the two binaries for aarch64 (static, from
+`src/pi/*.cpp` via `cmake/pi-aarch64.toolchain.cmake`) and ships them inside the
+bundle, so no Python runtime is needed on the Pi for the services themselves.
 
 ## One-line install from the latest release
 
@@ -75,8 +77,8 @@ the USB port carries data.
 
 - `dji-ap.service` runs the Wi-Fi access point via `ap.sh` (hostapd on `uap0` + dnsmasq
   for DHCP/DNS + iptables NAT). Always-on so the laptop can join in the field.
-- `dji-netctl.service` runs `netctl.py serve` and exposes Pi Wi-Fi/AP control on `:9911`.
-- `dji-bridge.service` runs `bridge.py` and exposes the AOA byte stream on `:9910`.
+- `dji-netctl.service` runs `bin/dji-netctl serve` and exposes Pi Wi-Fi/AP control on `:9911`.
+- `dji-bridge.service` runs `bin/dji-bridge` and exposes the AOA byte stream on `:9910`.
   The TCP listener opens before the remote controller / UDC path is ready; until AOA
   comes up, incoming laptop frames are accepted and logged as dropped.
 - `dji-update.timer` runs every 6 hours, checks GitHub Releases when internet is
@@ -92,9 +94,8 @@ journalctl -u dji-update -f
 tail -f /var/log/dji-link/bridge.log
 ```
 
-`bridge.py` also writes full Python tracebacks for main-thread crashes, background-thread
-crashes, TCP session failures, and AOA worker failures to both `journalctl` and
-`/var/log/dji-link/bridge.log`.
+`bin/dji-bridge` logs main-loop failures, TCP-session failures, and AOA worker
+failures to both `journalctl` (stdout) and `/var/log/dji-link/bridge.log`.
 
 ## Wi-Fi access point (why hostapd, not NetworkManager)
 
@@ -144,7 +145,6 @@ until hostapd succeeds; it never permanently gives up after an arbitrary number 
 attempts. The retry path reuses `uap0` and never disconnects `wlan0`, so LAN/SSH remains
 available while the lifeline AP recovers. netctl's separate watchdog still backs off
 after repeated failures and does not add a second tight restart loop.
-
 The BCM43430 AP is deliberately configured as 802.11g (`ieee80211n=0`). On the tested
 kernel, enabling 802.11n/HT made cfg80211 reject the correct shared channel during boot
 with `(extension) channel is disabled`; non-HT mode starts immediately and still gives
@@ -157,7 +157,7 @@ The off path leaves the early-created `uap0` object reserved but down and addres
 the next hotspot-on can therefore reuse the correct interface order instead of creating
 a new virtual interface after NetworkManager's P2P device.
 
-`netctl.py` restarts `dji-ap` only when the channel it must use actually changed, or
+dji-netctl restarts `dji-ap` only when the channel it must use actually changed, or
 when the AP is unhealthy. Joining a network that is already on the AP's channel, and
 every `disconnect`, leave the laptop's association alone.
 
@@ -168,7 +168,7 @@ stays on channel 6 while the uplink sits on 12/13, which one radio cannot do wel
 Verify / troubleshoot on the Pi:
 
 ```bash
-sudo python3 netctl.py doctor            # start here: every check in one place
+sudo dji-netctl doctor                   # start here: every check in one place
 bash ap.sh health                        # "ok", or what exactly is wrong
 systemctl status dji-ap                  # active = AP up
 iw dev                                   # expect a uap0 interface in type AP
@@ -242,7 +242,7 @@ The next `setup_pi.sh` / auto-update re-creates the unit and returns to hostapd.
    after the AOA handshake.
 2. Then plug the Pi into the remote controller. `dji-bridge.service` should already be
    listening on `:9910`; if the bridge log prints
-   `Remote controller identified itself: {0:'DJI',1:'com.dji.logiclink'...}`, the remote
+   `Remote controller identified itself: {0: 'DJI', 1: 'com.dji.logiclink', ...}`, the remote
    accepted the Pi as the phone accessory.
 3. Launch the installed desktop app (`dji-link`) on the PC. The discovery screen should
    find the Pi and connect through `:9910` / `:9911`.

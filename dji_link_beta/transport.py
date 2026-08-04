@@ -98,7 +98,7 @@ class CompositeTransport(Transport):
 
 
 class NetTransport(Transport):
-    """Laptop transport to the bridge on the Pi (pi/bridge.py) over TCP. Transparently shuffles
+    """Laptop transport to the bridge on the Pi (bin/dji-bridge in the pi/ bundle) over TCP. Transparently shuffles
     DUML bytes: send() -> to the RC, recv() <- from the RC. This way the laptop (keyboard/Drone
     API/neural net) controls the drone, while all the USB/AOA fuss lives on the Pi."""
 

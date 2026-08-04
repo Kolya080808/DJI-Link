@@ -1,18 +1,28 @@
 """
 media.py — SD card list / download / thumbnail / delete for WM160 (Mavic Mini 1).
 
-REAL PROTOCOL (reversed from litchis FileChannel in DJI Fly, fw 01.00.0600):
+Source of truth: `dji_link_beta/reverse_docs/MEDIA_PROTOCOL_DEX_TRUTH.md`
+(static jadx decompile of DJI Fly v1.21.4 classes_*.dex — NOT the older
+hand-written reverse_docs, which contradicted each other).
 
-  WM160 does NOT use the 0x7B/0x82/0x84/0xDC playback path (dead code on this HW).
-  ALL media rides one DUML command: cmd_set 0x00 / cmd_id 0x26 (RequestFile),
-  receiver=CAMERA(0x01). An inner 10-byte "FileChannel" header selects the op.
-  The camera answers on 0x00/0x27 (GetPushFile) DATA frames. Delete = 0x00/0x28.
+Playback entry (CONFIRMED): cmdset=0x02 CAMERA, cmd=0x10 SetMode,
+  payload={0x03} = CameraWorkMode.MEDIA_DOWNLOAD. The camera answers 0x02/0x80
+  pushes with CameraWorkMode at payload[4]; media ops are accepted at mode 3
+  (media download), not plain 2 (playback).
 
-FileChannel inner header (10 bytes, LE), carried as the 0x26/0x27 DUML payload:
+Legacy litchis transport (CONFIRMED in DEX, likely disused on WM160):
+  All requests ride cmd_set 0x00 / cmd_id 0x26 (RequestFile), receiver=CAMERA(0x01).
+  Camera answers on 0x00/0x27 (GetPushFile) DATA frames.
+  0x28 DeleteFile exists as a CmdIdCommon enum entry but its model class is
+  ABSENT from the dex — delete is implemented only in native `libcrossplayback.so`
+  this app ships; the layout below is therefore CAPTURE-PENDING (best known).
+
+FileChannel inner header (10 bytes, LE), the 0x26/0x27 DUML payload:
   [0]    0x0A | (version<<6)   version=1 → 0x4A (low 6 bits = header length = 10)
-  [1]    (cmdId<<5) | cmdType  cmdId: List=0 File=1 Stream=2 Num=3
+  [1]    (cmdId<<5) | cmdType  cmdId: List=0 File=1 Stream=2 Num=3 (unused)
                                cmdType: REQ=0 DATA=1 ACK=2 PUSH=3 ABORT=4 DEL=5
-  [2-3]  total frame length u16 (header + inner payload)
+  [2-3]  total length u16 (header + inner payload).  NOTE asymmetry on RX:
+         FileRecvPack does total=u16>>12 (top 4 bits = pkt-idx), len=u16 & 0xFFF.
   [4-5]  sessionId u16         (new per transfer, echoed in replies)
   [6-9]  offset u32            (0 on requests; file byte-offset on DATA chunks)
   [10..] inner payload
@@ -21,14 +31,12 @@ LIST request inner payload (7B): [startIndex u32; storage in top 2 bits of byte3
                                  [count u16][subType u8=0]
 LIST response (0x27 DATA, after 10B header): [count u32][dataLen u32][records...]
   record: [typeword u32][reserved u32][index u32][nameLen u8][name ASCII]
+  (fileSize NOT present on the wire here — dataset-level MediaFile.fromBytes has
+   fileSize u64 after a length-prefixed name; that path is native crossplayback.)
 
 FILE request inner payload (16B): [index u32][subCount u16=0][subType u8][grade u8=0]
                                   [offset u32=0][length u32=0 → whole]
   subType: ORG=0 THM=1 SCR=2
-FILE response (0x27 DATA): inner header offset = byte offset; first chunk (offset==0)
-  is prefixed with the same metadata block (index@8,nameLen@0xC,name@0xD) then bytes.
-
-DELETE: 0x00/0x28, payload [count u16 LE][index u32 LE]*count (capture-pending width).
 """
 
 from __future__ import annotations
@@ -175,15 +183,16 @@ class MediaClient:
 
     # ---- playback gate ----
     def note_camera_state(self, payload: bytes) -> None:
-        """0x02/0x80 push — byte[4] is CameraWorkMode; 2 = PLAYBACK."""
+        """0x02/0x80 push — byte[4] is CameraWorkMode. DEX: PLAYBACK=2, MEDIA_DOWNLOAD=3.
+        Media ops require mode 3 (MEDIA_DOWNLOAD); plain playback (=2) is not enough."""
         if len(payload) > 4:
             self._cam_mode = payload[4]
-            if self._cam_mode == 2:
+            if self._cam_mode == 3:
                 self._playback_ready = True
 
     def enter_playback(self) -> None:
         self._playback_ready = False
-        self.d.enter_playback()
+        self.d.enter_playback()   # drone enters MEDIA_DOWNLOAD(3) since v0.9.2
 
     def exit_playback(self) -> None:
         self.d.exit_playback()
@@ -311,11 +320,14 @@ class MediaClient:
                         receiver=self.receiver)
         self.last_note = f"FILE req sent (session={sess}, index={mf.file_index}, sub={sub_type} → {dest})"
 
-    # ---- DELETE ----
+    # ---- DELETE (CAPTURE-PENDING — not confirmed against WM160) ----
     def delete(self, mf) -> None:
-        """0x00/0x28 DeleteFile — count-prefixed index list. Must be in PLAYBACK.
-        Watch for 0xD6 PARAM_ERROR (then count width is wrong)."""
-        fs = mf if isinstance(mf, (list, tuple)) else [mf]
+        """0x00/0x28 DeleteFile — count-prefixed index list. CmdIdCommon.DeleteFile=0x28
+        is only an enum entry in v1.21.4; the packer class is stripped (native-only).
+        This layout (count u16 + indices u32) is our best-known guess — WATCH for
+        0xD6 PARAM_ERROR; if seen, the real format came from libcrossplayback.so and
+        needs a wire capture to fix."""
+        fs = [mf] if not isinstance(mf, (list, tuple)) else list(mf)
         payload = struct.pack("<H", len(fs)) + b"".join(
             struct.pack("<I", f.file_index & 0xFFFFFFFF) for f in fs)
         self.d.send_raw(CMDSET_GENERAL, CID_DELETE, payload, receiver=self.receiver)

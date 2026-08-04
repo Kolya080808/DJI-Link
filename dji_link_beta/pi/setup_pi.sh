@@ -10,7 +10,7 @@
 # Usage:
 #   sudo bash setup_pi.sh                      # set up this machine, use ~/pi if present
 #   sudo bash setup_pi.sh <git-url>            # also clone/update the project first
-#   sudo bash setup_pi.sh <git-url> --service  # and run bridge.py at boot
+#   sudo bash setup_pi.sh <git-url> --service  # and run the AOA bridge at boot
 #   sudo bash setup_pi.sh --dir /opt/dji-link/pi --service   # use already-present files
 #
 # A reboot is required the first time (dwc2 is a device-tree change).
@@ -181,7 +181,7 @@ After=NetworkManager.service dji-ap.service
 Wants=NetworkManager.service dji-ap.service
 
 [Service]
-ExecStart=/usr/bin/python3 ${PI_DIR}/netctl.py serve
+ExecStart=${PI_DIR}/bin/dji-netctl serve
 WorkingDirectory=${PI_DIR}
 Restart=always
 RestartSec=2
@@ -273,8 +273,7 @@ After=network.target
 StartLimitIntervalSec=0
 
 [Service]
-Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 ${PI_DIR}/bridge.py
+ExecStart=${PI_DIR}/bin/dji-bridge
 WorkingDirectory=${PI_DIR}
 Restart=always
 RestartSec=2
@@ -344,7 +343,7 @@ EOF
     systemctl restart dji-netctl.service || true
     systemctl restart dji-bridge.service || true
     systemctl restart dji-update.timer || true
-    # bridge.py opens :9910 immediately and retries AOA in the background, so it is useful
+    # dji-bridge opens :9910 immediately and retries AOA in the background, so it is useful
     # even before /dev/raw-gadget or the RC is ready.
     if [ "$NEED_REBOOT" = "0" ]; then
         echo "     dji-netctl.service enabled + started"
@@ -374,7 +373,7 @@ EOF
         echo "     ap: ${AP_STATE}  (hostapd+dnsmasq)"
         bash "${PI_DIR}/ap.sh" health 2>&1 | sed 's/^/       /' || true
         echo "     !! the access point is NOT healthy. Diagnose with:"
-        echo "        sudo python3 ${PI_DIR}/netctl.py doctor"
+        echo "        sudo ${PI_DIR}/bin/dji-netctl doctor"
         echo "        journalctl -u dji-ap -n 40 --no-pager"
     fi
     echo "     ap logs: journalctl -u dji-ap -f"

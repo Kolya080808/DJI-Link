@@ -168,11 +168,15 @@ the setup.
   - `core/` — DUML, composite mux, telemetry, control, drone API, transports, logging,
     Pi discovery, auto-updater, bundled ffmpeg lookup
   - `gui/` — SDL2 app window, preflight menu, video/HUD, settings, in-flight console
+  - `pi/` — the Pi jump-host services in C++ (`dji-bridge`: AOA↔TCP on :9910;
+    `dji-netctl`: Wi-Fi/AP HTTP API on :9911), built for aarch64 by the release
+    workflow via `cmake/pi-aarch64.toolchain.cmake`
 - **`dji_link_beta/`** — the old Python beta plus current Pi jump-host tooling
   - `pc_client.py` — historical desktop prototype (video, telemetry, control, settings, console)
   - `drone.py` · `duml.py` · `composite.py` · `telemetry.py` · `diag_codes.py` · `control.py` · `transport.py`
-  - `pi/` — release-packaged Raspberry Pi bridge/update tooling (`bridge.py`,
-    `netctl.py`, `ap.sh`, `rescue.sh`, `install.sh`, `setup_pi.sh`, `update_pi.sh`)
+  - `pi/` — release-packaged Raspberry Pi tooling (`ap.sh`, `rescue.sh`,
+    `install.sh`, `setup_pi.sh`, `update_pi.sh`; the services themselves live in
+    `bin/` in the bundle — C++ ports of the former `bridge.py`/`netctl.py`)
   - `reverse_docs/` — the reverse-engineering documentation
 - **`decompiled/`** — the DJI Fly app, unpacked (source material for the research)
 

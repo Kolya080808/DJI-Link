@@ -447,20 +447,41 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Install the aarch64 cross toolchain
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Build the Pi services (dji-bridge / dji-netctl, aarch64, static)
+        run: |
+          set -euo pipefail
+          # Static so the runner's newer glibc cannot keep the binaries from starting
+          # on Raspberry Pi OS; neither daemon does NSS/DNS lookups (raw ioctls plus
+          # nmcli/systemctl subprocesses), so -static is safe here.
+          cmake -S . -B build-pi \
+            -DDJI_LINK_GUI=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/pi-aarch64.toolchain.cmake
+          cmake --build build-pi --target dji-bridge dji-netctl -j"$(nproc)"
+          aarch64-linux-gnu-strip -s build-pi/dji-bridge build-pi/dji-netctl
+          file build-pi/dji-bridge build-pi/dji-netctl
+
       - name: Package the pi/ bundle
         run: |
           set -euo pipefail
           bash tests/ap_channel_test.sh
-          python3 tests/netctl_sim_test.py
-          mkdir -p dist stage/pi
-          # Everything the Pi needs at runtime (transparent AOA<->TCP bridge + setup).
-          cp dji_link_beta/pi/*.py dji_link_beta/pi/*.sh stage/pi/
+          mkdir -p dist stage/pi/bin
+          # Everything the Pi needs at runtime: the C++ services in bin/ plus the
+          # shell-side tooling (ap.sh runs the AP; setup/install/update/rescue manage it).
+          cp dji_link_beta/pi/*.sh stage/pi/
           cp dji_link_beta/pi/README.md stage/pi/ 2>/dev/null || true
+          cp build-pi/dji-bridge build-pi/dji-netctl stage/pi/bin/
+          chmod +x stage/pi/bin/dji-bridge stage/pi/bin/dji-netctl
           # One file per invocation: `bash -n a.sh b.sh` parses only a.sh and turns the
           # rest into positional parameters, so the glob silently checked ap.sh alone and
           # nothing else in the bundle was ever syntax-checked.
           for f in stage/pi/*.sh; do bash -n "$f"; done
-          python3 -m py_compile stage/pi/*.py
           tar -czf dist/dji-link-pi.tar.gz -C stage pi
           echo "Bundle contents:"
           tar -tzf dist/dji-link-pi.tar.gz

@@ -126,7 +126,7 @@ def selftest() -> int:
 def keyboard(model: str, connect: bool, pi: str | None, serial_port: str | None) -> int:
     """Game-style keyboard control.
       no flags     -> loopback (LogTransport): see frames without hardware
-      --pi HOST    -> via the bridge on the Pi Zero (pi/bridge.py) to the remote controller -> drone
+      --pi HOST    -> via the bridge on the Pi Zero (bin/dji-bridge in the pi bundle) to the remote controller -> drone
       --connect    -> direct AOA to the phone (stack demo, not the path to the drone)"""
     from transport import LogTransport
     from drone import Drone
@@ -282,7 +282,7 @@ def main() -> int:
     ap.add_argument("--connect", action="store_true",
                     help="with --keyboard: direct AOA to the phone (stack demo)")
     ap.add_argument("--pi", default=None, metavar="HOST[:PORT]",
-                    help="with --keyboard: address of the bridge on the Pi Zero (pi/bridge.py)")
+                    help="with --keyboard: address of the bridge on the Pi Zero (bin/dji-bridge in the pi bundle)")
     ap.add_argument("--serial", default=None, metavar="PORT",
                     help="with --keyboard: remote controller USB Virtual COM (COM4 / /dev/ttyACM0)")
     ap.add_argument("--model", default=aoa.DJI_IDENTITY[1],

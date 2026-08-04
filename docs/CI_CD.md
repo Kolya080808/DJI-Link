@@ -210,12 +210,15 @@ then runs `setup_pi.sh` which:
 
 Check it with `systemctl status dji-netctl dji-bridge dji-update.timer` and
 `journalctl -u dji-netctl -f` / `journalctl -u dji-bridge -f` /
-`journalctl -u dji-update -f`. Bridge tracebacks are also mirrored to
+`journalctl -u dji-update -f`. Bridge crash logs are also mirrored to
 `/var/log/dji-link/bridge.log` on the Pi.
 
-Before publishing the Pi assets, `release.yml` also runs the shell/Python Pi regression
-tests (`tests/ap_channel_test.sh`, `tests/netctl_sim_test.py`), then syntax-checks every
-bundled shell script and byte-compiles every bundled Python file.
+Before publishing the Pi assets, `release.yml` cross-compiles the Pi services
+(`src/pi/` → `dji-bridge` / `dji-netctl`, aarch64 static, via
+`cmake/pi-aarch64.toolchain.cmake`), runs the shell regression tests
+(`tests/ap_channel_test.sh`), and syntax-checks every bundled shell script. The
+bundle carries the binaries under `pi/bin/` plus the shell tooling; Python is no
+longer required on the Pi for the services themselves.
 
 > `raw_gadget` is an out-of-tree module, so it must be rebuilt after a kernel upgrade —
 > re-run the installer (or `sudo bash /opt/dji-link/pi/setup_pi.sh --dir /opt/dji-link/pi --service`).

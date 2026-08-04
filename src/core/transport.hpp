@@ -33,7 +33,7 @@ private:
     Bytes last_;
 };
 
-// TCP client to the Pi bridge (pi/bridge.py). Transparently shuffles DUML bytes.
+// TCP client to the Pi bridge (bin/dji-bridge in the pi bundle). Transparently shuffles DUML bytes.
 class NetTransport : public Transport {
 public:
     NetTransport(const std::string& host, int port = 9910);
