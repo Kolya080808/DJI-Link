@@ -133,3 +133,39 @@ jobs:
         # --no-tests=ignore: while there are no tests yet, "no tests" counts as success,
         # but real test failures still fail CI.
         run: ctest --test-dir build --build-config Release --output-on-failure --no-tests=ignore
+
+  # ---------------------------------------------------------------------------
+  # The Pi services (src/pi/*) are POSIX-only and are NOT compiled by the build
+  # matrix on macOS/Windows — so until the aarch64 pi-installer job runs in
+  # release.yml (tag only), nothing compile-checks them. This job mirrors
+  # release.yml's pi-installer build exactly (same toolchain file, same GUI=OFF,
+  # same static link) so a break in the Pi C++ is caught on every push/PR, not
+  # only at release time.
+  # ---------------------------------------------------------------------------
+  pi-crossbuild:
+    name: pi-aarch64-cross
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the aarch64 cross toolchain
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Build the Pi services (dji-bridge / dji-netctl, aarch64, static)
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-pi \
+            -DDJI_LINK_GUI=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/pi-aarch64.toolchain.cmake
+          cmake --build build-pi --target dji-bridge dji-netctl -j"$(nproc)"
+          file build-pi/dji-bridge build-pi/dji-netctl
+
+      - name: Check the shell-side Pi tooling (pulled into the pi/ bundle)
+        run: |
+          set -euo pipefail
+          # Same syntax check release.yml's "Package the pi/ bundle" step runs.
+          for f in dji_link_beta/pi/*.sh; do bash -n "$f"; done

@@ -59,6 +59,7 @@
 #include <ctime>
 #include <fcntl.h>
 #include <fstream>
+#include <memory>
 #include <mutex>
 #include <netinet/in.h>
 #include <optional>
@@ -392,13 +393,31 @@ CmdResult ap_sh(std::vector<std::string> args) {
 // Reader: a small tolerant recursive-descent parser good enough for the flat request
 // bodies our own PC client POSTs ({ssid, psk, on}).
 
+// A JSON object entry: key by value, value behind unique_ptr. Declared BEFORE
+// Json (not as a std::pair<std::string, Json>) because a std::pair of an
+// incomplete type is not valid inside std::vector at the point of the member
+// declaration — GCC happens to accept it, Clang rejects it, and the result is
+// not portable.
+struct Json;
+struct JsonMember {
+    std::string first;
+    std::unique_ptr<Json> second;
+    JsonMember() = default;
+    JsonMember(const std::string& k, Json&& v);
+    ~JsonMember();
+    JsonMember(JsonMember&&) noexcept;
+    JsonMember& operator=(JsonMember&&) noexcept;
+    JsonMember(const JsonMember& o);
+    JsonMember& operator=(const JsonMember& o);
+};
+
 struct Json {
     enum Type { Null, Bool, Int, Str, Arr, Obj } type = Null;
     bool boolean = false;
     long long number = 0;
     std::string str;
     std::vector<Json> arr;
-    std::vector<std::pair<std::string, Json>> obj;
+    std::vector<JsonMember> obj;
 
     static Json object() {
         Json j;
@@ -436,10 +455,26 @@ struct Json {
             return nullptr;
         for (const auto& kv : obj)
             if (kv.first == key)
-                return &kv.second;
+                return kv.second.get();
         return nullptr;
     }
 };
+
+// Out-of-line so Json is complete here (it is not at JsonMember's declaration).
+JsonMember::JsonMember(const std::string& k, Json&& v)
+    : first(k), second(std::make_unique<Json>(std::move(v))) {}
+JsonMember::~JsonMember() = default;
+JsonMember::JsonMember(JsonMember&&) noexcept = default;
+JsonMember& JsonMember::operator=(JsonMember&&) noexcept = default;
+JsonMember::JsonMember(const JsonMember& o)
+    : first(o.first), second(o.second ? std::make_unique<Json>(*o.second) : nullptr) {}
+JsonMember& JsonMember::operator=(const JsonMember& o) {
+    if (this != &o) {
+        first = o.first;
+        second = o.second ? std::make_unique<Json>(*o.second) : nullptr;
+    }
+    return *this;
+}
 
 void json_escape_into(std::string& out, const std::string& s) {
     static const char* const hex = "0123456789abcdef";
@@ -567,7 +602,7 @@ void json_dump_into(std::string& out, const Json& j, int indent, int level) {
                     out += '\n', pad(level + 1);
                 json_escape_into(out, j.obj[i].first);
                 out += indent ? ": " : ": ";
-                json_dump_into(out, j.obj[i].second, indent, level + 1);
+                json_dump_into(out, *j.obj[i].second, indent, level + 1);
             }
             if (indent) {
                 out += '\n';
