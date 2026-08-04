@@ -80,7 +80,14 @@ Event RawGadget::event_fetch(std::uint32_t data_cap) {
         throw_io("USB_RAW_IOCTL_EVENT_FETCH");
     Event out;
     out.type = ev->type;
-    std::uint32_t n = std::min(ev->length, data_cap);
+    // Python did not clamp: it returned bytes(ev.data[:ev.length]) in full, i.e. a
+    // kernel length beyond data_cap would blow up loudly rather than truncate. Match
+    // that instead of silently misparsing a control event.
+    if (ev->length > data_cap)
+        throw std::runtime_error("USB_RAW_IOCTL_EVENT_FETCH: event data longer than data_cap (" +
+                                 std::to_string(ev->length) + " > " + std::to_string(data_cap) +
+                                 ")");
+    std::uint32_t n = ev->length;
     out.data.assign(ev->data, ev->data + n);
     if (out.type == USB_RAW_EVENT_CONTROL && n >= sizeof(UsbCtrlRequest)) {
         UsbCtrlRequest ctrl;

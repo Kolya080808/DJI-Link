@@ -72,7 +72,8 @@ private:
 // (SUSPEND / dirty-disconnect recovery). bridge main() must call set_saved_argv(argc, argv)
 // once at startup so the AOA worker can re-exec /proc/self/exe with the same arguments.
 void set_saved_argv(int argc, char** argv);
-[[noreturn]] void restart_process();
+// Throws UsbError if execv fails (Python raised OSError and run_forever retried).
+void restart_process();
 
 class AoaDevice {
 public:

@@ -526,7 +526,9 @@ void json_escape_into(std::string& out, const std::string& s) {
                         cp = c & 0x07;
                         len = 3;
                     } else {
-                        cp = 0xfffd; // U+FFFD for the lone byte, like Python's error handling
+                        // Unreachable for strings that came through valid_utf8()
+                        // (Python's strict decode would already have refused them).
+                        cp = 0xfffd; // U+FFFD replacement, defensive only
                         len = 0;
                     }
                     for (size_t k = 0; k < len; ++k)
@@ -549,6 +551,54 @@ void json_escape_into(std::string& out, const std::string& s) {
         }
     }
     out += '"';
+}
+
+// Python strict UTF-8 check: subprocess.run(text=True) decodes command output with
+// errors="strict", so an SSID containing bytes that are not valid UTF-8 makes any
+// command touching it raise UnicodeDecodeError. Inside an HTTP handler that exception
+// is uncaught and the connection dies with no reply at all; a CLI command dies with a
+// traceback and exit code 1. This mirrors that: handle_connection closes silently when
+// this returns false, main() exits 1.
+bool valid_utf8(const std::string& s) {
+    for (size_t i = 0; i < s.size();) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c < 0x80) {
+            ++i;
+            continue;
+        }
+        size_t len;
+        unsigned cp;
+        if ((c & 0xe0) == 0xc0) {
+            cp = c & 0x1f;
+            len = 2;
+            if (cp < 2) return false; // overlong
+        } else if ((c & 0xf0) == 0xe0) {
+            cp = c & 0x0f;
+            len = 3;
+        } else if ((c & 0xf8) == 0xf0) {
+            cp = c & 0x07;
+            len = 4;
+        } else {
+            return false; // lone continuation byte or 0xf8+
+        }
+        if (i + len > s.size())
+            return false; // truncated
+        for (size_t k = 1; k < len; ++k) {
+            unsigned char t = static_cast<unsigned char>(s[i + k]);
+            if ((t & 0xc0) != 0x80)
+                return false;
+            cp = (cp << 6) | (t & 0x3f);
+        }
+        if (len == 3) {
+            if (cp < 0x800 || (cp >= 0xd800 && cp <= 0xdfff))
+                return false; // overlong or surrogate
+        } else if (len == 4) {
+            if (cp < 0x10000 || cp > 0x10ffff)
+                return false; // overlong or beyond Unicode
+        }
+        i += len;
+    }
+    return true;
 }
 
 void json_dump_into(std::string& out, const Json& j, int indent, int level) {
@@ -1083,11 +1133,14 @@ int ap_failures() {
     CmdResult r = ap_sh({"failures"});
     if (r.rc != 0)
         return 0;
-    try {
-        return std::max(0, std::stoi(py_strip(r.out)));
-    } catch (...) {
+    // Python: return max(0, int(out.strip())); int() rejects junk like "3abc"
+    // with ValueError (caught -> 0), while std::stoi would silently return 3.
+    std::string s = py_strip(r.out);
+    char* end = nullptr;
+    long v = std::strtol(s.c_str(), &end, 10);
+    if (end == s.c_str() || *end != '\0')
         return 0;
-    }
+    return std::max(0, static_cast<int>(v));
 }
 
 void reset_ap_failures() {
@@ -2054,9 +2107,19 @@ void handle_connection(int fd, std::string peer_ip) {
         else if (path.rfind("/status", 0) == 0)
             respond(status(), 200);
         else if (path.rfind("/scan", 0) == 0) {
+            std::vector<NetEntry> nets_v = scan();
+            // Python: text=True is strict — an SSID that is not valid UTF-8 raises
+            // UnicodeDecodeError inside scan(), killing the handler with no reply.
+            for (const NetEntry& n : nets_v) {
+                if (!valid_utf8(n.ssid) || !valid_utf8(n.security)) {
+                    ::shutdown(fd, SHUT_RDWR);
+                    ::close(fd);
+                    return;
+                }
+            }
             Json j = Json::object();
             Json nets = Json::array();
-            for (const NetEntry& n : scan()) {
+            for (const NetEntry& n : nets_v) {
                 Json e = Json::object();
                 e.set("ssid", Json::string(n.ssid));
                 e.set("signal", Json::integer(n.signal));
@@ -2075,10 +2138,16 @@ void handle_connection(int fd, std::string peer_ip) {
         }
     } else if (method == "POST") {
         std::optional<Json> parsed = body.empty() ? Json(Json::object()) : json_loads(body);
-        if (!parsed || parsed->type != Json::Obj) {
+        if (!parsed) {
             Json e = Json::object();
             e.set("error", Json::string("bad json"));
             respond(e, 400);
+        } else if (parsed->type != Json::Obj) {
+            // Python: json.loads succeeded, body.get(...) raises AttributeError, the
+            // handler thread dies and the client gets a dropped connection — no reply.
+            ::shutdown(fd, SHUT_RDWR);
+            ::close(fd);
+            return;
         } else if (path.rfind("/connect", 0) == 0) {
             const Json* jssid = parsed->get("ssid");
             if (!jssid || jssid->type != Json::Str || jssid->str.empty()) {
@@ -2093,7 +2162,16 @@ void handle_connection(int fd, std::string peer_ip) {
                     psk_v = jpsk->str;
                     psk = &psk_v;
                 }
-                respond(connect(jssid->str, psk), 200);
+                // Python decodes command output with text=True (strict UTF-8): an SSID
+                // with invalid bytes makes connect() raise UnicodeDecodeError and the
+                // request dies with no reply at all.
+                Json r = connect(jssid->str, psk);
+                if (!valid_utf8(jssid->str) || (psk && !valid_utf8(*psk))) {
+                    ::shutdown(fd, SHUT_RDWR);
+                    ::close(fd);
+                    return;
+                }
+                respond(r, 200);
             }
         } else if (path.rfind("/disconnect", 0) == 0) {
             respond(disconnect(), 200);
@@ -2264,7 +2342,13 @@ int main(int argc, char** argv) {
             exe = pathbuf.data();
         }
         size_t slash = exe.rfind('/');
-        AP_SH = (slash == std::string::npos ? std::string(".") : exe.substr(0, slash)) + "/ap.sh";
+        std::string dir = (slash == std::string::npos) ? std::string(".") : exe.substr(0, slash);
+        AP_SH = dir + "/ap.sh";
+        // The Python script lives next to ap.sh in the install dir, but the release
+        // bundles the binary as pi/bin/dji-netctl with pi/ap.sh — so look one level up
+        // as well (release.yml stages src → stage/pi/bin + dji_link_beta/pi/*.sh → stage/pi).
+        if (!file_exists(AP_SH.c_str()))
+            AP_SH = dir + "/../ap.sh";
     }
 
     if (argc < 2) {
@@ -2292,9 +2376,16 @@ int main(int argc, char** argv) {
             std::printf("usage: dji-netctl connect SSID [PASSWORD]\n");
             return 2;
         }
-        const std::string* psk = argc > 3 ? new std::string(argv[3]) : nullptr;
-        Json res = connect(argv[2], psk);
-        delete psk;
+        std::string ssid = argv[2];
+        std::string psk_v = argc > 3 ? argv[3] : "";
+        // Python text=True decodes strictly; UnicodeDecodeError here -> traceback,
+        // exit code 1.
+        if (!valid_utf8(ssid) || (argc > 3 && !valid_utf8(psk_v))) {
+            std::fprintf(stderr, "Traceback: UnicodeDecodeError: invalid UTF-8 in argument\n");
+            return 1;
+        }
+        const std::string* psk = argc > 3 ? &psk_v : nullptr;
+        Json res = connect(ssid, psk);
         std::printf("%s\n", json_dumps(res, 2).c_str());
     } else if (cmd == "disconnect") {
         std::printf("%s\n", json_dumps(disconnect(), 2).c_str());

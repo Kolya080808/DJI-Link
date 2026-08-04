@@ -22,13 +22,15 @@ bool DEBUG = true;
 bool BULK_DEBUG = false;
 
 void init_debug_from_env() {
-    // os.environ.get(name, default) not in ("0", "") — for these two vars the default is
-    // never "0"/"", so only the set-value case matters.
-    auto truthy = [](const char* v) {
-        return !((v && std::strcmp(v, "0") == 0) || (v && v[0] == '\0'));
+    // os.environ.get(name, default) not in ("0", "") — unset means *default*
+    // ("1" for AOA_DEBUG, "0" for AOA_DEBUG_BULK), not truthy!
+    auto truthy = [](const char* v, bool def) {
+        if (!v)
+            return def;
+        return !(std::strcmp(v, "0") == 0 || v[0] == '\0');
     };
-    DEBUG = truthy(std::getenv("AOA_DEBUG"));
-    BULK_DEBUG = truthy(std::getenv("AOA_DEBUG_BULK"));
+    DEBUG = truthy(std::getenv("AOA_DEBUG"), true);
+    BULK_DEBUG = truthy(std::getenv("AOA_DEBUG_BULK"), false);
 }
 
 // Python `print("[aoa]", *a, flush=True)` — fragments joined with a space.
@@ -224,12 +226,14 @@ void set_saved_argv(int argc, char** argv) {
     g_saved_argv.push_back(nullptr);
 }
 
-[[noreturn]] void restart_process() {
+void restart_process() {
     // os.execv(sys.executable, [sys.executable] + sys.argv) — full process restart.
     ::execv("/proc/self/exe", g_saved_argv.data());
-    // execv only returns on failure; Python would raise here.
-    std::fprintf(stderr, "[aoa] execv(/proc/self/exe) failed: %s\n", std::strerror(errno));
-    _exit(1);
+    // execv only returns on failure; Python raises OSError there — do the same instead
+    // of killing the process, so the run_forever loop treats it like startup's retry.
+    int e = errno;
+    std::fprintf(stderr, "[aoa] execv(/proc/self/exe) failed: %s\n", std::strerror(e));
+    throw UsbError(e, "execv /proc/self/exe");
 }
 
 // ---- ByteQueue ---------------------------------------------------------
@@ -358,14 +362,19 @@ RawGadget* AoaDevice::open_gadget() {
     // instead of dying on a race we know is transient.
     UsbError last(0, "open_gadget");
     for (int attempt = 0; attempt < 20; attempt++) {
-        auto* g = new RawGadget();
+        // Python: g = RawGadget() sits INSIDE the loop too — the /dev/raw-gadget open
+        // is retried on EBUSY along with init/run, not just the UDC binding.
+        RawGadget* g = nullptr;
         try {
+            g = new RawGadget();
             g->init(udc_driver, udc_device, USB_SPEED_HIGH);
             g->run();
             return g;
         } catch (const UsbError& e) {
-            g->close();
-            delete g;
+            if (g) {
+                g->close();
+                delete g;
+            }
             last = e;
             if (e.errnum != EBUSY)
                 throw;

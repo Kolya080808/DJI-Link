@@ -117,6 +117,10 @@ The current app builds the GUI by default (`DJI_LINK_GUI=ON`). SDL2 is fetched b
 with `FetchContent`, so CI runners do not need system GUI packages. Set
 `-DDJI_LINK_GUI=OFF` only for a headless/console-only build.
 
+The Pi services (`dji-bridge`, `dji-netctl`, `src/pi/*`) are **opt-in**: they build only
+with `-DDJI_LINK_PI=ON` on Linux. Desktop/PC CI jobs never compile them; the separate
+aarch64 cross job passes the flag explicitly.
+
 Live video is decoded through an `ffmpeg` process. The app does **not** install ffmpeg at
 runtime; release packaging handles it before the user launches the app:
 

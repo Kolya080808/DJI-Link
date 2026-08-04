@@ -26,9 +26,11 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <mutex>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <signal.h>
+#include <sys/utsname.h>
 #include <stdexcept>
 #include <string>
 #include <sys/socket.h>
@@ -50,26 +52,63 @@ const char* LOG_FILE = "/var/log/dji-link/bridge.log";
 // ./bridge.log when /var/log is not writable.
 FILE* log_fp = nullptr;
 std::mutex log_mutex;
-// logging.basicConfig wrote timestamps like
-// "2026-06-01 20:12:03,466 [INFO MainThread] bridge starting" — we keep the
-// datetime,msecs part; the level/thread name are replaced by the level letter + thread tag.
+// logging.basicConfig(stream=sys.stderr) format:
+// "%(asctime)s %(levelname)s %(threadName)s %(message)s",
+// e.g. "2026-06-01 20:12:03,466 INFO MainThread bridge starting".
+
+// The path actually opened — printed by the "bridge starting" log line below, where
+// Python logged os.path.abspath of it.
+std::string g_log_path;
+
+// "%(asctime)s" with milliseconds: "2026-06-01 20:12:03,466"
+std::string now_ms_str() {
+    timespec ts{};
+    clock_gettime(CLOCK_REALTIME, &ts);
+    time_t t = ts.tv_sec;
+    struct tm tmv {};
+    localtime_r(&t, &tmv);
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d:%02d,%03ld", tmv.tm_year + 1900,
+                  tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min, tmv.tm_sec,
+                  ts.tv_nsec / 1000000L);
+    return buf;
+}
 
 void log_open() {
     // mkdir -p the log dir; on failure (permissions) fall back to ./bridge.log.
     if (::mkdir(LOG_DIR, 0755) != 0 && errno != EEXIST) {
         // /var/log not writable — fall through to the file fallback below
     }
-    const char* path = LOG_FILE;
-    FILE* f = std::fopen(path, "a");
-    if (!f) {
-        f = std::fopen("bridge.log", "a");
-        path = "bridge.log";
+    FILE* f = std::fopen(LOG_FILE, "a");
+    if (f) {
+        g_log_path = LOG_FILE;
     } else {
-        path = LOG_FILE;
+        f = std::fopen("bridge.log", "a");
+        // Python: path = os.path.abspath("bridge.log")
+        char cwd[4096];
+        if (::getcwd(cwd, sizeof(cwd)))
+            g_log_path = std::string(cwd) + "/bridge.log";
+        else
+            g_log_path = "bridge.log";
     }
     log_fp = f;
     if (log_fp)
         setvbuf(log_fp, nullptr, _IOLBF, 0); // line buffering = Python buffering=1
+}
+
+// "bridge starting pid=... log=..." — setup_logging's own info line.
+void log_starting() {
+    // fprintf directly: simple and sufficient here.
+    std::string ts = now_ms_str();
+    std::lock_guard<std::mutex> lk(log_mutex);
+    std::string line = ts + " INFO MainThread bridge starting pid=" +
+                       std::to_string(::getpid()) + " log=" + g_log_path;
+    std::fprintf(stderr, "%s\n", line.c_str());
+    std::fflush(stderr);
+    if (log_fp) {
+        std::fprintf(log_fp, "%s\n", line.c_str());
+        std::fflush(log_fp);
+    }
 }
 
 void logf(const char* level, const char* thread_tag, const char* fmt, ...) {
@@ -90,13 +129,14 @@ void logf(const char* level, const char* thread_tag, const char* fmt, ...) {
     }
 
     std::lock_guard<std::mutex> lk(log_mutex);
+    // logging.basicConfig(stream=sys.stderr): "%(asctime)s %(levelname)s %(threadName)s %(message)s"
     char line[2560];
-    std::snprintf(line, sizeof(line), "%04d-%02d-%02d %02d:%02d:%02d,%03ld [%s %s] %s",
+    std::snprintf(line, sizeof(line), "%04d-%02d-%02d %02d:%02d:%02d,%03ld %s %s %s",
                   tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min,
                   tmv.tm_sec, ms, level, thread_tag, body);
-    // Tee: stdout (journal) + log file, like the Python Tee of sys.stdout/sys.stderr.
-    std::fprintf(stdout, "%s\n", line);
-    std::fflush(stdout);
+    // Tee: stderr (journal keeps the severity/the logging stream) + log file.
+    std::fprintf(stderr, "%s\n", line);
+    std::fflush(stderr);
     if (log_fp) {
         std::fprintf(log_fp, "%s\n", line);
         std::fflush(log_fp);
@@ -145,13 +185,16 @@ std::string detect_udc() {
                                  "(the dwc2 overlay must be active in peripheral mode)");
     std::sort(udcs.begin(), udcs.end());
     if (udcs.size() > 1) {
-        std::string all;
-        for (auto& u : udcs) {
-            if (!all.empty())
+        // Python printed the list itself: f"... several UDCs {udcs}, ..." -> repr of the
+        // list: ['a', 'b']
+        std::string all = "[";
+        for (std::size_t i = 0; i < udcs.size(); i++) {
+            if (i)
                 all += ", ";
-            all += u;
+            all += "'" + udcs[i] + "'";
         }
-        print_tee("[bridge] several UDCs [%s], using %s (override with --udc)", all.c_str(),
+        all += "]";
+        print_tee("[bridge] several UDCs %s, using %s (override with --udc)", all.c_str(),
                   udcs[0].c_str());
     }
     return udcs[0];
@@ -233,20 +276,27 @@ void usb_to_tcp(BridgeState* state, int conn, std::atomic<bool>* stop) {
             }
             print_tee("[bridge] AOA available for TCP client; drained %d stale frames", drained);
         }
-        Bytes data;
-        if (!dev->rx_queue.get_for(data, 0.5))
-            continue; // queue.Empty
-        // conn.sendall(data)
-        std::size_t off = 0;
-        while (off < data.size()) {
-            ssize_t n = ::send(conn, data.data() + off, data.size() - off, 0);
-            if (n < 0) {
-                if (errno == EINTR)
-                    continue;
-                stop->store(true);
-                return;
+        // except Exception: logging.error("rx_queue read failed: ..."); sleep(0.5); continue
+        try {
+            Bytes data;
+            if (!dev->rx_queue.get_for(data, 0.5))
+                continue; // queue.Empty
+            // conn.sendall(data)
+            std::size_t off = 0;
+            while (off < data.size()) {
+                ssize_t n = ::send(conn, data.data() + off, data.size() - off, 0);
+                if (n < 0) {
+                    if (errno == EINTR)
+                        continue;
+                    stop->store(true);
+                    return;
+                }
+                off += static_cast<std::size_t>(n);
             }
-            off += static_cast<std::size_t>(n);
+        } catch (const std::exception& e) {
+            logf("ERROR", "usb_to_tcp", "rx_queue read failed: %s", e.what());
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            continue;
         }
     }
 }
@@ -289,9 +339,16 @@ int main(int argc, char** argv) {
     djilink::pi::set_saved_argv(argc, argv);
 
     log_open();
+    log_starting();
 
-    ::signal(SIGINT, sig_handler);
-    ::signal(SIGTERM, sig_handler);
+    // sigaction WITHOUT SA_RESTART, so accept()/recv() return EINTR when SIGINT/SIGTERM
+    // land — otherwise Ctrl-C / systemctl stop hang until the next client packet.
+    struct sigaction sa {};
+    sa.sa_handler = sig_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    ::sigaction(SIGINT, &sa, nullptr);
+    ::sigaction(SIGTERM, &sa, nullptr);
     ::signal(SIGPIPE, SIG_IGN); // Python sockets raise instead; ignoring keeps ::send alive
 
     // ---- argument parsing: argparse equivalent of bridge.py ----
@@ -356,80 +413,109 @@ int main(int argc, char** argv) {
     worker.detach();
 
     // ---- serve(): TCP listener towards the laptop ----
-    int srv = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (srv < 0) {
-        logf("CRITICAL", "MainThread", "socket() failed: %s", std::strerror(errno));
-        return 1;
-    }
-    int one = 1;
-    ::setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(static_cast<std::uint16_t>(port));
-    if (::inet_pton(AF_INET, host, &addr.sin_addr) != 1) {
-        print_tee("[bridge] cannot parse --host %s", host);
-        return 1;
-    }
-    if (::bind(srv, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 ||
-        ::listen(srv, 1) != 0) {
-        logf("CRITICAL", "MainThread", "bind/listen on %s:%ld failed: %s", host, port,
-             std::strerror(errno));
-        return 1;
-    }
-    print_tee("[bridge] listening for laptop on %s:%ld", host, port);
-
-    while (!g_stop) {
-        sockaddr_in peer{};
-        socklen_t plen = sizeof(peer);
-        int conn = ::accept(srv, reinterpret_cast<sockaddr*>(&peer), &plen);
-        if (conn < 0) {
-            if (errno == EINTR)
-                continue;
-            break;
+    try {
+        int srv = ::socket(AF_INET, SOCK_STREAM, 0);
+        if (srv < 0) {
+            // Python: uncaught OSError -> traceback, exit code 2
+            logf("CRITICAL", "MainThread", "socket() failed: %s", std::strerror(errno));
+            return 2;
         }
-        char ip[64] = "?";
-        ::inet_ntop(AF_INET, &peer.sin_addr, ip, sizeof(ip));
-        print_tee("[bridge] connected (%s, %u)", ip, ntohs(peer.sin_port));
-        one = 1;
-        ::setsockopt(conn, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+        int one = 1;
+        ::setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+        // Python's srv.bind((host, port)) resolves the host — a hostname in --host is legal there.
+        addrinfo hints{};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_flags = AI_PASSIVE;
+        addrinfo* res = nullptr;
+        if (int gai = ::getaddrinfo(host, nullptr, &hints, &res); gai != 0) {
+            // Python: uncaught socket.gaierror -> traceback, exit code 2
+            logf("CRITICAL", "MainThread", "getaddrinfo(%s) failed: %s", host,
+                 ::gai_strerror(gai));
+            ::close(srv);
+            return 2;
+        }
+        sockaddr_in addr = *reinterpret_cast<sockaddr_in*>(res->ai_addr);
+        ::freeaddrinfo(res);
+        addr.sin_port = htons(static_cast<std::uint16_t>(port));
+        if (::bind(srv, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 ||
+            ::listen(srv, 1) != 0) {
+            logf("CRITICAL", "MainThread", "bind/listen on %s:%ld failed: %s", host, port,
+                 std::strerror(errno));
+            ::close(srv);
+            return 2;
+        }
+        print_tee("[bridge] listening for laptop on %s:%ld", host, port);
 
-        std::atomic<bool> stop{false};
-        std::thread t(usb_to_tcp, &state, conn, &stop);
-        t.detach();
-
-        // TCP -> remote controller
-        bool warned_no_aoa = false;
-        while (!stop && !g_stop) {
-            char buf[4096];
-            ssize_t n = ::recv(conn, buf, sizeof(buf), 0);
-            if (n < 0) {
+        while (!g_stop) {
+            sockaddr_in peer{};
+            socklen_t plen = sizeof(peer);
+            int conn = ::accept(srv, reinterpret_cast<sockaddr*>(&peer), &plen);
+            if (conn < 0) {
                 if (errno == EINTR)
-                    continue;
+                    continue; // signal -> g_stop noticed at the top of the loop
                 break;
             }
-            if (n == 0)
-                break;
-            auto* dev = state.ready_dev();
-            if (!dev) {
-                if (!warned_no_aoa) {
-                    print_tee("[bridge] dropping laptop frames until AOA is ready");
-                    warned_no_aoa = true;
+            char ip[64] = "?";
+            ::inet_ntop(AF_INET, &peer.sin_addr, ip, sizeof(ip));
+            // Python print: f"[bridge] connected {addr}" where addr is ('ip', port)
+            print_tee("[bridge] connected ('%s', %u)", ip, ntohs(peer.sin_port));
+            one = 1;
+            ::setsockopt(conn, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+
+            std::atomic<bool> stop{false};
+            std::thread t(usb_to_tcp, &state, conn, &stop);
+            t.detach();
+
+            // TCP -> remote controller
+            // Python: except Exception: logging.error("TCP session crashed"); break
+            try {
+                bool warned_no_aoa = false;
+                while (!stop && !g_stop) {
+                    char buf[4096];
+                    ssize_t n = ::recv(conn, buf, sizeof(buf), 0);
+                    if (n < 0) {
+                        if (errno == EINTR)
+                            continue;
+                        break;
+                    }
+                    if (n == 0)
+                        break;
+                    auto* dev = state.ready_dev();
+                    if (!dev) {
+                        if (!warned_no_aoa) {
+                            print_tee("[bridge] dropping laptop frames until AOA is ready");
+                            warned_no_aoa = true;
+                        }
+                        continue;
+                    }
+                    dev->send(Bytes(reinterpret_cast<std::uint8_t*>(buf),
+                                    reinterpret_cast<std::uint8_t*>(buf) + n));
                 }
-                continue;
+            } catch (const std::exception& e) {
+                logf("ERROR", "MainThread", "TCP session crashed: %s", e.what());
             }
-            dev->send(Bytes(reinterpret_cast<std::uint8_t*>(buf),
-                            reinterpret_cast<std::uint8_t*>(buf) + n));
+            stop = true;
+            ::shutdown(conn, SHUT_RDWR);
+            ::close(conn);
+            print_tee("[bridge] laptop disconnected, waiting again");
         }
-        stop = true;
-        ::shutdown(conn, SHUT_RDWR);
-        ::close(conn);
-        print_tee("[bridge] laptop disconnected, waiting again");
+        ::close(srv);
+    } catch (const std::exception& e) {
+        // Python: except Exception: logging.critical(...); raise -> exit code 2
+        logf("CRITICAL", "MainThread", "bridge main crashed: %s", e.what());
+        state.stop = true;
+        if (auto* dev = state.get_dev())
+            dev->stop();
+        return 2;
     }
+
+    // Python: KeyboardInterrupt -> print("\n[bridge] exit")
+    print_tee("\n[bridge] exit");
 
     // Python finally: state.stop.set(); dev.stop()
     state.stop = true;
     if (auto* dev = state.get_dev())
         dev->stop();
-    ::close(srv);
     return 0;
 }

@@ -159,6 +159,7 @@ jobs:
           set -euo pipefail
           cmake -S . -B build-pi \
             -DDJI_LINK_GUI=OFF \
+            -DDJI_LINK_PI=ON \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE=cmake/pi-aarch64.toolchain.cmake
           cmake --build build-pi --target dji-bridge dji-netctl -j"$(nproc)"

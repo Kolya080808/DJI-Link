@@ -30,6 +30,15 @@ endif()
 # package is needed on CI. Turn OFF for a headless/console-only build.
 option(DJI_LINK_GUI "Build the SDL2 GUI window" ON)
 
+# The Raspberry Pi jump-host services (dji-bridge / dji-netctl, ported 1:1 from
+# dji_link_beta/pi/*.py). OFF by default: they are POSIX/Linux-only daemons for
+# the aarch64 Pi, NOT part of the PC client, so the main CI/PC build should not
+# even try to compile them (a 32-bit/x86 build would fail against older
+# linux/usb/raw_gadget.h and serves no real Pi). Turn this ON only when you
+# explicitly want them — on the Pi itself, or via cmake/pi-aarch64.toolchain.cmake
+# (the release.yml pi-installer job sets it; ci.yml's pi-aarch64 job mirrors that).
+option(DJI_LINK_PI "Build the Raspberry Pi AOA bridge / netctl services" OFF)
+
 # --------------------------------------------------------------- core library
 # Every module with no windowing dependency lives here, so it compiles
 # identically on Linux/macOS/Windows and can be unit-tested without a display.
@@ -96,7 +105,10 @@ install(TARGETS dji-link RUNTIME DESTINATION bin BUNDLE DESTINATION .)
 # aarch64 via cmake/pi-aarch64.toolchain.cmake in the release workflow). They are
 # intentionally NOT installed/packaged with the PC client — release.yml's
 # pi-installer job copies the binaries into the pi/ bundle itself.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+#
+# Gated behind DJI_LINK_PI (OFF by default — see the option above) so the PC
+# CI matrix never tries to compile them.
+if(DJI_LINK_PI AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_executable(dji-bridge
         src/pi/bridge.cpp
         src/pi/aoa_device.cpp
