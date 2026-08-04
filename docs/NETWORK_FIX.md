@@ -229,7 +229,7 @@ unattended, so a bad release must not be able to strand the Pi.
 ## Verify on the Pi
 
 ```bash
-sudo pi/bin/dji-netctl doctor          # every check in one place (C++ since v0.9.4; older pis used `python3 netctl.py doctor`)
+sudo pi/bin/dji-netctl doctor          # every check in one place (C++ since v0.9.3; older pis used `python3 netctl.py doctor`)
 bash ap.sh health                        # "ok", or exactly what is wrong
 bash ap.sh chan                          # the channel it would use right now
 journalctl -u dji-ap -n 40 --no-pager

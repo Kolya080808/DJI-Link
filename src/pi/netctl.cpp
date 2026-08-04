@@ -571,7 +571,8 @@ bool valid_utf8(const std::string& s) {
         if ((c & 0xe0) == 0xc0) {
             cp = c & 0x1f;
             len = 2;
-            if (cp < 2) return false; // overlong
+            if (cp < 2)
+                return false; // overlong
         } else if ((c & 0xf0) == 0xe0) {
             cp = c & 0x0f;
             len = 3;

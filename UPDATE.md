@@ -1,6 +1,6 @@
 ---
-title: DJI Link v0.9.4 — Pi services migrated to C++
-version: 0.9.4
+title: DJI Link v0.9.3 — Pi services migrated to C++
+version: 0.9.3
 prerelease: true
 ---
 

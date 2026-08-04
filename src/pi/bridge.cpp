@@ -30,11 +30,11 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <signal.h>
-#include <sys/utsname.h>
 #include <stdexcept>
 #include <string>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
 #include <thread>
 #include <unistd.h>
 #include <vector>
@@ -101,8 +101,8 @@ void log_starting() {
     // fprintf directly: simple and sufficient here.
     std::string ts = now_ms_str();
     std::lock_guard<std::mutex> lk(log_mutex);
-    std::string line = ts + " INFO MainThread bridge starting pid=" +
-                       std::to_string(::getpid()) + " log=" + g_log_path;
+    std::string line = ts + " INFO MainThread bridge starting pid=" + std::to_string(::getpid()) +
+                       " log=" + g_log_path;
     std::fprintf(stderr, "%s\n", line.c_str());
     std::fflush(stderr);
     if (log_fp) {
@@ -129,7 +129,8 @@ void logf(const char* level, const char* thread_tag, const char* fmt, ...) {
     }
 
     std::lock_guard<std::mutex> lk(log_mutex);
-    // logging.basicConfig(stream=sys.stderr): "%(asctime)s %(levelname)s %(threadName)s %(message)s"
+    // logging.basicConfig(stream=sys.stderr): "%(asctime)s %(levelname)s %(threadName)s
+    // %(message)s"
     char line[2560];
     std::snprintf(line, sizeof(line), "%04d-%02d-%02d %02d:%02d:%02d,%03ld %s %s %s",
                   tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min,
@@ -430,8 +431,7 @@ int main(int argc, char** argv) {
         addrinfo* res = nullptr;
         if (int gai = ::getaddrinfo(host, nullptr, &hints, &res); gai != 0) {
             // Python: uncaught socket.gaierror -> traceback, exit code 2
-            logf("CRITICAL", "MainThread", "getaddrinfo(%s) failed: %s", host,
-                 ::gai_strerror(gai));
+            logf("CRITICAL", "MainThread", "getaddrinfo(%s) failed: %s", host, ::gai_strerror(gai));
             ::close(srv);
             return 2;
         }

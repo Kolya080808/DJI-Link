@@ -206,7 +206,7 @@ if [ -f "$PI_DIR/ap.sh" ]; then
             bash "$PI_DIR/ap.sh" health 2>&1 | sed 's/^/       /' || true
             journalctl -u dji-ap -n 20 --no-pager 2>/dev/null | sed 's/^/       /' || true
             if [ -d "$PREFIX/pi.old" ]; then
-            # Old bundles (< v0.9.4) shipped netctl as a Python script, and their
+            # Old bundles (< v0.9.3) shipped netctl as a Python script, and their
             # installed dji-netctl.service still ExecStarts `python3 netctl.py`;
             # the new bundle carries bin/dji-netctl instead. Overwrite the old unit
             # with a tiny compatibility wrapper BEFORE setup_pi.sh reinstalls the
