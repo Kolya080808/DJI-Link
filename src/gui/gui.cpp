@@ -1901,13 +1901,15 @@ void draw_hud(SDL_Renderer* r, Client& cli, int sw, int sh) {
     cell(c0, "ALTITUDE", alt);
     cell(c1, "FLY TIME", ft);
     y += 40;
-    // SATS · GPS — parity with the beta's _draw_flight_hud: satellite count (@0x24) and
+    // SATS / GPS — parity with the beta's _draw_flight_hud: satellite count (@0x24) and
     // GPS level (bits 18..21 of the u32 @0x20, 0..5) share one row with MODE, exactly
     // like pc_client.py does (`_hud_cell(c0, "SATS · GPS", ...)` next to MODE at c1).
+    // "·" is not ASCII: the bitmap fallback can't draw it and the stb path treats each
+    // UTF-8 byte separately, so the HUD uses "/" instead.
     const std::string sats_gps =
-        (st.satellites ? std::to_string(*st.satellites) : std::string("-")) + " · " +
+        (st.satellites ? std::to_string(*st.satellites) : std::string("-")) + " / " +
         (st.gps_level ? std::to_string(*st.gps_level) : std::string("-"));
-    cell(c0, "SATS · GPS", sats_gps);
+    cell(c0, "SATS / GPS", sats_gps);
     cell(c1, "MODE", st.flight_mode_name.value_or("-"));
     y += 42;
 

@@ -136,12 +136,16 @@ void Drone::set_max_altitude(int metres) {
     Bytes v;
     put_u16(v, static_cast<std::uint16_t>(m));
     set_param("g_config.flying_limit.max_height_0", v);
+    // The 0xF9 write is not auto-reported back, so the HUD would keep showing the stale
+    // limit. Re-read it: the 0xF8 reply flows into Telemetry via Client::apply_limit.
+    read_param("g_config.flying_limit.max_height_0");
 }
 void Drone::set_max_distance(int metres) {
     const int m = std::max(15, std::min(5000, metres));
     Bytes v;
     put_u16(v, static_cast<std::uint16_t>(m));
     set_param("g_config.flying_limit.max_radius_0", v);
+    read_param("g_config.flying_limit.max_radius_0");
 }
 void Drone::set_max_altitude_cmd(int metres) {
     const int m = std::max(15, std::min(500, metres));
@@ -225,6 +229,8 @@ void Drone::set_rth_altitude(int metres) {
     Bytes v;
     put_u16(v, static_cast<std::uint16_t>(m));
     set_param("g_config.go_home.fixed_go_home_altitude_0", v);
+    // Re-read the value after write so the HUD limit line refreshes (see set_max_altitude).
+    read_param("g_config.go_home.fixed_go_home_altitude_0");
 }
 
 // ---------------------------------------------------------------- gimbal
