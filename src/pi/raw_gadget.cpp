@@ -35,7 +35,11 @@ std::vector<std::uint8_t> make_ep_io(std::uint16_t ep, std::uint16_t flags, std:
 } // namespace
 
 RawGadget::RawGadget(const std::string& path) {
-    fd_ = ::open(path.c_str(), O_RDWR);
+    // O_CLOEXEC: Python 3 creates all fds with O_CLOEXEC (PEP 446), so its
+    // os.execv(sys.executable, ...) restart (see aoa_device) drops the gadget fd.
+    // Without it we inherit the fd into the exec'd process and still own the already-running
+    // UDC — the new process then hits EBUSY on open_gadget() forever.
+    fd_ = ::open(path.c_str(), O_RDWR | O_CLOEXEC);
     if (fd_ < 0)
         throw_io((std::string("open ") + path).c_str());
 }

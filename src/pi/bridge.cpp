@@ -415,7 +415,12 @@ int main(int argc, char** argv) {
 
     // ---- serve(): TCP listener towards the laptop ----
     try {
-        int srv = ::socket(AF_INET, SOCK_STREAM, 0);
+        // SOCK_CLOEXEC: Python sockets carry O_CLOEXEC by default (PEP 446), so when
+        // aoa_device's SUSPEND handler execv()s the process, the listening socket closes
+        // and the new instance can bind the port. We saw EADDRINUSE loops on the Pi
+        // without it (the whole "works again after ~2s" symptom was systemd restarting us
+        // after bind failed).
+        int srv = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
         if (srv < 0) {
             // Python: uncaught OSError -> traceback, exit code 2
             logf("CRITICAL", "MainThread", "socket() failed: %s", std::strerror(errno));
@@ -450,7 +455,9 @@ int main(int argc, char** argv) {
         while (!g_stop) {
             sockaddr_in peer{};
             socklen_t plen = sizeof(peer);
-            int conn = ::accept(srv, reinterpret_cast<sockaddr*>(&peer), &plen);
+            // SOCK_CLOEXEC on the accepted socket too (see above) — an inherited conn
+            // would keep the port unusable through execv() as well.
+            int conn = ::accept4(srv, reinterpret_cast<sockaddr*>(&peer), &plen, SOCK_CLOEXEC);
             if (conn < 0) {
                 if (errno == EINTR)
                     continue; // signal -> g_stop noticed at the top of the loop

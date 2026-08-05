@@ -285,6 +285,8 @@ bool AoaDevice::ready() const {
     return running_ && configured_ && ep_in_ >= 0 && ep_out_ >= 0;
 }
 
+// Python: send() just .put()s into tx_queue regardless of readiness; the bulk
+// writer drains it as soon as it comes up. Never drop here.
 void AoaDevice::send(const Bytes& data) {
     tx_queue_.put(data);
 }

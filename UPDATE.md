@@ -1,8 +1,27 @@
 ---
-title: DJI Link v0.9.3 — Pi services migrated to C++
-version: 0.9.3
+title: DJI Link v0.9.4 — Pi bridge hang fix
+version: 0.9.4
 prerelease: true
 ---
+
+## Fixed
+
+- **`dji-bridge` no longer wedges the USB gadget across its own restarts.**
+  Python creates every fd with `O_CLOEXEC` (PEP 446), so its
+  `os.execv(sys.executable, ...)` SUSPEND recovery drops the raw_gadget fd and
+  the `:9910` listener before the new instance starts. Our port opened
+  `/dev/raw-gadget` and the sockets without that flag, so an execv'd bridge
+  inherited them: the fresh process couldn't re-bind the port
+  (`Address already in use`, systemd kicked it into a restart loop) and held a
+  zombie UDC binding. From the laptop this looked exactly like "controls dead
+  for a while, then fine, then dead again" right after the remote controller
+  suspended the link. All bridge sockets and the gadget fd are now opened with
+  `SOCK_CLOEXEC`/`O_CLOEXEC`, restoring the Python behavior.
+
+---
+
+---
+title: DJI Link v0.9.3 — Pi services migrated to C++
 
 ## Changed
 
