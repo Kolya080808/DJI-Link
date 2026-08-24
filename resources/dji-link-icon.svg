@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">DJI Link application icon</title>
+  <desc id="desc">A stylized drone mark in mint and blue on a dark rounded square.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14243a"/>
+      <stop offset="1" stop-color="#071017"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#73f7c5"/>
+      <stop offset="1" stop-color="#78a8ff"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="url(#bg)"/>
+  <rect x="12" y="12" width="488" height="488" rx="108" fill="none" stroke="#73f7c5" stroke-opacity=".3" stroke-width="8"/>
+  <g fill="none" stroke="#73f7c5" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M182 232 82 350"/><path d="m330 232 100 118"/>
+    <path d="m218 174-104-78"/><path d="m294 174 104-78"/>
+    <path d="M214 174h84"/><path d="M228 258h56"/>
+    <circle cx="82" cy="350" r="24" fill="#73f7c5" stroke="none"/>
+    <circle cx="430" cy="350" r="24" fill="#78a8ff" stroke="none"/>
+    <rect x="218" y="156" width="76" height="112" rx="24" fill="url(#body)" stroke="none"/>
+  </g>
+</svg>

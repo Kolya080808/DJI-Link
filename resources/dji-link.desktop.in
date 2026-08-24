@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=DJI Link
+Comment=Control a DJI Mavic Mini 1 from your computer
+Exec=dji-link
+Icon=dji-link
+Terminal=false
+Categories=Utility;Network;
+StartupWMClass=dji-link

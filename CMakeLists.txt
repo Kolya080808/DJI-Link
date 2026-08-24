@@ -80,6 +80,20 @@ endif()
 add_executable(dji-link src/main.cpp)
 target_link_libraries(dji-link PRIVATE djilink_core)
 
+set(DJI_LINK_RESOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources")
+if(WIN32)
+    target_sources(dji-link PRIVATE "${DJI_LINK_RESOURCE_DIR}/dji-link.rc")
+elseif(UNIX AND NOT APPLE AND DJI_LINK_GUI)
+    include(GNUInstallDirs)
+    install(FILES "${DJI_LINK_RESOURCE_DIR}/dji-link-icon.svg"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps"
+            RENAME dji-link.svg)
+    configure_file("${DJI_LINK_RESOURCE_DIR}/dji-link.desktop.in"
+                   "${CMAKE_CURRENT_BINARY_DIR}/dji-link.desktop" @ONLY)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/dji-link.desktop"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
+endif()
+
 # On Windows, a GUI app should not pop a console window when double-clicked.
 if(DJI_LINK_GUI AND WIN32)
     set_target_properties(dji-link PROPERTIES WIN32_EXECUTABLE ON)
@@ -87,6 +101,12 @@ endif()
 # macOS: build an .app bundle so double-click works and DragNDrop packaging is a drag-in.
 if(DJI_LINK_GUI AND APPLE)
     set_target_properties(dji-link PROPERTIES MACOSX_BUNDLE ON)
+    set_source_files_properties("${DJI_LINK_RESOURCE_DIR}/dji-link.icns"
+                                PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(dji-link PRIVATE "${DJI_LINK_RESOURCE_DIR}/dji-link.icns")
+    set_target_properties(dji-link PROPERTIES
+        MACOSX_BUNDLE_ICON_FILE "dji-link.icns"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.kolya080808.dji-link")
 endif()
 
 if(DJI_LINK_GUI)
@@ -189,4 +209,5 @@ set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_BINARY_DIR}/LICENSE.txt")
 # WiX MSI: a STABLE upgrade GUID (generated once, never changed) is what lets a
 # new .msi upgrade an installed older version in place. Do not regenerate it.
 set(CPACK_WIX_UPGRADE_GUID "7E3C1B2A-4D5F-4A6B-9C8D-1E2F3A4B5C6D")
+set(CPACK_WIX_PRODUCT_ICON "${DJI_LINK_RESOURCE_DIR}/dji-link.ico")
 include(CPack)

@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <functional>
 #include <future>
 #include <map>
@@ -72,6 +73,64 @@ constexpr Color MUTED{140, 150, 165, 255};
 constexpr Color GOOD{120, 220, 140, 255};
 constexpr Color WARN{255, 180, 110, 255};
 constexpr Color BAD{255, 120, 120, 255};
+
+SDL_Surface* make_window_icon() {
+    constexpr int size = 64;
+    SDL_Surface* icon = SDL_CreateRGBSurfaceWithFormat(0, size, size, 32, SDL_PIXELFORMAT_RGBA32);
+    if (!icon)
+        return nullptr;
+    const auto pixel = [&](std::uint8_t r, std::uint8_t g, std::uint8_t b) {
+        return SDL_MapRGBA(icon->format, r, g, b, 255);
+    };
+    const std::uint32_t bg = pixel(7, 16, 23);
+    const std::uint32_t mint = pixel(115, 247, 197);
+    const std::uint32_t blue = pixel(120, 168, 255);
+    const std::uint32_t body = pixel(115, 220, 221);
+    SDL_FillRect(icon, nullptr, bg);
+    auto put = [&](int x, int y, std::uint32_t color, int radius = 0) {
+        for (int yy = -radius; yy <= radius; ++yy) {
+            for (int xx = -radius; xx <= radius; ++xx) {
+                if (xx * xx + yy * yy > radius * radius)
+                    continue;
+                const int px = x + xx, py = y + yy;
+                if (px >= 0 && px < size && py >= 0 && py < size)
+                    static_cast<std::uint32_t*>(icon->pixels)[py * (icon->pitch / 4) + px] = color;
+            }
+        }
+    };
+    auto line = [&](int x0, int y0, int x1, int y1, std::uint32_t color, int width = 2) {
+        const int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+        const int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+        int err = dx + dy;
+        while (true) {
+            put(x0, y0, color, width);
+            if (x0 == x1 && y0 == y1)
+                break;
+            const int twice = 2 * err;
+            if (twice >= dy) {
+                err += dy;
+                x0 += sx;
+            }
+            if (twice <= dx) {
+                err += dx;
+                y0 += sy;
+            }
+        }
+    };
+    line(23, 34, 11, 49, mint);
+    line(41, 34, 53, 49, blue);
+    line(28, 27, 18, 18, mint);
+    line(36, 27, 46, 18, mint);
+    line(27, 27, 37, 27, mint);
+    line(29, 36, 35, 36, mint);
+    put(11, 49, mint, 4);
+    put(53, 49, blue, 4);
+    for (int y = 26; y <= 39; ++y)
+        for (int x = 27; x <= 37; ++x)
+            if (x >= 29 && x <= 35 && y >= 28 && y <= 37)
+                static_cast<std::uint32_t*>(icon->pixels)[y * (icon->pitch / 4) + x] = body;
+    return icon;
+}
 
 void set_color(SDL_Renderer* r, Color c) {
     SDL_SetRenderDrawColor(r, c.r, c.g, c.b, c.a);
@@ -2300,6 +2359,7 @@ int run_app(const AppOptions& opt) {
     // We link without SDL2main and define SDL_MAIN_HANDLED, so SDL's own entry-point
     // shim never runs — announce that main() is ready before touching any SDL API.
     SDL_SetMainReady();
+    SDL_SetHint(SDL_HINT_APP_NAME, "DJI Link");
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_TIMER) != 0) {
         std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 2;
@@ -2313,6 +2373,10 @@ int run_app(const AppOptions& opt) {
         std::fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
         SDL_Quit();
         return 2;
+    }
+    if (SDL_Surface* icon = make_window_icon()) {
+        SDL_SetWindowIcon(win, icon);
+        SDL_FreeSurface(icon);
     }
     SDL_Renderer* r =
         SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
