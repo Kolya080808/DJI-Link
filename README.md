@@ -1,5 +1,7 @@
 # DJI Link
 
+**Project site:** https://dream-catcher-project.ru/ · **Downloads:** https://dream-catcher-project.ru/downloads · **Documentation:** https://dream-catcher-project.ru/docs
+
 **Fly a DJI Mavic Mini 1 (WM160) from your computer** — live video, telemetry, and full
 flight control from a native Windows/Linux/macOS app, without the phone app. A Raspberry
 Pi acts as a small bridge to the remote controller; the PC does everything else.
