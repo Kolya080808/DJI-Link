@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 240" role="img" aria-labelledby="title desc">
+  <title id="title">DJI Link</title>
+  <desc id="desc">DJI Link project logo with a drone symbol and wordmark.</desc>
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101a2b"/>
+      <stop offset="1" stop-color="#071017"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="240" rx="36" fill="url(#panel)"/>
+  <rect x="2" y="2" width="956" height="236" rx="34" fill="none" stroke="#73f7c5" stroke-opacity=".28" stroke-width="4"/>
+  <g transform="translate(48 48)" fill="none" stroke="#73f7c5" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M68 74 30 116"/><path d="m244 74 38 42"/>
+    <path d="m108 52-42-30"/><path d="m204 52 42-30"/>
+    <path d="M106 52h100"/><path d="M122 92h68"/>
+    <circle cx="30" cy="116" r="10" fill="#73f7c5" stroke="none"/>
+    <circle cx="282" cy="116" r="10" fill="#78a8ff" stroke="none"/>
+    <rect x="124" y="42" width="64" height="58" rx="16" fill="#78a8ff" stroke="none"/>
+  </g>
+  <text x="370" y="145" fill="#f4f7fb" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="92" font-weight="800" letter-spacing="-3">DJI Link</text>
+</svg>
