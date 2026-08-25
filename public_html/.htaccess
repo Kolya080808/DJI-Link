@@ -1,0 +1,12 @@
+Options +ExecCGI -Indexes
+AddHandler wsgi-script .wsgi
+
+RewriteEngine On
+
+# Do not expose application source or deployment files.
+RewriteRule ^(?:app\.py|Procfile|README\.md|requirements\.txt|templates/|__pycache__/|\.env) - [F,L]
+
+# Official Timeweb Flask pattern: existing assets are served directly and all
+# other requests are passed to Apache/mod_wsgi.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^(.*)$ /index.wsgi/$1 [QSA,PT,L]

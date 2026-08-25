@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://dream-catcher-project.ru/sitemap.xml

@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Authors — DJI Link{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <div class="container reveal">
+    <div class="eyebrow">PEOPLE</div>
+    <h1>Built by people who<br><span class="gradient-text">wanted to understand the stack.</span></h1>
+    <p>The project combines application work, protocol research, C++ engineering, Raspberry Pi development and hardware experimentation.</p>
+  </div>
+</section>
+<section class="section">
+  <div class="container grid-2">
+    <article class="author-card contributor-card reveal">
+      <div class="author-head">
+        <img class="author-avatar-img" src="{{ url_for('static_files', path='authors/kolya080808.jpg', v=static_version) }}" alt="Kolya080808 avatar" width="82" height="82" loading="lazy" decoding="async">
+        <div>
+          <div class="eyebrow">MAINTAINER · AUTHOR</div>
+          <h2>Kolya080808</h2>
+          <p class="author-handle">@Kolya080808 · Nikolay</p>
+        </div>
+      </div>
+      <p>Project maintainer and primary repository owner. Responsible for the native DJI Link application, release tooling, protocol research and the broader project direction.</p>
+      <div class="author-tags"><span class="pill">C++20</span><span class="pill">GUI</span><span class="pill">Protocol</span><span class="pill">Reverse engineering</span></div>
+      <a class="btn" href="https://github.com/Kolya080808" target="_blank" rel="noreferrer">GitHub profile ↗</a>
+    </article>
+    <article class="author-card contributor-card reveal">
+      <div class="author-head">
+        <img class="author-avatar-img" src="{{ url_for('static_files', path='authors/c0dem4sters.png', v=static_version) }}" alt="c0dem4sters avatar" width="82" height="82" loading="lazy" decoding="async">
+        <div>
+          <div class="eyebrow">CONTRIBUTOR · RASPBERRY PI</div>
+          <h2>c0dem4sters</h2>
+          <p class="author-handle">@c0dem4sters · Code_Masters</p>
+        </div>
+      </div>
+      <p>Code Masters. Contributed substantially to the Raspberry Pi side of the project, including the Pi bridge/tooling, and also helped with the C++ rewrite.</p>
+      <div class="author-tags"><span class="pill">Raspberry Pi</span><span class="pill">AOA</span><span class="pill">Networking</span><span class="pill">C++</span></div>
+      <a class="btn primary" href="https://github.com/c0dem4sters" target="_blank" rel="noreferrer">GitHub profile ↗</a>
+    </article>
+  </div>
+</section>
+<section class="section compact">
+  <div class="container callout reveal">
+    <div>
+      <div class="eyebrow">OPEN COLLABORATION</div>
+      <h2>Want to contribute?</h2>
+      <p>Protocol research, testing, documentation and code contributions are welcome through the GitHub repository.</p>
+    </div>
+    <a class="btn primary" href="{{ github_url }}" target="_blank" rel="noreferrer">Open repository ↗</a>
+  </div>
+</section>
+{% endblock %}

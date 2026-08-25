@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080b11"><meta name="description" content="DJI Link — unofficial desktop control and research tooling for DJI Mavic Mini 1 (WM160).">
+<title>{% block title %}DJI Link{% endblock %}</title>
+<link rel="icon" href="{{ url_for('static_files', path='logo.svg', v=static_version) }}" type="image/svg+xml">
+<link rel="stylesheet" href="{{ url_for('static_files', path='site.css', v=static_version) }}">
+</head>
+<body data-page="{{ page }}">
+<div class="noise"></div><div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+<header class="nav"><div class="container nav-inner">
+<a class="brand" href="/"><span class="brand-mark"><img src="{{ url_for('static_files', path='logo.svg') }}" alt=""></span><span>DJI Link</span></a>
+<nav class="nav-links"><a href="/" class="{% if page=='home' %}active{% endif %}">Home</a><a href="/downloads" class="{% if page=='downloads' %}active{% endif %}">Download</a><a href="/docs" class="{% if page=='docs' %}active{% endif %}">Docs</a><a href="/contribute" class="{% if page=='contribute' %}active{% endif %}">Contribute</a><a href="/license" class="{% if page=='license' %}active{% endif %}">License</a><a href="/authors" class="{% if page=='authors' %}active{% endif %}">Authors</a><a href="{{ github_url }}" target="_blank" rel="noreferrer">GitHub ↗</a></nav>
+<button class="menu-btn" id="menu-btn" aria-label="Open menu">☰</button>
+</div><div class="mobile-menu" id="mobile-menu"><a href="/">Home</a><a href="/downloads">Download</a><a href="/docs">Docs</a><a href="/contribute">Contribute</a><a href="/license">License</a><a href="/authors">Authors</a><a href="{{ github_url }}" target="_blank" rel="noreferrer">GitHub ↗</a></div></header>
+<main>{% block content %}{% endblock %}</main>
+<footer class="footer"><div class="container footer-grid"><div><div class="brand"><span class="brand-mark"><img src="{{ url_for('static_files', path='logo.svg') }}" alt=""></span><span>DJI Link</span></div><p class="small">Unofficial desktop control and research tooling for DJI Mavic Mini 1 (WM160).</p></div><div><h3>Project</h3><a href="/downloads">Downloads</a><a href="/docs">Documentation</a><a href="/contribute">Contribute</a><a href="/license">License</a></div><div><h3>Links</h3><a href="{{ github_url }}">GitHub</a><a href="{{ releases_url }}">Releases</a><a href="{{ github_url }}/issues">Issues</a></div></div><div class="container footer-bottom"><span>© {{ year }} Kolya080808 & contributors.</span><span>Independent project · not affiliated with DJI.</span></div></footer>
+<div class="toast" id="toast"></div>
+<script src="{{ url_for('static_files', path='site.js', v=static_version) }}"></script>
+</body></html>
