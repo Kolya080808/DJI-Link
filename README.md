@@ -2,9 +2,18 @@
 
 <p align="center"><img src="docs/dji-link-logo.svg" alt="DJI Link" width="640"></p>
 
+<p align="center">
+  <a href="https://github.com/Kolya080808/DJI-Link/actions/workflows/ci.yml"><img src="https://github.com/Kolya080808/DJI-Link/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Kolya080808/DJI-Link/actions/workflows/lint.yml"><img src="https://github.com/Kolya080808/DJI-Link/actions/workflows/lint.yml/badge.svg" alt="Lint"></a>
+  <a href="https://github.com/Kolya080808/DJI-Link/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-73f7c5.svg" alt="Apache-2.0 license"></a>
+</p>
 
 
-**Project site:** https://dream-catcher-project.ru/ · **Downloads:** https://dream-catcher-project.ru/downloads · **Documentation:** https://dream-catcher-project.ru/docs
+
+· **Project site:** https://dream-catcher-project.ru/ \
+· **Downloads:** https://dream-catcher-project.ru/downloads \
+· **Documentation:** https://dream-catcher-project.ru/docs \
+· **Contribute:** https://dream-catcher-project.ru/contribute
 
 
 
@@ -18,8 +27,21 @@ drone's own **DUML** protocol, reverse-engineered from the DJI Fly app.
 > ⚠️ Unofficial project, not affiliated with DJI. Use at your own risk — see
 > [Disclaimer](#disclaimer). For your own hardware only.
 
-<!-- Demo: replace with a real screenshot/GIF once recorded -->
+# DEMO
+
+Add the finished GIF as `docs/demo.gif`, then uncomment the image line below:
+
+<!-- Add docs/demo.gif after recording. Keep it short (10–20 seconds) and show the
+     preflight screen, live HUD/telemetry, and one safe control interaction. -->
 <!-- ![DJI Link in flight](docs/demo.gif) -->
+
+Until then, the simulator can open the same interface without aircraft hardware:
+
+```bash
+dji-link --sim --windowed
+```
+
+See [`docs/DEMO.md`](docs/DEMO.md) for the recording checklist.
 
 ---
 
