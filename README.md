@@ -3,7 +3,7 @@
 <p align="center"><img src="docs/dji-link-logo.svg" alt="DJI Link" width="640"></p>
 
 <p align="center">
-  <a href="https://github.com/Kolya080808/DJI-Link/">
+  <a>
     <img src="docs/dji-link-logo-small-white.svg" alt="Logo" width="30" height="30" style="vertical-align: middle;">
   </a>
   <a href="https://github.com/Kolya080808/DJI-Link/actions/workflows/ci.yml">
