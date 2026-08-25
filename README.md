@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Kolya080808/DJI-Link/">
-    <img src="docs/dji-link-logo-small.svg" alt="Logo" width="30" height="30" style="vertical-align: middle;">
+    <img src="docs/dji-link-logo-small-white.svg" alt="Logo" width="30" height="30" style="vertical-align: middle;">
   </a>
   <a href="https://github.com/Kolya080808/DJI-Link/actions/workflows/ci.yml">
     <img src="https://github.com/Kolya080808/DJI-Link/actions/workflows/ci.yml/badge.svg" alt="CI">
