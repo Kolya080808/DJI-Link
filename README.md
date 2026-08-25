@@ -3,9 +3,18 @@
 <p align="center"><img src="docs/dji-link-logo.svg" alt="DJI Link" width="640"></p>
 
 <p align="center">
-  <a href="https://github.com/Kolya080808/DJI-Link/actions/workflows/ci.yml"><img src="https://github.com/Kolya080808/DJI-Link/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Kolya080808/DJI-Link/actions/workflows/lint.yml"><img src="https://github.com/Kolya080808/DJI-Link/actions/workflows/lint.yml/badge.svg" alt="Lint"></a>
-  <a href="https://github.com/Kolya080808/DJI-Link/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-73f7c5.svg" alt="Apache-2.0 license"></a>
+  <a href="https://github.com/Kolya080808/DJI-Link/">
+    <img src="docs/dji-link-logo-small.svg" alt="Logo" width="30" height="30" style="vertical-align: middle;">
+  </a>
+  <a href="https://github.com/Kolya080808/DJI-Link/actions/workflows/ci.yml">
+    <img src="https://github.com/Kolya080808/DJI-Link/actions/workflows/ci.yml/badge.svg" alt="CI">
+  </a>
+  <a href="https://github.com/Kolya080808/DJI-Link/actions/workflows/lint.yml">
+    <img src="https://github.com/Kolya080808/DJI-Link/actions/workflows/lint.yml/badge.svg" alt="Lint">
+  </a>
+  <a href="https://github.com/Kolya080808/DJI-Link/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache--2.0-73f7c5.svg" alt="Apache-2.0 license">
+  </a>
 </p>
 
 
