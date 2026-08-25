@@ -1,6 +1,6 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 1. Check the Wiki first
+  - name: Check the Wiki first
     url: https://github.com/Kolya080808/DJI-Link/wiki
     about: Setup instructions and answers to common questions may already be documented here.
   - name: Documentation and contribution guide
