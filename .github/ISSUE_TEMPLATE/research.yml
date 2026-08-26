@@ -1,0 +1,45 @@
+name: Research
+description: Investigate an unknown protocol, media feature, hardware behavior, or experimental idea
+title: "research: "
+labels: [research, help wanted]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Code is not required. A useful finding, capture, experiment, comparison, or documented dead end is valuable.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Research area
+      options:
+        - Media
+        - Reverse engineering / DUML
+        - Telemetry
+        - Flight control
+        - Hardware / firmware
+        - Controller
+        - AI / future capabilities
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Research question
+      description: What are we trying to understand?
+    validations:
+      required: true
+  - type: textarea
+    id: known
+    attributes:
+      label: What is already known?
+      description: Link Wiki pages, captures, code, or previous issues when relevant.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence / experiments
+      description: Hardware, firmware, app version, captures, observations, and experiments.
+  - type: textarea
+    id: useful
+    attributes:
+      label: What would count as a useful result?
