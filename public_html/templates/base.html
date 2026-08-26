@@ -7,7 +7,16 @@
 <link rel="icon" href="{{ url_for('static_files', path='logo.svg', v=static_version) }}" type="image/svg+xml">
 <link rel="stylesheet" href="{{ url_for('static_files', path='site.css', v=static_version) }}">
 </head>
-<body data-page="{{ page }}">
+<body data-page="{{ page }}" class="is-loading">
+<div class="page-loader" id="page-loader" aria-live="polite" aria-label="Loading DJI Link">
+  <div class="page-loader-inner">
+    <div class="page-loader-mark"><img src="{{ url_for('static_files', path='logo.svg') }}" alt=""></div>
+    <div class="page-loader-brand">DJI Link</div>
+    <div class="page-loader-status"><span>INITIALIZING</span><span class="page-loader-dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+    <div class="page-loader-track" aria-hidden="true"><span></span></div>
+  </div>
+</div>
+<div class="page-shell">
 <div class="noise"></div><div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
 <header class="nav"><div class="container nav-inner">
 <a class="brand" href="/"><span class="brand-mark"><img src="{{ url_for('static_files', path='logo.svg') }}" alt=""></span><span>DJI Link</span></a>
@@ -16,6 +25,7 @@
 </div><div class="mobile-menu" id="mobile-menu"><a href="/">Home</a><a href="/downloads">Download</a><a href="/docs">Docs</a><a href="/contribute">Contribute</a><a href="/license">License</a><a href="/authors">Authors</a><a href="{{ github_url }}" target="_blank" rel="noreferrer">GitHub ↗</a></div></header>
 <main>{% block content %}{% endblock %}</main>
 <footer class="footer"><div class="container footer-grid"><div><div class="brand"><span class="brand-mark"><img src="{{ url_for('static_files', path='logo.svg') }}" alt=""></span><span>DJI Link</span></div><p class="small">Unofficial desktop control and research tooling for DJI Mavic Mini 1 (WM160).</p></div><div><h3>Project</h3><a href="/downloads">Downloads</a><a href="/docs">Documentation</a><a href="/contribute">Contribute</a><a href="/license">License</a></div><div><h3>Links</h3><a href="{{ github_url }}">GitHub</a><a href="{{ releases_url }}">Releases</a><a href="{{ github_url }}/issues">Issues</a></div></div><div class="container footer-bottom"><span>© {{ year }} Kolya080808 & contributors.</span><span>Independent project · not affiliated with DJI.</span></div></footer>
+</div>
 <div class="toast" id="toast"></div>
 <script src="{{ url_for('static_files', path='site.js', v=static_version) }}"></script>
 </body></html>
