@@ -3,256 +3,273 @@
 <p align="center"><img src="docs/dji-link-logo.svg" alt="DJI Link" width="640"></p>
 
 <p align="center">
-  <a>
-    <img src="docs/dji-link-logo-small-white.svg" alt="Logo" width="30" height="30" style="vertical-align: middle;">
-  </a>
-  <a>
-    <img src="https://github.com/Kolya080808/DJI-Link/actions/workflows/ci.yml/badge.svg" alt="CI">
-  </a>
-  <a>
-    <img src="https://github.com/Kolya080808/DJI-Link/actions/workflows/lint.yml/badge.svg" alt="Lint">
-  </a>
-  <a>
-    <img src="https://img.shields.io/badge/license-Apache--2.0-73f7c5.svg" alt="Apache-2.0 license">
-  </a>
+  <strong>Fly a DJI Mavic Mini 1 from your computer.</strong><br>
+  Live HEVC video · telemetry · spectator-style flight control · camera/gimbal · reverse-engineered DUML
 </p>
 
+<p align="center">
+  <a href="https://github.com/Kolya080808/DJI-Link/releases/latest">Download</a> ·
+  <a href="https://github.com/Kolya080808/DJI-Link/wiki/Getting-Started">Quick start</a> ·
+  <a href="https://github.com/Kolya080808/DJI-Link/wiki">Wiki</a> ·
+  <a href="https://github.com/Kolya080808/DJI-Link/discussions">Discussions</a>
+</p>
 
+<p align="center">
+  <img src="https://github.com/Kolya080808/DJI-Link/actions/workflows/ci.yml/badge.svg" alt="CI">
+  <img src="https://github.com/Kolya080808/DJI-Link/actions/workflows/lint.yml/badge.svg" alt="Lint">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-73f7c5.svg" alt="Apache-2.0 license">
+</p>
 
-· **Project site:** https://dream-catcher-project.ru/ \
-· **Downloads:** https://dream-catcher-project.ru/downloads \
-· **Documentation:** https://dream-catcher-project.ru/docs \
-· **Contribute:** https://dream-catcher-project.ru/contribute
+> **The idea:** make the first-generation Mavic Mini feel like a programmable camera platform instead of a phone-only drone.
 
+DJI Link is an open-source desktop ground station for the **DJI Mavic Mini 1 (WM160)**. A small Raspberry Pi acts as a USB accessory bridge to the stock remote controller; the PC handles the UI, DUML protocol, telemetry, video, and control.
 
+There is no official DJI desktop SDK for the Mini 1. DJI Link therefore talks to the aircraft using the drone's own **DUML** protocol, reverse-engineered from DJI Fly and verified against real hardware.
 
-**Fly a DJI Mavic Mini 1 (WM160) from your computer** — live video, telemetry, and full
-flight control from a native Windows/Linux/macOS app, without the phone app. A Raspberry
-Pi acts as a small bridge to the remote controller; the PC does everything else.
+> ⚠️ **Unofficial project.** Not affiliated with, endorsed by, or supported by DJI. Use only with hardware you own or are authorized to operate. Flight-control software can cause crashes, flyaways, damage, or injury. Read the [disclaimer](#disclaimer) before flight.
 
-There is no official desktop SDK for the Mini 1, so DJI Link is built directly on the
-drone's own **DUML** protocol, reverse-engineered from the DJI Fly app.
+## Why this project is interesting
 
-> ⚠️ Unofficial project, not affiliated with DJI. Use at your own risk — see
-> [Disclaimer](#disclaimer). For your own hardware only.
+This is more than a remote-control GUI. It is a reproducible reverse-engineering project that turns a closed consumer drone link into a documented, scriptable desktop interface.
 
-# DEMO
+**What is already working:**
 
-Add the finished GIF as `docs/demo.gif`, then uncomment the image line below:
+- **Live video** — H.265/HEVC stream decoded in the desktop app.
+- **Telemetry** — attitude, altitude, speed, battery, flight mode, home state, GPS information where available, and decoded flight-block reasons.
+- **Flight control** — takeoff, landing, RTH, control authority, and continuous virtual-stick input.
+- **Spectator-style controls** — mouse to look/yaw, `W A S D` to move, `Space/Shift` for throttle.
+- **Camera & gimbal** — photo, recording, zoom, exposure controls, and gimbal tilt.
+- **Cross-platform desktop app** — Windows, Linux, and macOS release packages.
+- **Raspberry Pi bridge** — Zero 2 W reference setup, automatic discovery, access point, and recovery tooling.
+- **Simulator** — open the UI without aircraft hardware.
+- **Reverse engineering corpus** — DUML command tables, telemetry notes, flight-gating research, parameter research, media research, and protocol captures.
 
-<!-- Add docs/demo.gif after recording. Keep it short (10–20 seconds) and show the
-     preflight screen, live HUD/telemetry, and one safe control interaction. -->
-<!-- ![DJI Link in flight](docs/demo.gif) -->
+## See it before you build it
 
-Until then, the simulator can open the same interface without aircraft hardware:
+No drone is required to inspect the desktop interface:
 
 ```bash
 dji-link --sim --windowed
 ```
 
-See [`docs/DEMO.md`](docs/DEMO.md) for the recording checklist.
+The simulator is the recommended first step for a new PC install. For the real hardware setup, use the **[Wiki → Getting Started](https://github.com/Kolya080808/DJI-Link/wiki/Getting-Started)** guide.
 
----
-
-## Features
-
-- **Live video** from the drone (H.265/HEVC), decoded into the app window.
-- **Telemetry** — attitude, altitude, speed, battery, flight mode, home flag, and
-  plain-language reasons when the motors refuse to start (decoded diagnostic tables).
-- **Flight control** — takeoff, land, return-to-home, arm/disarm, and continuous **virtual-stick
-  flight** (hardware-verified: `0x03/0x8E` DataFlycJoystick; spectator-style — mouse to look/turn,
-  WASD to move, Space/Shift for throttle). Control auto-enables once the takeoff settles, and hands
-  back to the remote on release. Flight modes Cine/Normal/Sport.
-- **Gimbal & camera** — tilt with the mouse, photo, record (R toggles), zoom, ISO/shutter/EV.
-- **Settings panel** (Esc) — max altitude and distance (up to the drone's 500 m ceiling,
-  no unlock needed), RTH altitude, home-to-current, exposure, camera mode.
-- **Console** — run native flight/gimbal/camera/raw DUML commands from the GUI or
-  `--console`, with media commands intentionally left out until that path is finished.
-- **Zero-config launch** — the installed `dji-link` app finds the Pi, connects, and walks
-  you through powering on the link.
-
----
+> **Demo note:** the repository intentionally does not ship a fake flight video. When a real recording is added, keep it short, label simulated footage clearly, and show the UI/HUD rather than pretending simulator telemetry is a real flight.
 
 ## How it works
 
+```text
+┌──────────────────────────────┐
+│ PC                           │
+│ C++ desktop app              │
+│                              │
+│ UI · DUML · telemetry        │
+│ video · control · console    │
+└──────────────┬───────────────┘
+               │ Wi-Fi 2.4 GHz / TCP
+               ▼
+┌──────────────────────────────┐
+│ Raspberry Pi Zero 2 W        │
+│ Dumb USB accessory bridge    │
+│ AP + discovery + bridge      │
+└──────────────┬───────────────┘
+               │ USB Cable / AOA
+               ▼
+┌──────────────────────────────┐
+│ DJI Mavic Mini 1 remote      │
+└──────────────┬───────────────┘
+               │ DJI radio link
+               ▼
+┌──────────────────────────────┐
+│ DJI Mavic Mini 1 / WM160     │
+└──────────────────────────────┘
 ```
-[ PC — the brain, C++ app ] --Wi-Fi-->  [ Pi — dumb bridge ]  --USB-->  [ remote ]  )))  [ drone ]
-   video · telemetry · control                (forwards bytes)
-```
 
-The drone and remote talk over DUML, and the phone app connects to the remote as a USB
-**accessory** (Android Open Accessory). A normal PC can only be a USB *host*, so it can't
-pose as that accessory — a Raspberry Pi can. The Pi presents itself to the remote as the
-phone and forwards the raw byte stream to the PC over Wi-Fi. All protocol handling —
-DUML framing, the composite AOA mux, video reassembly, control — happens on the PC.
+The important trick is the Raspberry Pi: the stock remote expects the mobile application to appear as a USB **accessory** (Android Open Accessory). A normal PC cannot be that USB accessory (usually, PC can be only USB host because it doesn't have OTG controller, but we need USB device), while the Pi can. The Pi forwards the raw byte stream; the PC remains the "brain".
 
-Full protocol write-up: **[`dji_link_beta/reverse_docs/`](dji_link_beta/reverse_docs/)**
-(`MASTER_REPORT.md`, `FLIGHT_GATING.md`, `ERROR_CODES.md`, telemetry and command tables).
-
----
+See the deeper explanation in [Architecture](https://github.com/Kolya080808/DJI-Link/wiki/Architecture) and [Protocol Deep Dive](https://github.com/Kolya080808/DJI-Link/wiki/Protocol-Deep-Dive).
 
 ## Hardware
 
 | Part | Requirement |
-|------|-------------|
-| Drone | DJI Mavic Mini 1 (WM160), already activated once with the official app |
-| Remote | The Mavic Mini remote controller |
-| Bridge | Raspberry Pi **Zero 2 W** (any Pi with USB OTG / `dwc2` peripheral mode works) |
-| SD card | ≥ 8 GB (16 GB recommended), Raspberry Pi OS (Bookworm, 64-bit) |
-| Cables | A **data** USB cable from the Pi's USB port to the remote (the phone cable); separate power for the Pi |
+|---|---|
+| Drone | DJI Mavic Mini 1 (WM160), activated once with the official app |
+| Remote | Stock Mavic Mini remote controller |
+| Bridge | Raspberry Pi Zero 2 W recommended; other Pi boards with USB OTG/peripheral mode may work |
+| Storage | 8 GB+ SD card (16 GB recommended), Raspberry Pi OS Bookworm 64-bit |
+| Cables | Data USB cable from Pi to the remote + separate Pi power |
 | PC | Windows 10/11, Linux, or macOS |
 
-The Pi only forwards bytes, so 512 MB RAM (the Zero 2 W) is plenty.
+The Pi is intentionally simple: it forwards the accessory stream, so it's just dumb bridge. The reference Zero 2 W has enough RAM for the bridge.
 
----
+## Download
 
-## Install
+Use the latest GitHub Release; release packages include a matching `ffmpeg` runtime for live video.
+
+| Platform | Package |
+|---|---|
+| Windows x64 | [MSI](https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x64.msi) · [ZIP](https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x64.zip) |
+| Windows arm64 | [MSI](https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-arm64.msi) |
+| Windows x86 | [MSI](https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x86.msi) |
+| macOS Apple Silicon | [DMG](https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-arm64.dmg) |
+| macOS Intel | [DMG](https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-x86_64.dmg) |
+| Linux x86_64 | [DEB](https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-x86_64.deb) · [RPM](https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-x86_64.rpm) |
+| Linux arm64 | [DEB](https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-arm64.deb) · [RPM](https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-arm64.rpm) |
+| Raspberry Pi | [install-pi.sh](https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh) |
+
+**Full first-time setup:** [Wiki → Getting Started](https://github.com/Kolya080808/DJI-Link/wiki/Getting-Started)
+
+## First run
 
 ### PC
-Download the native installer for your OS from GitHub Releases:
 
-Latest release page:
-`https://github.com/Kolya080808/DJI-Link/releases/latest`
+After installing:
 
-Direct latest installers:
+**WINDOWS:**
 
-| Platform | Installer |
-|----------|-----------|
-| Windows x64 | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x64.msi` |
-| Windows x86 | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x86.msi` |
-| Windows arm64 | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-arm64.msi` |
-| macOS Apple Silicon | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-arm64.dmg` |
-| macOS Intel | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-x86_64.dmg` |
-| Linux x86_64 `.deb` | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-x86_64.deb` |
-| Linux arm64 `.deb` | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-arm64.deb` |
-| Linux x86_64 `.rpm` | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-x86_64.rpm` |
-| Linux arm64 `.rpm` | `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-arm64.rpm` |
+Well, you know what to do: double-click the .exe file.
 
-Portable latest archives:
-- Windows x64: https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-windows-x64.zip
-- macOS Apple Silicon: https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-arm64.tar.gz
-- macOS Intel: https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-macos-x86_64.tar.gz
-- Linux x86_64: https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-x86_64.tar.gz
-- Linux arm64: https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-linux-arm64.tar.gz
+**LINUX/MACOS:**
 
-Live video needs `ffmpeg`, and release packages bundle it at package time:
-
-- Windows `.msi` includes `ffmpeg.exe` in the installed app directory.
-- macOS `.dmg` includes an architecture-matching `ffmpeg` inside the `.app` bundle.
-- Linux `.deb` / `.rpm` / `.tar.gz` include a static `ffmpeg` binary in `bin/`.
-
-The app itself never installs dependencies at runtime. Portable release archives include
-the same bundled `ffmpeg`; local developer builds can also use `ffmpeg` from `PATH`.
+```bash
+dji-link --sim        # inspect the UI without hardware
+dji-link              # normal GUI launch
+dji-link --console    # headless / DUML console mode
+```
 
 ### Raspberry Pi
-Flash Raspberry Pi OS, enable SSH, then run the latest release installer on the Pi:
+
+On a freshly prepared Pi:
+
 ```bash
 curl -fsSL https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh | sudo bash
 ```
-The installer downloads `dji-link-pi.tar.gz` from the same latest release, installs
-`dwc2`, `raw_gadget`, `dji-ap.service` (the Wi-Fi access point), `dji-netctl.service`,
-`dji-bridge.service`, and `dji-update.timer`. If the Pi has internet, the timer checks
-GitHub Releases and updates the Pi bundle automatically. A first-time install may require
-one reboot, then services start by themselves on every power-up.
 
-`dji-netctl.service` exposes discovery/Wi-Fi control on `:9911`; `dji-bridge.service`
-exposes the flight data path on `:9910`. The bridge service opens `:9910` as soon as it
-starts and retries AOA/UDC setup in the background, so the PC can reach the flying
-endpoint even while the remote controller is still being plugged in. Bridge logs are in
-`journalctl -u dji-bridge` and `/var/log/dji-link/bridge.log` on the Pi.
+The installer configures the USB gadget path, Wi-Fi access point, discovery service, bridge service, and update timer.
 
-If the Pi ends up with no network at all and no access point, see
-[`dji_link_beta/pi/README.md`](dji_link_beta/pi/README.md#rescue-the-pi-is-not-reachable-at-all) —
-`rescue.sh` repairs it, including straight off the SD card with no console attached.
+For the actual wiring, first boot, Wi-Fi behavior, rescue procedure, and service logs, use the [Raspberry Pi Wiki page](https://github.com/Kolya080808/DJI-Link/wiki/Raspberry-Pi) rather than duplicating those instructions here.
 
-Direct latest assets:
-- `https://github.com/Kolya080808/DJI-Link/releases/latest/download/install-pi.sh`
-- `https://github.com/Kolya080808/DJI-Link/releases/latest/download/dji-link-pi.tar.gz`
+## Controls
 
----
+| Input | Action |
+|---|---|
+| Mouse | Look / yaw + gimbal tilt |
+| `W A S D` | Horizontal movement |
+| `Space` / `Shift` | Up / down |
+| `Enter` | Arm / disarm |
+| `T` | Takeoff |
+| `L` | Land |
+| `H` | Return-to-home |
+| `P` | Photo |
+| `R` | Start / stop recording |
+| `K` | Request video keyframe |
+| `Esc` | Settings |
+| `F1` | Help overlay |
+| `F3` | HUD on/off |
+| `F11` | Fullscreen |
+| `Tab` | DUML console |
 
-## Usage
+For flight workflow and safety, read [How to Fly](https://github.com/Kolya080808/DJI-Link/wiki/How-to-Fly) before enabling control.
 
-On the PC, with the Pi powered and the drone + remote on, launch the installed app:
+## Roadmap
+
+DJI Link is growing in major steps rather than trying to ship every experimental idea at once.
+
+### 2.0.0 — Media + controllers
+
+The next major release is planned to complete the **media side** of the project and make the desktop experience easier to use with a physical controller. That includes broader media operations and recovery, plus configurable support for **PS/Xbox-style gamepads** alongside keyboard and mouse input.
+
+### 3.0.0 — AI-assisted features
+
+The longer-term direction is to explore **AI-assisted capabilities**: bringing useful features found on newer drones to the Mini where technically possible, and experimenting with capabilities that DJI never shipped for this aircraft. Possible areas include camera/media assistance, scene understanding, higher-level automation, and intelligent diagnostics.
+
+These are roadmap goals, not promises. Anything flight-critical will remain explicit, bounded, and user-controlled; experimental AI features will be clearly separated from the deterministic control stack.
+
+For the detailed contributor-facing roadmap, see [`ROADMAP.md`](ROADMAP.md).
+
+## Reverse engineering
+
+The project documents how it moved from the DJI Fly APK to a working desktop client:
+
+1. Recover the DUML frame format and checksums.
+2. Reconstruct command tables and high-level semantics.
+3. Follow the Android app from MSDK concepts down to native packers.
+4. Build the USB accessory path through a Raspberry Pi.
+5. Split the composite stream into DUML and HEVC video.
+6. Verify stateful flight-control, camera, telemetry, and parameter behavior on WM160 hardware.
+7. Port verified behavior from the experimental Python implementation into C++.
+
+The [Wiki → Reverse Engineering](https://github.com/Kolya080808/DJI-Link/wiki/Reverse-Engineering) page explains the methodology and evidence levels. The complete technical record stays in [`dji_link_beta/reverse_docs/`](dji_link_beta/reverse_docs/).
+
+## Current status & roadmap
+
+The native C++ client intentionally exposes only protocol paths that are sufficiently understood and tested. Media list/download/delete, *some (not all)* GPS parsing, and parts of the parameter/research surface remain incomplete or evolving.
+
+See [`ROADMAP.md`](ROADMAP.md) for the current contributor-facing roadmap and [`UPDATE.md`](UPDATE.md) for release notes.
+
+Good areas for contributions include:
+
+- media research — this is currently the biggest unknown in DJI-Link;
+  anything about media/storage protocols, commands, file transfer,
+  metadata, camera/media workflows, packet captures, or findings from
+  other DJI platforms is especially valuable. The media side is largely
+  unexplored right now, so research is much more useful than implementation;
+- AI research and ideas — this is a longer-term direction for the 3.x
+  roadmap. Ideas, experiments, references, and research into how AI could
+  add capabilities missing from the Mavic Mini (but not missing from the Mavic 1 or 2) are very welcome;
+- Xbox controller testing — PS controller support can be tested locally,
+  but I do not currently have an Xbox controller, so testing and mapping
+  on Xbox hardware would be especially useful;
+- documentation — the project is growing fast and the documentation is
+  becoming difficult to keep consistent. Help reviewing, correcting,
+  restructuring, and cross-linking the Wiki and reverse-engineering notes
+  is very welcome;
+- ideas for future development — suggestions for useful, unusual, or
+  technically interesting features are encouraged, especially ideas that
+  could bring capabilities found on newer DJI drones to the Mavic Mini;
+- verified protocol research — new packet captures, protocol discoveries,
+  hardware/firmware observations, and independently reproducible findings
+  are valuable even when they do not come with an implementation.
+
+## Development
+
+Native development uses C++20 + CMake:
+
 ```bash
-dji-link              # GUI: menu -> discovery -> flight window
-dji-link --sim        # no hardware — try the interface
-dji-link --console    # headless console client
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
 ```
 
-### Controls
-| Input | Action |
-|-------|--------|
-| Mouse | Look / turn (yaw) and tilt the gimbal — spectator style |
-| W A S D | Forward / left / back / right |
-| Space / Shift | Up / down (throttle) |
-| Enter | Arm / disarm |
-| T / L / H | Takeoff / land / return-to-home |
-| P / R | Photo / record |
-| K / U | Request keyframe / send no-GPS takeoff unlock |
-| Esc | Settings panel |
-| F1 | Help overlay |
-| F3 | Hide / show HUD |
-| F11 | Fullscreen toggle |
-| Tab | Console (any DUML command) |
+Use the simulator for UI work without aircraft hardware:
 
-Motors will not start until you **arm** (Enter). Keep the propellers off until you trust
-the setup.
+```bash
+./build/dji-link --sim --windowed
+```
 
----
+See [Wiki → Development](https://github.com/Kolya080808/DJI-Link/wiki/Development) and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-## Project layout
+## Safety & disclaimer
 
-- **`src/`** — the native C++ application
-  - `core/` — DUML, composite mux, telemetry, control, drone API, transports, logging,
-    Pi discovery, auto-updater, bundled ffmpeg lookup
-  - `gui/` — SDL2 app window, preflight menu, video/HUD, settings, in-flight console
-  - `pi/` — the Pi jump-host services in C++ (`dji-bridge`: AOA↔TCP on :9910;
-    `dji-netctl`: Wi-Fi/AP HTTP API on :9911), built for aarch64 by the release
-    workflow via `cmake/pi-aarch64.toolchain.cmake`
-- **`dji_link_beta/`** — the old Python beta plus current Pi jump-host tooling
-  - `pc_client.py` — historical desktop prototype (video, telemetry, control, settings, console)
-  - `drone.py` · `duml.py` · `composite.py` · `telemetry.py` · `diag_codes.py` · `control.py` · `transport.py`
-  - `pi/` — release-packaged Raspberry Pi tooling (`ap.sh`, `rescue.sh`,
-    `install.sh`, `setup_pi.sh`, `update_pi.sh`; the services themselves live in
-    `bin/` in the bundle — C++ ports of the former `bridge.py`/`netctl.py`)
-  - `reverse_docs/` — the reverse-engineering documentation
-- **`decompiled/`** — the DJI Fly app, unpacked (source material for the research)
+**Use at your own risk.** DJI Link is an unofficial independent project and is not affiliated with, endorsed by, or supported by DJI. Controlling a real aircraft with unofficial software can cause crashes, flyaways, damage, injury, or loss of the aircraft.
 
----
+- Test new builds with the aircraft secured and propellers removed whenever possible.
+- Keep the official remote available as a manual fallback.
+- Do not use the project to bypass safety geofencing or other protections.
+- Obey all applicable registration, altitude, airspace, and line-of-sight rules.
+- Use only hardware you own or are authorized to operate.
 
-## Limitations
-
-- The current C++ port intentionally does **not** include media list/download/delete or
-  GPS parsing yet. Those Python paths are unfinished and will be ported only after the
-  Python implementation is verified.
-- **Speed and other flight-controller parameters** are addressed by a hash of the
-  parameter name, computed inside the app's packer and not recoverable from static
-  analysis — so setting max speed needs a one-time runtime capture of the hash. Max
-  altitude and distance do **not** need this and work directly.
-- **DJI account walls** (offline-unreachable): no-fly-zone / geo unlock, first-time
-  activation of a factory-reset unit, and anti-theft binding all require DJI's servers. An
-  already-activated drone flies without any of them.
-- The Mini 1 has **no obstacle sensors**, so any automated flight is inherently blind.
-
----
-
-## Disclaimer
-
-**Use at your own risk.** This is an unofficial, independent project, **not affiliated
-with, endorsed by, or supported by DJI**. It is provided "as is", without warranty.
-
-- Controlling a drone with unofficial software can cause crashes, flyaways, damage, injury
-  or loss of the aircraft. The authors are **not liable** for any damage or loss.
-- Bypassing the official app/remote or changing flight-controller settings **may void your
-  warranty**.
-- **You are responsible for obeying the law** — registration, no-fly zones, altitude and
-  line-of-sight rules vary by country. Do not use this to bypass safety geofencing.
-- Use only on hardware you own or are authorized to operate.
-
-"DJI", "Mavic", "Mini", and "DJI Fly" are trademarks of their respective owners, used here
-for identification only.
+"DJI", "Mavic", "Mini", and "DJI Fly" are trademarks of their respective owners and are used for identification only.
 
 ## License
 
-Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE).
+Apache License 2.0 — see [`LICENSE`](LICENSE).
+
+---
+
+<p align="center">
+  <strong>Built for people who want to know what their drone can do.</strong><br>
+  <a href="https://github.com/Kolya080808/DJI-Link/wiki/Getting-Started">Get started</a> ·
+  <a href="https://github.com/Kolya080808/DJI-Link/wiki/Reverse-Engineering">Read the research</a> ·
+  <a href="https://github.com/Kolya080808/DJI-Link/issues">Help improve DJI Link</a>
+</p>
