@@ -30,6 +30,7 @@ on:
       - 'vcpkg.json'
       - 'conanfile.txt'
       - 'conanfile.py'
+      - 'resources/**'
       - '.github/workflows/ci.yml'   # re-run if the workflow itself changed
   pull_request:
     paths: *cpp_paths

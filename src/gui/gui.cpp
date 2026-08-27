@@ -85,7 +85,6 @@ SDL_Surface* make_window_icon() {
     const std::uint32_t bg = pixel(7, 16, 23);
     const std::uint32_t mint = pixel(115, 247, 197);
     const std::uint32_t blue = pixel(120, 168, 255);
-    const std::uint32_t body = pixel(115, 220, 221);
     SDL_FillRect(icon, nullptr, bg);
     auto put = [&](int x, int y, std::uint32_t color, int radius = 0) {
         for (int yy = -radius; yy <= radius; ++yy) {
@@ -117,18 +116,19 @@ SDL_Surface* make_window_icon() {
             }
         }
     };
-    line(23, 34, 11, 49, mint);
-    line(41, 34, 53, 49, blue);
-    line(28, 27, 18, 18, mint);
-    line(36, 27, 46, 18, mint);
-    line(27, 27, 37, 27, mint);
-    line(29, 36, 35, 36, mint);
-    put(11, 49, mint, 4);
-    put(53, 49, blue, 4);
-    for (int y = 26; y <= 39; ++y)
-        for (int x = 27; x <= 37; ++x)
-            if (x >= 29 && x <= 35 && y >= 28 && y <= 37)
-                static_cast<std::uint32_t*>(icon->pixels)[y * (icon->pitch / 4) + x] = body;
+    // Exact geometry of the mark in docs/dji-link-logo.svg, scaled into 64x64.
+    line(18, 32, 11, 40, mint);
+    line(46, 32, 53, 40, mint);
+    line(25, 28, 18, 23, mint);
+    line(39, 28, 46, 23, mint);
+    line(25, 28, 39, 28, mint);
+    line(27, 36, 37, 36, mint);
+    put(11, 40, mint, 2);
+    put(53, 40, blue, 2);
+    for (int y = 26; y <= 38; ++y)
+        for (int x = 27; x <= 38; ++x)
+            if (x >= 27 && x <= 38 && y >= 26 && y <= 38)
+                static_cast<std::uint32_t*>(icon->pixels)[y * (icon->pitch / 4) + x] = blue;
     return icon;
 }
 

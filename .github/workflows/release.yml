@@ -16,9 +16,16 @@ on:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
       - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      test_build:
+        description: Build release packages without publishing a GitHub Release
+        required: true
+        default: true
+        type: boolean
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: false      # never cancel a release midway
 
 permissions:
@@ -48,7 +55,10 @@ jobs:
         id: gate
         run: |
           set -euo pipefail
-          if [ -f UPDATE.md ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Manual test build — using synthetic version."
+          elif [ -f UPDATE.md ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
             echo "UPDATE.md present — proceeding with release."
           else
@@ -60,6 +70,13 @@ jobs:
         id: parse
         if: steps.gate.outputs.skip != 'true'
         run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=0.0.0-test.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "title=DJI Link test build ${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            printf 'Manual test build from %s.\n' "$GITHUB_SHA" > release-notes.md
+            exit 0
+          fi
           python3 - <<'PY'
           import os, re
           text = open('UPDATE.md', encoding='utf-8').read().replace('\r\n', '\n')
@@ -87,7 +104,7 @@ jobs:
           PY
 
       - name: Verify tag matches UPDATE.md version
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.gate.outputs.skip != 'true' && github.event_name != 'workflow_dispatch'
         run: |
           set -euo pipefail
           tag_version="${GITHUB_REF_NAME#v}"
@@ -372,6 +389,7 @@ jobs:
           ls -la dist
 
       - name: Create stable latest-download aliases
+        if: github.event_name != 'workflow_dispatch'
         shell: bash
         run: |
           set -euo pipefail
@@ -401,6 +419,7 @@ jobs:
               ;;
             macOS)
               test -x verify-install/dji-link.app/Contents/MacOS/dji-link
+              test -f verify-install/dji-link.app/Contents/Resources/dji-link.icns
               test -x verify-install/dji-link.app/Contents/Resources/bin/ffmpeg
               verify-install/dji-link.app/Contents/Resources/bin/ffmpeg -version >/dev/null
               otool -L verify-install/dji-link.app/Contents/Resources/bin/ffmpeg
@@ -408,6 +427,8 @@ jobs:
             Linux)
               test -x verify-install/bin/dji-link
               test -x verify-install/bin/ffmpeg
+              test -f verify-install/share/applications/dji-link.desktop
+              test -f verify-install/share/icons/hicolor/scalable/apps/dji-link.svg
               verify-install/bin/ffmpeg -version >/dev/null
               ;;
           esac
@@ -512,7 +533,7 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     needs: [prepare, build, pi-installer]
-    if: needs.prepare.outputs.skip != 'true'
+    if: needs.prepare.outputs.skip != 'true' && github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Download packages

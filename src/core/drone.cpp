@@ -211,6 +211,10 @@ void Drone::set_flight_mode(const std::string& name) {
 
 // ---------------------------------------------------------------- home point
 void Drone::set_home_point(double lat_deg, double lon_deg) {
+    if (!std::isfinite(lat_deg) || !std::isfinite(lon_deg) || lat_deg < -90.0 || lat_deg > 90.0 ||
+        lon_deg < -180.0 || lon_deg > 180.0) {
+        throw std::invalid_argument("home coordinates must be finite latitude [-90,90] and longitude [-180,180]");
+    }
     Bytes p{0x02};
     put_f64(p, lat_deg * kPi / 180.0);
     put_f64(p, lon_deg * kPi / 180.0);

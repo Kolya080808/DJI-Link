@@ -301,6 +301,11 @@ class Drone:
     def set_home_point(self, lat_deg: float, lon_deg: float) -> None:
         """Set home to an EXPLICIT GPS coordinate (type APP=0x02)."""
         import math
+        lat_deg, lon_deg = float(lat_deg), float(lon_deg)
+        if (not math.isfinite(lat_deg) or not math.isfinite(lon_deg)
+                or not -90.0 <= lat_deg <= 90.0
+                or not -180.0 <= lon_deg <= 180.0):
+            raise ValueError("home coordinates must be finite latitude [-90,90] and longitude [-180,180]")
         self._cmd(0x03, 0x31,
                   bytes([0x02]) + struct.pack("<dd", math.radians(lat_deg), math.radians(lon_deg))
                   + bytes([0x00]),
