@@ -527,6 +527,9 @@ exact custom byte NOT pinned statically (native codec) → Frida. For AUTO just 
 
 ## 5. MEDIA MANAGER — the file-list / download state machine (fixes the `0xe0` NAK)
 
+> **WM160 status correction (2026-08-27):** the public MSDK sequence is a behavioral/API reference, not
+> proof of the active WM160 wire family. Current status is in `FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
+
 Deep detail: `MEDIA_TRANSPORT_TRUTH.md` (authoritative, native-verified), `MSDK_MEDIA_SEQUENCE.md`,
 `DOMAIN_media_album.md`, `MEDIA_TRANSFER.md`.
 
@@ -568,25 +571,19 @@ only MOV/MP4 playable). **Two different transports:**
 - Video playback (stream, not download): `playVideoMediaFile/pause/resume/stop/moveToPosition`;
   `VideoPlaybackStatus {STOPPED, PLAYING, PAUSED}`.
 
-### 5.3 WM160 DUML — the exact frames and why we were getting `0xe0`
+### 5.3 Native media commands and unresolved WM160 mapping
 - Transport = the **same AOA DUML datalink** as flight/video — **no separate FTP/RNDIS/socket** for
   the RC path (native `FileTaskManager`/`CommonFileDownloadHandler`/`FileTransferHandler` → the AOA
   service port). The HTTP/CURL and WiFi-highspeed paths in `libsdk_jni.so` are for direct-WiFi/cloud
   products — decoys for us.
-- Wire commands (receiver camera **0x01**): **`0x00/0x20 get_file_list`**, **`0x00/0x1F
-  get_file_data`** (thumbnail/screennail/original), **`0x00/0x28 delete_file`**. cmd_set 0x00 is on the
-  **non-encrypted** list. Data returns as windowed DUML `file_transfer_push` frames needing
-  **selective-ACKs** back (`FileTransferHandler::SendACKPack`) or the pump stalls; `SendAbortPack` to
-  stop.
-- **Root cause of `0xe0`** (= firmware "command refused / not available in this state", generic NAK):
-  we were entering **PLAYBACK (2)**; the file family (`0x00/0x1F/0x20/0x28`) is serviced **only in
-  MEDIA_DOWNLOAD (3)** — a `download_mode` state the firmware tracks separately from `liveview_mode`.
-  **Fix: `0x02/0x10 set_camera_working_mode` with byte = 3 (MEDIA_DOWNLOAD)**, wait for the camera to
-  *report* download_mode (not just the `0x00` ack), then `0x00/0x20`. Fallback probe byte 6 (DOWNLOAD).
-  `0x02/0x0C switch_playbackmode`, `0x02/0x09`, `0x02/0xB3` each `0xe0` on WM160 — those cmd_ids simply
-  aren't implemented on the 2019 FC7203 firmware and are **not needed** (the app drives the Mini via the
-  legacy `SpecialCommandManager` / `0x02/0x10` path). `drone.enter_playback` already sends byte 3 —
-  correct.
+- Native SDK code confirms real `0x00/0x20`, `0x00/0x1F`, and `0x00/0x28` command objects, a playback
+  readiness state machine, and selective-ACK transfer machinery. It does not prove that UAV59 selects
+  this family; outer legacy and litchis families also exist.
+- `0xE0` is `INVALID_CMD`; `0xE4` is the distinct current-state error. Retained observations do not
+  establish absence of the modern commands or a single wrong-state root cause.
+- Legacy and modern work-mode enums disagree: legacy `3=TRANSCODE`, modern `3=MEDIA_DOWNLOAD`.
+  For FC7203, `[2]` is the first legacy playback candidate, followed by special-control transition and a
+  confirming status push. Neither `[2]` nor `[3]` alone is a verified complete fix.
 - **List request/response layout** (SDK-internal `FileListRequest.toBytes`, prefix 46 B — note the
   native *re-serializes* the real request, so treat this as the CSDK format, confirm the wire bytes
   with one capture): req `[+0 index i32][+12 type i32: MEDIA=0/COMMON=1/MEDIA_FOLDER=4][+16 slot i32:

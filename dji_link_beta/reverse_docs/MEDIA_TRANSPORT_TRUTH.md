@@ -1,5 +1,10 @@
 # MEDIA TRANSPORT — GROUND TRUTH (WM160 / Mavic Mini 1), verified against native `libsdk_jni.so`
 
+> **STATUS UPDATE (2026-08-27):** native symbols and AOA transport findings remain authoritative, but
+> this document does not establish a working WM160 media sequence. `0xE0` is `INVALID_CMD`, not a generic
+> wrong-state code; protocol selection, the exact `0x01/0x01` transition, and successful list/download
+> remain capture-pending. See `FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
+
 Purpose: settle, from the **native** DJI Fly code (not the Java value-objects that `MEDIA_TRANSFER.md`
 trusted), **why the drone gives ZERO reply** to our hand-built `0x00/0x20` (file list) and `0x00/0x1F`
 (file data) frames over the AOA/RC-radio link, and what the real working sequence is.

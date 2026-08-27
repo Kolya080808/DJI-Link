@@ -176,7 +176,7 @@ Motors will not start until you **arm** (Enter). Keep the propellers off until y
 
 The most valuable contributions are not necessarily code:
 
-- **Media research — highest priority.** The media protocol is still largely unknown. Packet captures, protocol analysis, DJI Fly observations, comparisons with other DJI platforms, and reproducible experiments are much more valuable right now than implementation based on guesses.
+- **Media research — highest priority.** The media protocol is still **largely unknown**. The AOA/DUML transport, camera firmware routing, three candidate file-transfer families, and legacy request serializers are documented in [`FIRMWARE_MEDIA_HOME_LIMITS_2026.md`](dji_link_beta/reverse_docs/FIRMWARE_MEDIA_HOME_LIMITS_2026.md), but it is still unknown which family DJI Fly selects on WM160 and what the successful list/download/delete wire sequence is. One complete official-app capture is required.
 - **Xbox controller testing.** PS-controller testing is available locally, but I do not currently have an Xbox controller. Testing mappings, axes, dead zones, and platform-specific behavior would directly help the controller work planned for 2.0.0.
 - **Documentation.** The Wiki and reverse-engineering corpus are growing quickly. Help finding outdated statements, broken links, contradictions, missing cross-links, and unclear research notes is very welcome.
 - **AI research and ideas.** AI is a longer-term 3.0.0 direction. Research, references, experiments, and ideas for useful AI-assisted capabilities are welcome even before implementation.
@@ -187,7 +187,7 @@ For contribution guidelines and research evidence expectations, see [`CONTRIBUTI
 ---
 ## Limitations
 
-- The current C++ port intentionally does **not** include media list/download/delete or GPS parsing yet. Those Python paths are unfinished and will be ported only after the Python implementation is verified.
+- The current C++ port intentionally does **not** include media list/download/delete or GPS parsing yet. The Python media path is an experimental probe, not a verified implementation, and will be ported only after an official DJI Fly AOA capture establishes protocol selection, transfer completion, and delete framing.
 - **Speed and other flight-controller parameters** are addressed by a hash of the parameter name, computed inside the app's packer and not recoverable from static analysis — so setting max speed needs a one-time runtime capture of the hash. Max altitude and distance do **not** need this and work directly.
 - **DJI account walls** (offline-unreachable): no-fly-zone / geo unlock, first-time activation of a factory-reset unit, and anti-theft binding all require DJI's servers. An already-activated drone flies without any of them.
 - The Mini 1 has **no obstacle sensors**, so any automated flight is inherently blind.

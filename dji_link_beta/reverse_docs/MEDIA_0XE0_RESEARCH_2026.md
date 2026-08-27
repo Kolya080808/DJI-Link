@@ -1,5 +1,9 @@
 # MEDIA 0xE0 NAK — Dedicated Research (2026-07-22)
 
+> **OBSOLETE STATUS (2026-08-27):** `0xE0` is correctly decoded as `INVALID_CMD`, but it does not prove
+> that WM160 lacks native `0x20/0x1F`, and no capture proves `0x22/0x24` as the selected WM160 path.
+> Keep this as investigation history; current status is in `FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
+
 Blocker: media file-list request on WM160 returns a 1-byte `0xE0` NAK regardless of
 list-request payload variant, even after fixing enter-playback (0x02/0x10 [0x02]=PLAYBACK).
 Every variant on cmd_set 0x00 / cmd_id 0x20 (receiver 0x01) gets exactly 0xE0.

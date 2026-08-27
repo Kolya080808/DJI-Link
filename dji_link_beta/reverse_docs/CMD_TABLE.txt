@@ -1,3 +1,4 @@
+# CMD_SET 0x02 (CAMERA) only; IDs below are not CmdIdCommon media commands.
 0x01 uav_camera_take_photo_req                               uav_camera_take_photo_rsp
 0x02 uav_camera_record_video_req                             uav_camera_record_video_rsp
 0x09 uav_camera_set_liveview_source_camera_req               uav_camera_set_liveview_source_camera_rsp

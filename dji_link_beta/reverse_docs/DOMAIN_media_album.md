@@ -1,21 +1,12 @@
 # DOMAIN: media_album — gallery, thumbnails, in-drone playback engine, in-app editor (WM160 / Mavic Mini 1)
 
-> **⚠ WM160 CORRECTION (updated 2026-07, confirmed: app smali `DataRequest*.doPack`/`FileSendPack`/`FileRecvPack` + hardware):**
-> `MEDIA_TRANSFER.md` and this doc's §1–2 table reference `0x00/0x20` (File List) and `0x00/0x1F` (File Data)
-> as the primary path. **These cmd_ids are NOT implemented on WM160 — hardware returns `0xE0 = INVALID_CMD`.**
-> WM160 media rides the **litchis FileChannel**: `0x00/0x26` (RequestFile) out, `0x00/0x27` (GetPushFile) in,
-> `0x00/0x28` delete. The operation (List/File/Stream) is chosen by the **inner FileChannel header**
-> `[0x4A][cmdId<<5|cmdType][len u16 (low 12 bits)][session u16][offset u32]`, not the outer cmd_id.
-> Sequence: `0x02/0x10 [0x02]` → wait `0x02/0x80` byte[4]==2 → LIST req `0x00/0x26` hdr(List,REQ) →
-> reply `0x00/0x27` hdr(List,PUSH count)+DATA → FILE req `0x00/0x26` hdr(File,REQ) → `0x00/0x27` data chunks.
-> **OPEN:** LIST currently returns count=0 for storage=1/subType=0 though the drone holds 385 files —
-> see `FINDINGS.md §1b` and `media.py sweep_list_params()`. `media.py` is the authoritative implementation.
+> **WM160 STATUS CORRECTION (2026-08-27):** this page documents app APIs, value objects, and candidate
+> protocols; it does not establish the selected WM160 wire path. Native `0x20/0x1f`, outer legacy
+> `0x22..0x28`, and litchis inside `0x26/0x27` must be kept separate. No successful checked-in WM160
+> capture proves list/download/delete or in-drone playback. See `FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
 
-This document **extends** `MEDIA_TRANSFER.md`. It does **not** re-derive the wire protocol for
-LIST / DOWNLOAD / THUMBNAIL / DELETE / STORAGE — that is fully nailed there (the `ByteStream` serializer,
-`FileListRequest`/`FileDataRequest`/`FileActionRequest` byte layouts, the `0x00/0x1F`+`0x00/0x20`+`0x00/0x28`
-DUML commands, `MediaFile`/`PhotoAndVideoNailInfo` records, and the reassembly contract). Read that first.
-> Note: `0x00/0x1F`/`0x00/0x20` above apply to other DJI cameras; WM160 uses `0x22`/`0x24`/`0x26`/`0x27` — see correction above.
+This document extends `MEDIA_TRANSFER.md` at the API/value-object level. Those serializers describe SDK
+semantics, not proven WM160 DUML payloads; native code may reserialize them before transmission.
 
 What this doc adds, for the `uav.media.album` / `com.dji.playback` / `com.uav.playback` domain:
 

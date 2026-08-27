@@ -3,6 +3,12 @@
 The full protocol/app write-up for the DJI Mavic Mini 1. Start with `MASTER_REPORT.md`
 and `APP_MAP_INDEX.md`; the rest are per-topic references.
 
+**Media status update (2026-08-27):** the WM160 media protocol remains **largely unknown**.
+`FIRMWARE_MEDIA_HOME_LIMITS_2026.md` supersedes prior WM160
+media-path verdicts. Native `0x20/0x1f`, outer legacy `0x22..0x28`, and litchis inside `0x26/0x27`
+are distinct real DJI protocols, but no successful checked-in WM160 capture establishes which one DJI Fly
+selects. List records, transfer completion/ACK behavior, and delete remain capture-pending.
+
 ## Overview
 - **`MASTER_REPORT.md`** — the consolidated report.
 - **`APP_MAP_INDEX.md`** — one-page map of every app subsystem, with WM160-support tags.
@@ -21,20 +27,14 @@ These supersede earlier guesses where they disagree — the jar is DJI's own un-
 - **`RTH_ALTITUDE_RESEARCH_2026.md`** — ★ RTH/go-home altitude = param `g_config.go_home.fixed_go_home_altitude_0`
   (hash 0x38cc63dc, u16 LE metres, 20..500) via `0x03/0xF9`; no dedicated command. Read back via `0x03/0xF8`
   (same as max height / max distance) — pc_client reads all three on connect + after write, shown in the HUD.
-- **`MEDIA_0XE0_RESEARCH_2026.md`** — ★★ AUTHORITATIVE media reverse (HW-confirmed). `0xE0 = INVALID_CMD`
-  (app Ccode enum) → WM160 does NOT implement cmd_id `0x20`/`0x1F`. Correct path = **`0x00/0x22`
-  RequestSendFiles [CURRENT] → list PUSHED back as `0x00/0x24` GetPushFiles**; file via `0x26`→`0x27`;
-  delete `0x28`. Confirmed by app smali + dji-firmware-tools. media.py rewritten to this.
-- **`MEDIA_DELETE_VIEW_RESEARCH_2026.md`** — ★★ delete + view/thumbnail (app + dji-firmware-tools + MSDK v4,
-  all consistent). DELETE = `0x00/0x28` count-prefixed u32 index list (native deleteFiles(ArrayList);
-  fallback camera-set `0x02/0x79` DeletePhoto). VIEW = `0x00/0x26` RequestFile + 1-byte grade
-  (ORIGIN=0/THUMBNAIL=1/SCREENNAIL=2) + offset/size from the record's PhotoAndVideoNailInfo → bytes on
-  `0x00/0x27`. 16-byte request layout from litchis packer. media.py has delete()/fetch_thumbnail()/fetch_screennail().
-- **`MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md`** — earlier pass; its 0x20/0x1F conclusion is CORRECTED by the
-  above (0x20 NAKs 0xE0 on hardware). Still useful for the mode fix + readiness signal.
+- **`FIRMWARE_MEDIA_HOME_LIMITS_2026.md`** — ★ current media status across APK, SDK native code, firmware,
+  and retained hardware evidence; separates the three protocol families and identifies capture-pending fields.
+- **`MEDIA_0XE0_RESEARCH_2026.md`**, **`MEDIA_DELETE_VIEW_RESEARCH_2026.md`**, and
+  **`MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md`** — investigation history. Their WM160 protocol-selection,
+  mode-fix, and delete-body conclusions are superseded; serializer/enumeration evidence remains useful.
 - **`FLIGHT_LIMITS_RESEARCH_2026.md`** — max height/radius via `0x03/0xF9` param write; read back 0xF8.
-- **`CAMERA_MEDIA_RESEARCH_2026.md`** — ISO (needs Manual exposure), recording (needs video mode), shutter
-  `0x02/0x28`, and the media playback/download sequence (0xe0 fix = enter playback with mode `[2]`).
+- **`CAMERA_MEDIA_RESEARCH_2026.md`** — ISO, recording, and shutter findings remain useful; its album
+  protocol conclusion is superseded by `FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
 - **`HOME_POINT_RESEARCH_2026.md`** — superseded by v2 (kept for history).
 
 ## Protocol
@@ -59,11 +59,11 @@ These supersede earlier guesses where they disagree — the jar is DJI's own un-
 - **`ERROR_CODES.md`** — 743 diagnostic codes with local English text (in `diag_codes_full.py`).
 
 ## Media
-- **`MEDIA_0XE0_RESEARCH_2026.md`** — ★★ authoritative list/download (0x22/0x24 handshake).
-- **`MEDIA_DELETE_VIEW_RESEARCH_2026.md`** — ★★ authoritative delete (0x28) + view/thumbnail (0x26 grade byte).
-- **`MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md`** — earlier pass, 0x20/0x1F conclusion corrected by the above.
-- **`MEDIA_TRANSPORT_TRUTH.md`** — native-lib mining; the `get_file_list_req 0x20` claim is wrong for WM160.
-- **`MEDIA_TRANSFER.md`** — earliest media notes (superseded).
+- **`FIRMWARE_MEDIA_HOME_LIMITS_2026.md`** — authoritative current status and next capture sequence.
+- **`MEDIA_PROTOCOL_DEX_TRUTH.md`** — authoritative for DEX serializers/value objects, not WM160 selection.
+- **`MEDIA_TRANSPORT_TRUTH.md`** — native symbols and AOA transport evidence; working WM160 flow not proven.
+- **`MEDIA_0XE0_RESEARCH_2026.md`**, **`MEDIA_DELETE_VIEW_RESEARCH_2026.md`**,
+  **`MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md`**, **`MEDIA_TRANSFER.md`** — superseded research history.
 
 ## App subsystems
 `DOMAIN_*.md` — one reference per subsystem: account, activation/motorlock, transport (USB/AOA),

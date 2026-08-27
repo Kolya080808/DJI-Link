@@ -36,14 +36,18 @@ Assembled from 5 parallel agents. WM160 = **device ID 59 (UAV59)** in the app's 
 
 ---
 
-## 1b. Media — SD card list / download / delete (confirmed ≥2 sources: MSDK v4 jar + app smali + dft lua)
+## 1b. Media — SD card list / download / delete
+
+> **Status correction (2026-08-27):** this section records a serializer-exact litchis probe, not a
+> hardware-confirmed WM160 gallery implementation. Native `0x20/0x1f`, outer legacy `0x22..0x28`, and
+> litchis `0x26/0x27` are separate candidate families. No retained successful capture proves list,
+> download, thumbnail, or delete. See `reverse_docs/FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
 
 All on cmd_set **0x00** (non-encrypted), sender **0x02** (APP), receiver **0x01** (CAMERA).
-WM160 media rides the **litchis FileChannel**: outbound requests on `0x00/0x26` (RequestFile),
-camera replies on `0x00/0x27` (GetPushFile), deletes on `0x00/0x28`. The *operation* (List /
-File / Stream) is selected by the **inner FileChannel header**, not the outer cmd_id.
-Confirmed 2026-07 from app smali (`DataRequestList/File/Ack.doPack`, `FileSendPack.b`,
-`FileRecvPack`) cross-checked against hardware. `media.py` is the authoritative implementation.
+One candidate is the **litchis FileChannel**: outbound requests on `0x00/0x26`, replies on
+`0x00/0x27`, with List/File/Stream selected by the inner header. Its serializers are confirmed by app
+smali (`DataRequestList/File/Ack.doPack`, `FileSendPack.b`, `FileRecvPack`), but official DJI Fly
+selection on WM160 is not confirmed. `media.py` is an experimental probe.
 
 **FileChannel header (10B, little-endian)** — same layout out and in:
 `[0]=0x4A ver1|hdrLen10` · `[1]=(cmdId<<5)|cmdType` · `[2:4]=len u16 (only low 12 bits; top nibble=flags)` · `[4:6]=sessionId u16` · `[6:10]=offset u32`
@@ -55,22 +59,19 @@ Confirmed 2026-07 from app smali (`DataRequestList/File/Ack.doPack`, `FileSendPa
 | 1. Enter playback | `0x02/0x10` | `[0x02]` | PLAYBACK mode; liveview freezes |
 | 2. Wait gate | — | — | poll `0x02/0x80` push byte[4]==2, OR `0x02/0x82` push arrival |
 | 3. LIST req | `0x00/0x26` | hdr(List,REQ) + `[startIdx u32 (storage=top2 bits of byte3)][count u16][subType u8]` | subType ORG=0 THM=1 SCR=2 |
-| 4. LIST reply | `0x00/0x27` ← | hdr(List,PUSH) `inner[0:4]=result count`, then hdr(List,DATA) record chunks | records reassembled by header offset |
+| 4. LIST reply candidate | `0x00/0x27` ← | hdr(List,PUSH), then possible hdr(List,DATA) chunks | PUSH field semantics, records, and completion are capture-pending |
 | 5. FILE req | `0x00/0x26` | hdr(File,REQ) + file index + subType (ORG/THM/SCR) | download original or thumbnail |
-| 6. FILE data | `0x00/0x27` ← | hdr(File,DATA) chunks at header offset; first chunk has 13B meta prefix | strip meta on offset-0 chunk |
-| 7. Delete | `0x00/0x28` | `[count u16 LE][idx u32 LE …]` | count width capture-pending (watch 0xD6) |
+| 6. FILE data candidate | `0x00/0x27` ← | hdr(File,DATA) chunks at header offset | first-chunk prefix, ACK cadence, and EOF are capture-pending |
+| 7. Delete | `0x00/0x28` | unknown | keep disabled; index-list body and `0x02/0x79` fallback are unconfirmed |
 | 8. Exit playback | `0x02/0x10` | `[0x01]` | restores liveview + i-frame |
 
 **ACK** = a FileChannel frame with cmdType=ACK(2): inner `z(seek u32) + count(1B) + [offset u32 + len u32]×count`
 (from `DataRequestAck.doPack`). Whole-transfer pull = seek 0, one range `[0, 0xFFFFFFFF]`.
 
-> **OPEN (2026-07): LIST returns count=0.** Frame is byte-perfect against smali, camera ACKs and
-> replies with PUSH count=0 + ABORT for `storage=1/subType=0` — yet the drone holds **385 files**.
-> `0x00/0x26` reaches a live handler but enumerates empty; the right storage/subType combo (or a
-> required precondition) is unresolved. Next: `sweep_list_params()` sweeps storage×subType looking
-> for count>0. The litchis `DataRequest*` classes are **dead code in the app** (never called), but
-> the camera *firmware* implements FileChannel — so it's viable, we just build the frames ourselves.
-> P3 `DataCameraRequestSendFiles` (cmd_id `CmdIdCommon.l`) is an unexplored alternate download path.
+> **Retained hardware evidence:** three historical litchis sessions ended with ABORT and no DATA.
+> The raw PUSH and ABORT bodies were not retained, so reported values such as `count=0`, `4110`, and
+> `385 files` are operator observations rather than auditable wire artifacts. Blind parameter sweeps are
+> not a substitute for one bidirectional official-app AOA capture.
 
 ---
 

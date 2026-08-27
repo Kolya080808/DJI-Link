@@ -1,5 +1,10 @@
 # MEDIA PROTOCOL — STATIC TRUTH FROM DJI Fly v1.21.4 DEX
 
+> **Scope correction (2026-08-27):** this remains authoritative for DEX serializers/value objects only;
+> it does not select the WM160 wire family. Native code proves a real `0x00/0x20` command despite its
+> absence from Java enums, and mode `[0x03]` is not an authoritative FC7203 frame. See
+> `FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
+
 Scope: what the DEX of DJI Fly v1.21.4 (`reverse_docs/unpacked_app_dex/classes_*.dex`, 16 files)
 statically proves about the SD-card media protocol (LIST / DOWNLOAD / DELETE / COUNT) on WM160
 family, vs what `dji_link_beta/media.py` currently assumes.

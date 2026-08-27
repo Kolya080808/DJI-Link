@@ -207,23 +207,14 @@ UNLOCK** (`fc_dark_need_gps_0=0`).
   back-to-back makes the camera drop START — `start_record` now waits + re-sends START. Photo type =
   SINGLE=1 (was HDR=2). Verify via `0x02/0x80` push (recordState (u32@0x00>>6)&3, videoRecordTime@0x1D).
   Shutter `0x02/0x28`. (RECORD_PHOTO_RESEARCH_2026.md, CAMERA_MEDIA_RESEARCH_2026.md)
-🟡 **In progress:** **Media list/download.** Two root causes, both now fixed in code:
-(1) enter-playback was mode `[3]`=TRANSCODE; WM160 needs `0x02/0x10 [2]`=PLAYBACK.
-(2) **the list cmd_id was wrong: `0x20`/`0x1F` return `0xE0 = INVALID_CMD` on WM160** (decoded from the
-app's own `Ccode` enum — the firmware doesn't implement 0x20). **Correct WM160 path (HW-confirmed +
-dji-firmware-tools): `0x00/0x22` RequestSendFiles [CURRENT] → the list is PUSHED back as `0x00/0x24`
-GetPushFiles** (NOT in the ACK); file bytes via `0x00/0x26` RequestFile → `0x00/0x27` GetPushFile; delete
-`0x00/0x28`. `media.py` rewritten to this handshake + a readiness gate (getMode byte[4]==2 of `0x02/0x80`);
-pc_client now listens for the 0x24 push and decodes the 0x22 ACK code.
-**DELETE + VIEW (MEDIA_DELETE_VIEW_RESEARCH_2026.md, app+dft+MSDK):** delete = `0x00/0x28` count-prefixed
-u32 index list (multi-delete is native-normal; fallback camera-set `0x02/0x79` DeletePhoto). View/thumbnail
-= `0x00/0x26` RequestFile + **1-byte grade (ORIGIN=0/THUMBNAIL=1/SCREENNAIL=2)** + offset/size (from the
-list record's PhotoAndVideoNailInfo) → bytes on `0x00/0x27`; a thumbnail is just a short byte-range read,
-no dedicated cmd_id. media.py now has delete(list)/fetch_thumbnail()/fetch_screennail(); pc_client has a
-"thumbnail first" button and reassembles 0x27 chunks (raw dumped to media_chunk_dump.bin).
-Remaining (capture-only): the 0x24 record layout incl. the nailInfo quad, the 0x28 index byte-order, and
-the 0x26/0x27 chunk header — one live capture pins them.
-(MEDIA_0XE0_RESEARCH_2026.md + MEDIA_DELETE_VIEW_RESEARCH_2026.md — supersede the 0x20/0x1F claim in MEDIA_LIST_DOWNLOAD_RESEARCH_2026.md)
+🟡 **In progress: media list/download/delete/playback.** Firmware and native analysis confirms three
+distinct DJI file families: modern `0x00/0x20`+`0x1F`, outer legacy `0x22..0x28`, and litchis inside
+`0x26/0x27`. No successful checked-in WM160 album capture establishes which family DJI Fly selects.
+`0xE0` is `INVALID_CMD`, but retained artifacts do not prove that modern commands are absent. Legacy
+playback `[2]` plus a confirming state push is the best-supported next probe; the exact repeated
+`0x01/0x01` transition, list records, ACK/EOF behavior, thumbnail ranges, and delete body remain
+capture-pending. `media.py` is an experimental probe and delete must remain disabled. See
+`FIRMWARE_MEDIA_HOME_LIMITS_2026.md` for the current APK/SDK/firmware evidence and capture procedure.
 ✅ **Expected available (per MSDK 4.13, not all HW-checked yet):** QuickShots, simulator (props off),
 GPS modes (Normal/Sport/Cine/Tripod), altitude/distance limits, LED/find-my-drone, voice.
 ❌ **Not available (SDK code exists, but the aircraft will reject it):** ActiveTrack/Follow-Me/tracking (no sensors),
@@ -252,9 +243,8 @@ drone kit. Pi↔PC — over Wi-Fi (no cable needed), the remote controller power
    (MSDK v5) command. Remaining: confirm axis signs per airframe.
 2. ~~**FC parameter hash** — Frida dump~~ **SOLVED** — hash algorithm known, 132-param WM160 set captured
    (`PARAM_TABLE_WM160.md`), read+write verified on HW in plaintext. No Frida needed.
-3. **Media list/download** — 0xe0 fixed twice: playback mode `[2]`, AND the list cmd is `0x00/0x22`
-   RequestSendFiles → `0x00/0x24` push (NOT 0x20/0x1F, which NAK 0xE0 INVALID_CMD on WM160). `media.py`
-   rewritten. Remaining: one live capture to pin the 0x24 list-record stride + 0x26/0x27 chunk framing.
+3. **Media list/download/delete** — unresolved pending one complete official DJI Fly AOA capture. Do not
+   treat modern `0x20/0x1F`, outer legacy `0x22/0x24`, or litchis `0x26/0x27` as selected/working on WM160.
 4. **True Sport top speed** — `mode_normal_cfg.tilt_atti_range_0` is FC-clamped to ~20°; raising the
    real ceiling needs more reversing.
 5. **Pi bring-up** — raw-gadget AOA is finicky, finalized on a live Pi.

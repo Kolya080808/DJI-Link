@@ -71,7 +71,7 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=0.0.0-test.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "version=0.0.0" >> "$GITHUB_OUTPUT"
             echo "title=DJI Link test build ${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
             printf 'Manual test build from %s.\n' "$GITHUB_SHA" > release-notes.md

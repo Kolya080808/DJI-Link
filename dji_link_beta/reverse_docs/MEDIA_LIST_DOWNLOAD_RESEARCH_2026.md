@@ -1,5 +1,9 @@
 # WM160 Media List + Download — DUML Reverse (2026)
 
+> **SUPERSEDED AGAIN (2026-08-27):** this page remains useful for native/legacy evidence and readiness
+> analysis, but it does not prove either `0x20/0x1F` absent or `0x22/0x24` selected on WM160. See
+> `FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
+
 Fresh reverse of the **rebranded WM160 app** (`uav.midware.*` = repackaged DJI CSDK core).
 DEX dumps: models `classes_0451d00c.dex`, config `classes_016b200c.dex`,
 download mgr `classes_08fe100c.dex`, crossplayback `classes_0855200c.dex`, full dump `/tmp/all`.
@@ -163,13 +167,12 @@ native mining (MEDIA_TRANSPORT_TRUTH.md) and stand on their own.
 
 ---
 
-## ⚠️ CORRECTION (2026-07-22, from hardware + MEDIA_0XE0_RESEARCH_2026.md)
+## Historical correction (2026-07-22; superseded 2026-08-27)
 
-The conclusion above — that WM160 uses the MODERN `0x20`(list)/`0x1F`(data) family — is **WRONG on
-hardware**. The drone returns **`0xE0` = INVALID_CMD** for cmd_id 0x20 (decoded from the app's own
-`Ccode.smali`), i.e. WM160 firmware does NOT implement 0x20/0x1F at all. The "native registry only
-knows 0x20/0x1F" evidence was misleading (those were Java ordinals, not wire ids — no COMMON command
-has wire id 0x20). **The correct WM160 path is the RequestSendFiles handshake:**
+This pass concluded that WM160 rejected the modern `0x20`/`0x1F` family with `0xE0` and selected the
+following RequestSendFiles handshake. Later native and firmware work showed that the native commands are
+real and that the retained hardware artifacts do not establish either family as selected. The sequence
+below is preserved as the historical hypothesis, not the current verdict:
 `0x00/0x22 (RequestSendFiles, payload 1B CURRENT=0)` → the list is PUSHED back as `0x00/0x24
 (GetPushFiles)`; file bytes via `0x00/0x26 (RequestFile)` → `0x00/0x27 (GetPushFile)`; delete `0x00/0x28`.
 Confirmed by app `Ccode`+`CmdIdCommon` smali AND dji-firmware-tools. See MEDIA_0XE0_RESEARCH_2026.md.

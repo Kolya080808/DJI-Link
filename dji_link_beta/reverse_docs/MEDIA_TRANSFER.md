@@ -1,5 +1,10 @@
 # DJI Fly media-file protocol (WM160 / Mavic Mini 1) — LIST / DOWNLOAD / DELETE / BROWSE
 
+> **OBSOLETE AS A WIRE SPEC:** the value-object layouts below are SDK-internal serializers, not proven
+> WM160 DUML payloads. Protocol selection, playback entry, list records, transfer framing, and delete body
+> remain capture-pending. Use this page for field semantics only; see
+> `FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
+
 Reverse of how **DJI Fly v1.21.4** lists, thumbnails, previews, downloads and deletes photos/videos on
 the drone's SD card, for our PC-over-AOA controller. Every byte layout below is taken from the app's own
 serializer — no guessing. Where a fact lives only in native code, it is called out explicitly with the

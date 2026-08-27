@@ -1,5 +1,9 @@
 # MSDK media/file-list sequence vs. our DUML `0xe0` NAK (WM160 / Mavic Mini 1)
 
+> **OBSOLETE WM160 MAPPING (2026-08-27):** the MSDK sequence remains useful as a behavioral analogue,
+> but Mini 1 is not a public-MSDK product and this page does not prove mode `[3]` or `0x20/0x1F` as its
+> active wire path. See `FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
+
 Goal: pin the exact precondition the DJI Mobile SDK (and DJI Fly's embedded CSDK) satisfies before
 `get_file_list`, so we can add the missing step to our DUML client. Our symptom: `0x02/0x10
 set_camera_working_mode` returns `0x00` (liveview freezes, mode really changed), but `0x00/0x20

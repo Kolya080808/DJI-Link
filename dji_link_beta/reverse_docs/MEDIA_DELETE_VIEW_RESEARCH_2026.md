@@ -1,5 +1,9 @@
 # WM160 Media DELETE + VIEW/THUMBNAIL — DUML Reverse (2026-07-22)
 
+> **OBSOLETE WM160 VERDICT (2026-08-27):** enum values and litchis serializers remain useful, but the
+> selected WM160 path, nail/list record mapping, `0x28` body, and `0x02/0x79` fallback are not
+> capture-confirmed. Keep delete disabled. See `FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
+
 Goal: pin the exact DUML frames to (A) DELETE a photo/video and (B) VIEW/PREVIEW media
 (thumbnail / screennail / original) on WM160 (Mavic Mini 1, UAV59).
 

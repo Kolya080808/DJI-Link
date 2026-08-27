@@ -1,5 +1,9 @@
 # CAMERA / MEDIA RESEARCH 2026 — WM160 (Mavic Mini 1, UAV59, legacy camera)
 
+> **MEDIA STATUS CORRECTION (2026-08-27):** camera exposure/record findings remain useful, but this
+> document does not establish the WM160 album protocol. `0xE0` is `INVALID_CMD`; modern, outer-legacy,
+> and litchis paths remain unselected candidates. See `FIRMWARE_MEDIA_HOME_LIMITS_2026.md`.
+
 Ground truth = `dji-sdk-provided-4.18.jar` (un-obfuscated class names, `javap -p -c`).
 Numbers below are the raw wire bytes read straight from bytecode. Enum ctor is
 `<init>(String name, int ordinal, int VALUE)`; **VALUE (2nd int) is the wire byte**.
