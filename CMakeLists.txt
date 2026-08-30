@@ -54,6 +54,7 @@ add_library(djilink_core STATIC
     src/core/diag_codes_full.cpp
     src/core/transport.cpp
     src/core/flight_mode.cpp
+    src/core/soft_switch_detect.cpp
     src/core/drone.cpp
     src/core/applog.cpp
     src/core/netfind.cpp
@@ -169,6 +170,9 @@ if(PROJECT_IS_TOP_LEVEL)
     add_executable(sim_flight_mode_test tests/sim_flight_mode_test.cpp)
     target_link_libraries(sim_flight_mode_test PRIVATE djilink_core)
     add_test(NAME sim_flight_mode COMMAND sim_flight_mode_test)
+    add_executable(soft_switch_detect_test tests/soft_switch_detect_test.cpp)
+    target_link_libraries(soft_switch_detect_test PRIVATE djilink_core)
+    add_test(NAME soft_switch_detect COMMAND soft_switch_detect_test)
 endif()
 
 # Release-time ffmpeg bundle. The release workflow sets these paths after preparing

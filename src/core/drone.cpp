@@ -203,7 +203,7 @@ void Drone::set_flight_mode(FlightMode mode) {
     // set_flight_mode_send test asserts the two paths stay byte-identical so a future tweak
     // (e.g. roadmap T7) cannot silently diverge them.
     const RcSoftSwitchMode gear = soft_switch_for(mode);
-    cmd(kRcCmdSet, static_cast<std::uint8_t>(soft_switch_cmd_id_), soft_switch_payload(gear),
+    cmd(kRcCmdSet, static_cast<std::uint8_t>(soft_switch_cmd_id_.load()), soft_switch_payload(gear),
         kRcReceiver, /*ack=*/true);
 }
 
@@ -216,7 +216,7 @@ void Drone::set_flight_mode(const std::string& name) {
 }
 
 void Drone::set_soft_switch_cmd_id(SoftSwitchCmdId id) {
-    soft_switch_cmd_id_ = id;
+    soft_switch_cmd_id_.store(id);
 }
 
 // ---------------------------------------------------------------- home point

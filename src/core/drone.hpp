@@ -84,6 +84,11 @@ public:
     // The SoftSwitchMode cmd_id is still unconfirmed on hardware (three candidates). Config /
     // OSD auto-detection (roadmap T7) selects the winner at runtime; default is candidate #1.
     void set_soft_switch_cmd_id(SoftSwitchCmdId id);
+    // The currently selected SoftSwitchMode cmd_id. Lets the auto-detector (roadmap T7) snapshot
+    // and restore it, so a failed scan never leaves a wrong cmd_id latched on the control path.
+    SoftSwitchCmdId soft_switch_cmd_id() const {
+        return soft_switch_cmd_id_.load();
+    }
 
     // ---- home point ----
     void set_home_point(double lat_deg, double lon_deg);
@@ -149,8 +154,9 @@ private:
     std::shared_ptr<std::mutex> tx_mu_ = std::make_shared<std::mutex>();
     std::atomic<std::uint16_t> seq_{0};
     // cmd_id used by set_flight_mode's SoftSwitchMode frame; configurable because the real one
-    // is confirmed only on the drone (roadmap T7). Defaults to the first candidate.
-    SoftSwitchCmdId soft_switch_cmd_id_ = SoftSwitchCmdId::SetMachineMode;
+    // is unconfirmed on hardware. Atomic: the T7 auto-detector writes it repeatedly from the
+    // console thread while the GUI thread may read it via set_flight_mode.
+    std::atomic<SoftSwitchCmdId> soft_switch_cmd_id_ = SoftSwitchCmdId::SetMachineMode;
     int shutter_denom_ = -1;                   // last user-set 1/N shutter (-1 = auto)
     std::shared_ptr<std::atomic<bool>> alive_; // guards detached camera-sequence threads
 };
