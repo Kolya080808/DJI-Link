@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <string>
 
 namespace djilink {
 namespace {
@@ -15,18 +16,6 @@ std::string to_lower(std::string_view s) {
 
 } // namespace
 
-std::string_view flight_mode_name(FlightMode mode) {
-    switch (mode) {
-    case FlightMode::Cine:
-        return "cine";
-    case FlightMode::Normal:
-        return "normal";
-    case FlightMode::Sport:
-        return "sport";
-    }
-    return "normal"; // unreachable: the switch is exhaustive over the enum
-}
-
 std::optional<FlightMode> flight_mode_from_name(std::string_view name) {
     const std::string key = to_lower(name);
     if (key == "cine" || key == "cinema")
@@ -36,18 +25,6 @@ std::optional<FlightMode> flight_mode_from_name(std::string_view name) {
     if (key == "sport")
         return FlightMode::Sport;
     return std::nullopt;
-}
-
-RcSoftSwitchMode soft_switch_for(FlightMode mode) {
-    switch (mode) {
-    case FlightMode::Cine:
-        return RcSoftSwitchMode::Tripod;
-    case FlightMode::Normal:
-        return RcSoftSwitchMode::Position;
-    case FlightMode::Sport:
-        return RcSoftSwitchMode::Sport;
-    }
-    return RcSoftSwitchMode::Position; // unreachable: the switch is exhaustive over the enum
 }
 
 } // namespace djilink

@@ -10,7 +10,6 @@
 #pragma once
 
 #include <optional>
-#include <string>
 #include <string_view>
 
 namespace djilink {
@@ -26,16 +25,36 @@ enum class FlightMode { Cine, Normal, Sport };
 enum class RcSoftSwitchMode { Position, Sport, Tripod };
 
 // Canonical lower-case name of a mode ("cine" / "normal" / "sport"). Total, never throws.
-std::string_view flight_mode_name(FlightMode mode);
+constexpr std::string_view flight_mode_name(FlightMode mode) {
+    switch (mode) {
+    case FlightMode::Cine:
+        return "cine";
+    case FlightMode::Normal:
+        return "normal";
+    case FlightMode::Sport:
+        return "sport";
+    }
+    return "normal"; // unreachable: the switch is exhaustive over the enum
+}
+
+// The RcSoftSwitchMode (gear position) that activates a given user mode. Total mapping:
+//   Cine -> Tripod, Normal -> Position, Sport -> Sport.
+constexpr RcSoftSwitchMode soft_switch_for(FlightMode mode) {
+    switch (mode) {
+    case FlightMode::Cine:
+        return RcSoftSwitchMode::Tripod;
+    case FlightMode::Normal:
+        return RcSoftSwitchMode::Position;
+    case FlightMode::Sport:
+        return RcSoftSwitchMode::Sport;
+    }
+    return RcSoftSwitchMode::Position; // unreachable: the switch is exhaustive over the enum
+}
 
 // Parse a user-supplied mode name into a FlightMode. Case-insensitive; accepts the canonical
 // names plus the aliases the GUI/CLI already send ("cinema" for Cine, "position" for Normal).
 // Returns nullopt for anything unrecognised (including "tripod", which is a gear value, not a
 // user mode) so callers decide how to report the error.
 std::optional<FlightMode> flight_mode_from_name(std::string_view name);
-
-// The RcSoftSwitchMode (gear position) that activates a given user mode. Total mapping:
-//   Cine -> Tripod, Normal -> Position, Sport -> Sport.
-RcSoftSwitchMode soft_switch_for(FlightMode mode);
 
 } // namespace djilink
