@@ -156,6 +156,9 @@ if(PROJECT_IS_TOP_LEVEL)
     add_executable(home_rth_test tests/home_rth_test.cpp)
     target_link_libraries(home_rth_test PRIVATE djilink_core)
     add_test(NAME home_rth COMMAND home_rth_test)
+    add_executable(derived_flight_mode_test tests/derived_flight_mode_test.cpp)
+    target_link_libraries(derived_flight_mode_test PRIVATE djilink_core)
+    add_test(NAME derived_flight_mode COMMAND derived_flight_mode_test)
 endif()
 
 # Release-time ffmpeg bundle. The release workflow sets these paths after preparing
