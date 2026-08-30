@@ -44,6 +44,7 @@ add_library(djilink_core STATIC
     src/core/diag_codes.cpp
     src/core/diag_codes_full.cpp
     src/core/transport.cpp
+    src/core/flight_mode.cpp
     src/core/drone.cpp
     src/core/applog.cpp
     src/core/netfind.cpp
@@ -118,6 +119,9 @@ endif()
 # Skipped when this project is consumed as a subproject.
 if(PROJECT_IS_TOP_LEVEL)
     enable_testing()
+    add_executable(flight_mode_test tests/flight_mode_test.cpp)
+    target_link_libraries(flight_mode_test PRIVATE djilink_core)
+    add_test(NAME flight_mode COMMAND flight_mode_test)
     add_executable(netctl_parse_test tests/netctl_parse_test.cpp)
     target_link_libraries(netctl_parse_test PRIVATE djilink_core)
     add_test(NAME netctl_parse COMMAND netctl_parse_test)
