@@ -8,6 +8,11 @@
 
 using namespace djilink;
 
+// The two pure mappings are constexpr, so pin that down at compile time as well: a future
+// refactor that makes them runtime-only would break this build, not just a test.
+static_assert(flight_mode_name(FlightMode::Sport) == "sport");
+static_assert(soft_switch_for(FlightMode::Cine) == RcSoftSwitchMode::Tripod);
+
 namespace {
 void require(bool condition, const char* message) {
     if (!condition)
