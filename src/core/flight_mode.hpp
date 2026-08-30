@@ -62,9 +62,9 @@ constexpr RcSoftSwitchMode soft_switch_for(FlightMode mode) {
 // The gear switch is an RC-component command (cmd_set 0x06), not a FLYC 0x03 write. The exact
 // cmd_id is still unconfirmed on hardware, so we keep the three reverse-engineered candidates
 // and let config / OSD auto-detection (roadmap T7) pick the winner. The receiver is the RC
-// device (0x06), made explicit here because drone.hpp still aliases DEV_RC to the app address
-// 0x02 (a bug fixed in T3). Every constant below is best-effort from the DJI Fly KeyValue
-// reverse and is re-verified on the drone (see the roadmap's open unknowns).
+// device (0x06); this constant is kept local to the SoftSwitchMode contract, and drone.hpp's
+// DEV_RC was corrected from 0x02 to 0x06 to match (T3). Every constant below is best-effort from
+// the DJI Fly KeyValue reverse and is re-verified on the drone (see the roadmap's open unknowns).
 
 inline constexpr std::uint8_t kRcCmdSet = 0x06;   // RC-component command set
 inline constexpr std::uint8_t kRcReceiver = 0x06; // RC device DUML address
