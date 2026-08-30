@@ -27,12 +27,12 @@ enum class RcSoftSwitchMode { Position, Sport, Tripod };
 // Canonical lower-case name of a mode ("cine" / "normal" / "sport"). Total, never throws.
 constexpr std::string_view flight_mode_name(FlightMode mode) {
     switch (mode) {
-    case FlightMode::Cine:
-        return "cine";
-    case FlightMode::Normal:
-        return "normal";
-    case FlightMode::Sport:
-        return "sport";
+        case FlightMode::Cine:
+            return "cine";
+        case FlightMode::Normal:
+            return "normal";
+        case FlightMode::Sport:
+            return "sport";
     }
     return "normal"; // unreachable: the switch is exhaustive over the enum
 }
@@ -41,12 +41,12 @@ constexpr std::string_view flight_mode_name(FlightMode mode) {
 //   Cine -> Tripod, Normal -> Position, Sport -> Sport.
 constexpr RcSoftSwitchMode soft_switch_for(FlightMode mode) {
     switch (mode) {
-    case FlightMode::Cine:
-        return RcSoftSwitchMode::Tripod;
-    case FlightMode::Normal:
-        return RcSoftSwitchMode::Position;
-    case FlightMode::Sport:
-        return RcSoftSwitchMode::Sport;
+        case FlightMode::Cine:
+            return RcSoftSwitchMode::Tripod;
+        case FlightMode::Normal:
+            return RcSoftSwitchMode::Position;
+        case FlightMode::Sport:
+            return RcSoftSwitchMode::Sport;
     }
     return RcSoftSwitchMode::Position; // unreachable: the switch is exhaustive over the enum
 }
