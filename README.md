@@ -21,19 +21,7 @@ There is no official desktop SDK for the Mini 1, so DJI Link is built directly o
 
 # DEMO
 
-Add the finished GIF as `docs/demo.gif`, then uncomment the image line below:
-
-<!-- Add docs/demo.gif after recording. Keep it short (10–20 seconds) and show the
-     preflight screen, live HUD/telemetry, and one safe control interaction. -->
-<!-- ![DJI Link in flight](docs/demo.gif) -->
-
-Until then, the simulator can open the same interface without aircraft hardware:
-
-```bash
-dji-link --sim --windowed
-```
-
-See [`docs/DEMO.md`](docs/DEMO.md) for the recording checklist.
+![DJI Link in flight](docs/demo.gif)
 
 ---
 ## Features
