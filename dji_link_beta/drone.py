@@ -277,18 +277,19 @@ class Drone:
         import struct as _s
         self._cmd(0x03, 0xF8, _s.pack("<I", param_hash(name)), receiver=DEV_FC)
 
-    # Cine/Normal/Sport on WM160 are NOT a DUML mode command — the FC picks a pre-stored
-    # block via the RC GEAR channel, which the float joystick 0x03/0x8E has no slot for. So
-    # we EMULATE the gears by writing the active (Normal) block's max lean angle = the speed
-    # cap. tilt higher -> faster. Param persists (RW+EE); write 20 to restore stock Normal.
-    FLIGHT_MODE_TILT = {"cine": 10.0, "cinema": 10.0, "cinematic": 10.0,
-                        "normal": 20.0, "sport": 30.0, "max": 40.0}
-
     def set_flight_mode(self, name: str) -> None:
-        tilt = self.FLIGHT_MODE_TILT.get(str(name).strip().lower())
-        if tilt is None:
-            raise ValueError(f"unknown mode {name!r}; use cine/normal/sport/max")
-        self.set_param("g_config.mode_normal_cfg.tilt_atti_range_0", struct.pack("<f", tilt))
+        """Select Cine/Normal/Sport once its WM160 wire command is captured.
+
+        Changing mode_normal_cfg.tilt_atti_range_0 only changes the Normal block's speed
+        limit and persists it in EEPROM. It does not select the Sport or Gentle block.
+        """
+        mode = str(name).strip().lower()
+        if mode not in ("cine", "cinema", "cinematic", "normal", "sport"):
+            raise ValueError(f"unknown mode {name!r}; use cine/normal/sport")
+        raise NotImplementedError(
+            "WM160 flight-mode wire command is not confirmed; use flight_mode_probe.py on the "
+            "ground with an explicit hypothesis, or hspeed to change the Normal speed limit"
+        )
 
     # --- home point (DataFlycSetHomePoint 0x03/0x31, 18-byte payload) ---
     # doPack confirmed byte-for-byte from DJI bytecode (HOME_POINT_RESEARCH_2026_v2.md §3):

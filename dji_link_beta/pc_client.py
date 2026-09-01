@@ -25,7 +25,7 @@ Hotkeys: Enter ARM/DISARM · T takeoff (auto-C) · C control on/off · L landing
         F1 help · F3 hide/show HUD (clean video) · F11 fullscreen
         (media list/download auto-enter playback; no manual B/zoom/stick-flag keys)
 Console (Tab): takeoff/land/rth · home here|<lat> <lon> · setalt <m>/setdist <m>/rthalt <m>
-        fmode cine|normal|sport · hspeed <m/s> · rp height|radius|tilt · iso <n>/shutter <N>|auto/ev <n>
+        fmode disabled until verified · hspeed <m/s> · rp height|radius|tilt · iso <n>/shutter <N>|auto/ev <n>
         rec start|stop · zoom <x> · gimbal <deg>|speed <dps> · raw <set> <id> <hex> [recv]
 """
 
@@ -689,7 +689,7 @@ def run_console_cmd(cli: Client, line: str):
         elif c == "rthalt":
             d.set_rth_altitude(int(args[0])); cli.msg(f"RTH alt {args[0]} m")
         elif c in ("fmode", "flightmode"):
-            d.set_flight_mode(args[0]); cli.msg(f"flight mode {args[0]} (tilt/speed; verify: rp tilt or watch ground speed)")
+            d.set_flight_mode(args[0])
         elif c in ("hspeed", "speed"):
             d.set_horizontal_speed(float(args[0])); cli.msg(f"horiz speed ~{args[0]} m/s (via tilt angle)")
         elif c == "photo": d.take_photo(); cli.msg("photo")
@@ -740,7 +740,7 @@ def run_console_cmd(cli: Client, line: str):
                 cli.msg("fetchmedia: done — liveview restored, check media_downloads/ + [media] log")
             _t.Thread(target=_sweep, daemon=True).start()
         elif c == "help":
-            cli.msg("takeoff land rth control on|off gs on|off gps sats home status|here|<lat> <lon> setalt <m> setdist <m> rthalt <m> rp height|radius gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> fetchmedia <from> <to> [delay] raw <set> <id> <hex> [recv]")
+            cli.msg("takeoff land rth control on|off gs on|off gps sats home status|here|<lat> <lon> setalt <m> setdist <m> rthalt <m> rp height|radius hspeed <m/s> gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> fetchmedia <from> <to> [delay] raw <set> <id> <hex> [recv]")
         else:
             cli.msg(f"unknown command: {c} (help)")
     except Exception as e:
@@ -786,8 +786,6 @@ class SettingsPanel:
         self.dragging = None              # a slider widget while the mouse button is held
         d = cli.d
         self.w = [
-            _W("choice", "Flight mode", lambda v: self._try(lambda: d.set_flight_mode(v), f"mode {v}"),
-               opts=["normal", "cinema", "sport"]),
             _W("slider", "Max altitude (m)", lambda v: self._try(lambda: (d.set_max_altitude(v), d.read_param("g_config.flying_limit.max_height_0")), f"max alt {v} m"),
                lo=15, hi=500, step=5, val=120),
             _W("slider", "Max distance (m)", lambda v: self._try(lambda: (d.set_max_distance(v), d.read_param("g_config.flying_limit.max_radius_0")), f"max dist {v} m"),
@@ -1031,7 +1029,7 @@ class SettingsPanel:
     # ---- draw ----
     # Widgets are grouped visually: a small heading is drawn above the first row of each
     # group so the panel reads as Flight / Camera / Media / (exit), not one long list.
-    _GROUPS = [(0, "FLIGHT"), (3, "CAMERA"), (8, "HOME & MEDIA")]
+    _GROUPS = [(0, "FLIGHT"), (3, "CAMERA"), (7, "HOME & MEDIA")]
 
     # Layout constants — one place to retune the rhythm of the panel.
     _PAD = 26           # inner padding of the card
