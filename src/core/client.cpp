@@ -2,6 +2,7 @@
 
 #include "core/applog.hpp"
 #include "core/param_hash.hpp"
+#include "core/soft_switch_detect.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -432,6 +433,45 @@ void Client::stats_loop() {
     }
 }
 
+std::optional<SoftSwitchCmdId> Client::auto_detect_mode_cmd_id() {
+    // Wire the pure detector (soft_switch_detect) to the live Drone/Telemetry pair. apply() selects
+    // a candidate cmd_id and sends the probe switch; observe() reads the derived FLYC_STATE mode;
+    // wait() paces the polls. The sim streams an OSD push roughly every rx timeout (~300 ms) and a
+    // real link is faster, so 150 ms x 8 polls (SoftSwitchDetectConfig defaults) gives each
+    // candidate ~1.2 s per attempt to reveal the transition without dragging the scan out.
+    //
+    // The scan mutates control-path state (it re-selects cmd_ids and switches gears), so we
+    // snapshot both first and restore them: a FAILED scan must not leave a wrong cmd_id latched,
+    // and a SUCCESSFUL scan must not silently leave the aircraft in the probe mode (Sport is a
+    // geofence-relaxed profile). Only Normal/Sport/Cine gear frames are ever sent — never
+    // takeoff/land/RTH.
+    const SoftSwitchCmdId original_cmd_id = drone_.soft_switch_cmd_id();
+    const std::optional<DerivedFlightMode> baseline = tele_.state().user_mode;
+
+    SoftSwitchDetectHooks hooks;
+    hooks.apply = [this](SoftSwitchCmdId id, FlightMode probe) {
+        drone_.set_soft_switch_cmd_id(id);
+        drone_.set_flight_mode(probe);
+    };
+    hooks.observe = [this]() { return tele_.state().user_mode; };
+    hooks.wait = [] { std::this_thread::sleep_for(std::chrono::milliseconds(150)); };
+
+    const SoftSwitchDetectResult r = detect_soft_switch_cmd_id(SoftSwitchDetectConfig{}, hooks);
+    if (r.cmd_id) {
+        drone_.set_soft_switch_cmd_id(*r.cmd_id); // lock the winner for the rest of the session
+        // Put the aircraft back in the mode it started in (fall back to Normal when it was unknown,
+        // never leaving it in the relaxed Sport probe), now using the confirmed cmd_id.
+        drone_.set_flight_mode(flight_mode_for(baseline.value_or(DerivedFlightMode::Normal)));
+        char buf[8];
+        std::snprintf(buf, sizeof(buf), "0x%02X", static_cast<unsigned>(*r.cmd_id));
+        set_msg(std::string("flight-mode cmd_id detected: ") + buf);
+    } else {
+        drone_.set_soft_switch_cmd_id(original_cmd_id); // failed scan restores the prior selection
+        set_msg("flight-mode cmd_id auto-detect failed (no candidate switched the mode)");
+    }
+    return r.cmd_id;
+}
+
 // ---------------------------------------------------------------- console
 void run_console_cmd(Client& cli, const std::string& line) {
     auto parts = split(line);
@@ -537,6 +577,11 @@ void run_console_cmd(Client& cli, const std::string& line) {
         } else if (c == "fmode" || c == "flightmode") {
             d.set_flight_mode(a[0]);
             cli.set_msg("flight mode " + a[0]);
+        } else if (c == "detectmode") {
+            // Probe the three SoftSwitchMode cmd_id candidates and lock whichever one actually
+            // moves FLYC_STATE (roadmap T7). Blocking (polls telemetry between sends) but bounded;
+            // safe on --sim and on hardware it only toggles Normal/Sport. Sets its own HUD message.
+            cli.auto_detect_mode_cmd_id();
         } else if (c == "hspeed" || c == "speed") {
             d.set_horizontal_speed(std::stod(a[0]));
             cli.set_msg("horiz speed ~" + a[0] + " m/s");
@@ -597,7 +642,8 @@ void run_console_cmd(Client& cli, const std::string& line) {
             cli.set_msg(
                 "arm disarm takeoff land rth control on|off gs on|off home here|<lat> <lon> "
                 "setalt setdist rthalt rp gimbal <deg>|speed recenter photo rec start|stop zoom "
-                "mode iso shutter ev videofmt codec keyframe unlock tele raw <set> <id> <hex>");
+                "mode iso shutter ev videofmt codec keyframe unlock tele detectmode raw <set> <id> "
+                "<hex>");
         } else if (c == "quit" || c == "exit") {
             cli.set_msg("quitting");
         } else {

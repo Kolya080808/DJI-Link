@@ -1,9 +1,14 @@
 #include "core/transport.hpp"
 
 #include "core/composite.hpp"
+#include "core/duml.hpp"
+#include "core/flight_mode.hpp"
 
+#include <chrono>
 #include <cstdio>
+#include <optional>
 #include <stdexcept>
+#include <thread>
 
 #ifdef _WIN32
 // WIN32_LEAN_AND_MEAN keeps <windows.h> from pulling in the old <winsock.h> (v1),
@@ -56,8 +61,57 @@ void ensure_wsa() {
 #endif
 
 // ---------------------------------------------------------------- LogTransport
+namespace {
+// OSD FLYC_STATE codes the sim reports per gear (see telemetry.cpp's kFlycState map and the
+// roadmap's mode table): SPORT=31, GPS_Atti=6 (an ordinary, decisive Normal), TRIPOD_GPS=38.
+// There is deliberately no Cinematic(19) here: on the WM160 Cine is delivered through the Tripod
+// gear (Cine -> Tripod in soft_switch_for), so selecting Cine reports TRIPOD_GPS — matching the
+// hardware model and the Cine<->Tripod equivalence still open for the T9 hardware checklist.
+constexpr std::uint8_t kFlycSport = 31;
+constexpr std::uint8_t kFlycNormal = 6;
+constexpr std::uint8_t kFlycTripod = 38;
+constexpr std::uint8_t kSimDefaultFlycState = kFlycNormal;
+
+// A minimal OSD-common push (cmd_set 0x03 / cmd_id 0x43) large enough to clear Telemetry's
+// >=0x34 size gate; only FLYC_STATE @0x1e is populated (every other field reads as zero), which
+// is all T6 needs to show a mode change — battery/GPS/etc. are out of the sim's scope.
+constexpr std::size_t kOsdPayloadLen = 0x34;
+constexpr std::size_t kFlycStateOffset = 0x1e;
+
+// Map a SoftSwitchMode wire value (soft_switch_wire_value: SPORT=0 / POSITION=1 / TRIPOD=2) to the
+// FLYC_STATE the firmware would then report; nullopt for an unknown value (state left unchanged).
+std::optional<std::uint8_t> flyc_state_for_wire(std::uint32_t wire) {
+    switch (wire) {
+        case 0:
+            return kFlycSport; // SPORT gear -> SPORT
+        case 1:
+            return kFlycNormal; // POSITION gear -> GPS_Atti (Normal)
+        case 2:
+            return kFlycTripod; // TRIPOD gear -> TRIPOD_GPS
+    }
+    return std::nullopt;
+}
+
+// Is this decoded frame a SoftSwitchMode gear command? It must be an RC-component command
+// (cmd_set 0x06) with a u32 payload and one of the three candidate cmd_ids. Hardware confirms the
+// real cmd_id (roadmap T7); the sim accepts all three so auto-detect can settle on the first.
+// receiver and cmd_type are deliberately NOT gated: the exact RC-DUML wrapper is still an open
+// unknown, so being lenient here keeps the sim from rejecting a frame that real hardware accepts.
+bool is_soft_switch(const DumlPacket& pkt) {
+    if (pkt.cmd_set != kRcCmdSet || pkt.payload.size() < 4)
+        return false;
+    switch (static_cast<SoftSwitchCmdId>(pkt.cmd_id)) {
+        case SoftSwitchCmdId::SetMachineMode:
+        case SoftSwitchCmdId::SetFunctionSwitch:
+        case SoftSwitchCmdId::SetControllerMode:
+            return true;
+    }
+    return false;
+}
+} // namespace
+
 LogTransport::LogTransport(bool verbose, bool silent_repeat)
-    : verbose_(verbose), silent_repeat_(silent_repeat) {}
+    : verbose_(verbose), silent_repeat_(silent_repeat), flyc_state_(kSimDefaultFlycState) {}
 
 void LogTransport::send(const Bytes& frame) {
     if (verbose_ && !(silent_repeat_ && frame == last_)) {
@@ -65,10 +119,40 @@ void LogTransport::send(const Bytes& frame) {
         std::fflush(stdout);
     }
     last_ = frame;
+
+    // Sim feedback (T6): if the frame we just "sent" is a SoftSwitchMode gear command, flip the
+    // FLYC_STATE recv() reports from now on, so --sim shows the selected mode actually take effect.
+    if (auto pkt = DumlPacket::decode(frame); pkt && is_soft_switch(*pkt)) {
+        if (auto wire = get_u32(pkt->payload, 0)) {
+            if (auto state = flyc_state_for_wire(*wire)) {
+                std::lock_guard<std::mutex> lk(sim_mu_);
+                flyc_state_ = *state;
+            }
+        }
+    }
 }
 
-Bytes LogTransport::recv(int) {
-    return {};
+Bytes LogTransport::recv(int timeout_ms) {
+    // Pace synthetic telemetry to the caller's poll timeout instead of returning instantly, so the
+    // sim rx loop blocks like a real link rather than spinning at 100% CPU. Each call yields one
+    // OSD-common push carrying the current FLYC_STATE (the sim rx path feeds it straight to
+    // DumlStream, so we return a raw DUML frame — no composite wrapping).
+    const int ms = timeout_ms < 1 ? 1 : timeout_ms;
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+
+    std::uint8_t state = 0;
+    {
+        std::lock_guard<std::mutex> lk(sim_mu_);
+        state = flyc_state_;
+    }
+    DumlPacket pkt;
+    pkt.sender = 0x03;   // FC (DEV_FC); the parse path only gates on cmd_set/cmd_id/size
+    pkt.receiver = 0x02; // app (DEV_APP)
+    pkt.cmd_set = 0x03;
+    pkt.cmd_id = 0x43; // DataOsdGetPushCommon
+    pkt.payload = Bytes(kOsdPayloadLen, 0);
+    pkt.payload[kFlycStateOffset] = state;
+    return pkt.encode();
 }
 
 // ---------------------------------------------------------------- NetTransport

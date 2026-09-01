@@ -5,6 +5,7 @@
 
 #include "core/bytes.hpp"
 #include "core/control.hpp"
+#include "core/flight_mode.hpp"
 #include "core/transport.hpp"
 
 #include <atomic>
@@ -18,7 +19,10 @@ namespace djilink {
 // DUML addresses (drone.py). NOTE: we speak as the MOBILE APP (0x02); 0x0a is the
 // PC/Assistant address and makes the FC lock the motors (AssistantProtected).
 inline constexpr std::uint8_t DEV_APP = 0x02;
-inline constexpr std::uint8_t DEV_RC = 0x02;
+// The RC device's own DUML address. Historically miswritten as 0x02 (the app's own address);
+// RC-component commands (SoftSwitchMode, cmd_set 0x06) must target the RC at 0x06, so it is
+// corrected here (T3). Matches kRcReceiver in flight_mode.hpp. Had no consumers at 0x02.
+inline constexpr std::uint8_t DEV_RC = 0x06;
 inline constexpr std::uint8_t DEV_FC = 0x03;
 inline constexpr std::uint8_t DEV_GIMBAL = 0x04;
 inline constexpr std::uint8_t DEV_CAMERA = 0x01;
@@ -70,7 +74,21 @@ public:
     void unlock_no_gps(bool unlock = true);
     void get_param_info(int index);
     void read_param(const std::string& name);
-    void set_flight_mode(const std::string& name);
+    // Flight mode on the Mini is not a writable FC parameter: it selects a pre-loaded FC
+    // config block via the RC gear channel, which DJI Fly emulates with the RC-component
+    // SoftSwitchMode frame (cmd_set 0x06) — NOT the old FLYC tilt write (that only sped up the
+    // Normal block, so Normal->Sport never switched). set_horizontal_speed stays the tilt/speed
+    // setting and is deliberately unrelated to mode selection now.
+    void set_flight_mode(FlightMode mode);
+    void set_flight_mode(const std::string& name); // parse a mode name; throws on unknown
+    // The SoftSwitchMode cmd_id is still unconfirmed on hardware (three candidates). Config /
+    // OSD auto-detection (roadmap T7) selects the winner at runtime; default is candidate #1.
+    void set_soft_switch_cmd_id(SoftSwitchCmdId id);
+    // The currently selected SoftSwitchMode cmd_id. Lets the auto-detector (roadmap T7) snapshot
+    // and restore it, so a failed scan never leaves a wrong cmd_id latched on the control path.
+    SoftSwitchCmdId soft_switch_cmd_id() const {
+        return soft_switch_cmd_id_.load();
+    }
 
     // ---- home point ----
     void set_home_point(double lat_deg, double lon_deg);
@@ -135,6 +153,10 @@ private:
     // them and must still take the same lock.
     std::shared_ptr<std::mutex> tx_mu_ = std::make_shared<std::mutex>();
     std::atomic<std::uint16_t> seq_{0};
+    // cmd_id used by set_flight_mode's SoftSwitchMode frame; configurable because the real one
+    // is unconfirmed on hardware. Atomic: the T7 auto-detector writes it repeatedly from the
+    // console thread while the GUI thread may read it via set_flight_mode.
+    std::atomic<SoftSwitchCmdId> soft_switch_cmd_id_ = SoftSwitchCmdId::SetMachineMode;
     int shutter_denom_ = -1;                   // last user-set 1/N shutter (-1 = auto)
     std::shared_ptr<std::atomic<bool>> alive_; // guards detached camera-sequence threads
 };

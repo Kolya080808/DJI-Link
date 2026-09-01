@@ -4,10 +4,10 @@
 #include "core/param_hash.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 
@@ -193,20 +193,30 @@ void Drone::read_param(const std::string& name) {
     put_u32(p, param_hash(name));
     cmd(0x03, 0xF8, p, DEV_FC);
 }
+void Drone::set_flight_mode(FlightMode mode) {
+    // Select the FC config block by emulating the RC gear switch (SoftSwitchMode), exactly as
+    // DJI Fly does: an RC-component command (cmd_set 0x06) to the RC device (0x06), NOT a FLYC
+    // 0x03 tilt write. cmd() supplies the app sender (0x02), the atomic seq and the ACK flag,
+    // and leaves the frame plaintext (it only SIMPLE-encrypts FLYC 0x03 config). This mirrors the
+    // T2 encoder make_soft_switch_packet() field-for-field; we route through cmd() (not that
+    // helper) so the frame shares the single tx_mu_/next_seq() send funnel. The
+    // set_flight_mode_send test asserts the two paths stay byte-identical so a future tweak
+    // (e.g. roadmap T7) cannot silently diverge them.
+    const RcSoftSwitchMode gear = soft_switch_for(mode);
+    cmd(kRcCmdSet, static_cast<std::uint8_t>(soft_switch_cmd_id_.load()), soft_switch_payload(gear),
+        kRcReceiver, /*ack=*/true);
+}
+
 void Drone::set_flight_mode(const std::string& name) {
-    static const std::map<std::string, double> kTilt = {{"cine", 10.0},      {"cinema", 10.0},
-                                                        {"cinematic", 10.0}, {"normal", 20.0},
-                                                        {"sport", 30.0},     {"max", 40.0}};
-    std::string key = name;
-    std::transform(key.begin(), key.end(), key.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    auto it = kTilt.find(key);
-    if (it == kTilt.end()) {
-        throw std::invalid_argument("unknown mode '" + name + "'; use cine/normal/sport/max");
+    const std::optional<FlightMode> mode = flight_mode_from_name(name);
+    if (!mode) {
+        throw std::invalid_argument("unknown flight mode '" + name + "'; use cine/normal/sport");
     }
-    Bytes v;
-    put_f32(v, static_cast<float>(it->second));
-    set_param("g_config.mode_normal_cfg.tilt_atti_range_0", v);
+    set_flight_mode(*mode);
+}
+
+void Drone::set_soft_switch_cmd_id(SoftSwitchCmdId id) {
+    soft_switch_cmd_id_.store(id);
 }
 
 // ---------------------------------------------------------------- home point
