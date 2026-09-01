@@ -1,7 +1,7 @@
-// Unit test for the FLYC_STATE -> user-mode derivation (roadmap T4). Two things are covered:
-//   1. derived_user_mode() maps the raw FLYC_STATE code to the right DerivedFlightMode, and
+// Unit test for the FLYC_STATE -> observed-profile derivation. Two things are covered:
+//   1. observed_flight_profile() maps explicit codes and rejects ambiguous states, and
 //      returns nullopt for transient/action states.
-//   2. Fed through Telemetry, the OsdState::user_mode is STICKY: a transient state keeps the last
+//   2. Fed through Telemetry, OsdState::observed_profile keeps the last explicit value.
 //      decisive value instead of dropping to Normal ("transient states keep last").
 // Display-free and network-free: we hand-build OSD-common frames and feed them to Telemetry.
 #include "core/duml.hpp"
@@ -35,65 +35,74 @@ DumlPacket osd(int flyc_state) {
 int main() {
     try {
         // --- pure mapping: the three explicitly selectable modes ---
-        require(derived_user_mode(31) == DerivedFlightMode::Sport, "31 -> Sport");
-        require(derived_user_mode(19) == DerivedFlightMode::Cine, "19 -> Cine");
-        require(derived_user_mode(38) == DerivedFlightMode::Tripod, "38 -> Tripod (kept != Cine)");
+        require(observed_flight_profile(31) == ObservedFlightProfile::Sport, "31 -> Sport");
+        require(observed_flight_profile(19) == ObservedFlightProfile::Cine, "19 -> Cine");
+        require(observed_flight_profile(38) == ObservedFlightProfile::Tripod, "38 -> Tripod");
 
         // --- ordinary controlled flight (GPS / Atti / Hover / Novice family) is Normal ---
-        for (int code : {1, 2, 3, 4, 5, 6, 7, 8, 23, 32}) {
-            require(derived_user_mode(code) == DerivedFlightMode::Normal,
-                    "GPS/Atti/Hover/Novice code should derive Normal");
+        for (int code : {6, 32}) {
+            require(observed_flight_profile(code) == ObservedFlightProfile::Normal,
+                    "explicit normal code should derive Normal");
         }
 
         // --- transient / action / intelligent states derive nothing (keep last) ---
-        for (int code : {0, 9, 10, 11, 12, 13, 14, 15, 16, 17, 24, 28, 30, 33, 37, 100}) {
-            require(derived_user_mode(code) == std::nullopt,
-                    "transient state must not derive a mode");
+        for (int code : {0,  1,  2,  3,  4,  5,  7,  8,  9,  10, 11, 12,
+                         13, 14, 15, 16, 17, 23, 24, 28, 30, 33, 37, 100}) {
+            require(observed_flight_profile(code) == std::nullopt,
+                    "ambiguous state must not derive a profile");
         }
 
         // --- names ---
-        require(derived_flight_mode_name(DerivedFlightMode::Normal) == "Normal", "name Normal");
-        require(derived_flight_mode_name(DerivedFlightMode::Sport) == "Sport", "name Sport");
-        require(derived_flight_mode_name(DerivedFlightMode::Cine) == "Cine", "name Cine");
-        require(derived_flight_mode_name(DerivedFlightMode::Tripod) == "Tripod", "name Tripod");
+        require(observed_flight_profile_name(ObservedFlightProfile::Normal) == "Normal",
+                "name Normal");
+        require(observed_flight_profile_name(ObservedFlightProfile::Sport) == "Sport",
+                "name Sport");
+        require(observed_flight_profile_name(ObservedFlightProfile::Cine) == "Cine", "name Cine");
+        require(observed_flight_profile_name(ObservedFlightProfile::Tripod) == "Tripod",
+                "name Tripod");
 
         // --- sticky behaviour through Telemetry ---
         Telemetry tel;
-        // Before any decisive state, a transient push leaves user_mode unset.
+        // Before any explicit state, an ambiguous push leaves the profile unset.
         tel.feed_packet(osd(17)); // Joystick
-        require(!tel.state().user_mode.has_value(), "no decisive state seen yet -> nullopt");
+        require(!tel.state().observed_profile.has_value(), "no explicit profile seen yet");
         // The raw FLYC_STATE fields are still populated regardless.
         require(tel.state().flight_mode == 17, "raw flight_mode still parsed");
         require(tel.state().flight_mode_name == "Joystick", "raw flight_mode_name still parsed");
 
         // Sport becomes the sticky mode; a following transient state keeps it.
         tel.feed_packet(osd(31)); // SPORT
-        require(tel.state().user_mode == DerivedFlightMode::Sport, "sport is decisive");
+        require(tel.state().observed_profile == ObservedFlightProfile::Sport, "sport is explicit");
         tel.feed_packet(osd(17)); // Joystick (virtual sticks) — gear does not apply here
-        require(tel.state().user_mode == DerivedFlightMode::Sport, "transient keeps Sport");
+        require(tel.state().observed_profile == ObservedFlightProfile::Sport,
+                "joystick keeps Sport");
         tel.feed_packet(osd(11)); // AutoTakeoff
-        require(tel.state().user_mode == DerivedFlightMode::Sport, "takeoff keeps Sport");
+        require(tel.state().observed_profile == ObservedFlightProfile::Sport,
+                "takeoff keeps Sport");
 
         // M1 (roadmap): losing GPS degrades Sport into Atti — a DECISIVE Normal, not a transient
         // action — so the sticky mode intentionally drops to Normal. Stickiness guards against
         // transient actions, never against a real flight-block change.
         tel.feed_packet(osd(1)); // Atti (GPS lost)
-        require(tel.state().user_mode == DerivedFlightMode::Normal,
-                "GPS loss (Atti) is decisive Normal");
+        require(tel.state().observed_profile == ObservedFlightProfile::Sport,
+                "GPS loss does not identify the selected profile");
         tel.feed_packet(osd(31)); // re-select SPORT
-        require(tel.state().user_mode == DerivedFlightMode::Sport, "Sport re-selected after Atti");
+        require(tel.state().observed_profile == ObservedFlightProfile::Sport,
+                "Sport re-observed after Atti");
 
         // A decisive Normal push overwrites it; RTH then keeps Normal.
         tel.feed_packet(osd(6)); // GPS_Atti
-        require(tel.state().user_mode == DerivedFlightMode::Normal, "GPS_Atti is decisive Normal");
+        require(tel.state().observed_profile == ObservedFlightProfile::Normal,
+                "GPS_Atti is explicit Normal");
         tel.feed_packet(osd(15)); // GoHome
-        require(tel.state().user_mode == DerivedFlightMode::Normal, "RTH keeps Normal");
+        require(tel.state().observed_profile == ObservedFlightProfile::Normal, "RTH keeps Normal");
 
         // Tripod and Cine each overwrite when reported.
         tel.feed_packet(osd(38)); // TRIPOD_GPS
-        require(tel.state().user_mode == DerivedFlightMode::Tripod, "tripod is decisive");
+        require(tel.state().observed_profile == ObservedFlightProfile::Tripod,
+                "tripod is explicit");
         tel.feed_packet(osd(19)); // Cinematic
-        require(tel.state().user_mode == DerivedFlightMode::Cine, "cine is decisive");
+        require(tel.state().observed_profile == ObservedFlightProfile::Cine, "cine is explicit");
 
     } catch (const std::exception& e) {
         std::cerr << e.what() << '\n';

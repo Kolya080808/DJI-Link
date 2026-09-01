@@ -76,33 +76,21 @@ std::string flyc_state_name(int code) {
     return it != kFlycState.end() ? it->second : ("?" + std::to_string(code));
 }
 
-std::optional<DerivedFlightMode> derived_user_mode(int flyc_state) {
+std::optional<ObservedFlightProfile> observed_flight_profile(int flyc_state) {
     switch (flyc_state) {
         // The three explicitly selectable modes each report their own FLYC_STATE code.
         case 31: // SPORT
-            return DerivedFlightMode::Sport;
+            return ObservedFlightProfile::Sport;
         case 19: // Cinematic
-            return DerivedFlightMode::Cine;
+            return ObservedFlightProfile::Cine;
         case 38: // TRIPOD_GPS — kept distinct from Cine until the Cine<->Tripod link is confirmed
                  // on hardware (roadmap open unknown), so we do not fold 38 into Cine here.
-            return DerivedFlightMode::Tripod;
-        // Ordinary controlled flight — GPS position hold, its Atti/Hover degradations, and the
-        // Novice variant — is the Normal block. These are stable, decisive states (not transient),
-        // so they set the mode. Consequence (roadmap open unknown, flag for the T9 checklist):
-        // losing GPS drops Sport/Cine into Atti here, so the HUD then reads Normal by design — the
-        // stickiness below guards against transient ACTIONS, not against a real block change.
-        case 1:  // Atti
-        case 2:  // Atti_CL
-        case 3:  // Atti_Hover
-        case 4:  // Hover
-        case 5:  // GPS_Blake
+            return ObservedFlightProfile::Tripod;
+        // GPS_Atti and Novice explicitly identify the ordinary position profile. Atti/Hover and
+        // other degraded states are ambiguous because the selected gear can remain unchanged.
         case 6:  // GPS_Atti
-        case 7:  // GPS_CL
-        case 8:  // GPS_HomeLock
-        case 23: // Atti_Limited
-        case 32: // NOVICE — position hold with beginner limits; a Normal-block flight, not an
-                 // action state, so it resolves the mode rather than being kept-last.
-            return DerivedFlightMode::Normal;
+        case 32: // NOVICE
+            return ObservedFlightProfile::Normal;
         default:
             // Transient / action / intelligent-flight states (Manual, AutoTakeoff, AutoLanding,
             // GoHome, Joystick, QuickShot, Pano, GPS_HotPoint, ...) do not reflect the user's
@@ -111,15 +99,15 @@ std::optional<DerivedFlightMode> derived_user_mode(int flyc_state) {
     }
 }
 
-std::string derived_flight_mode_name(DerivedFlightMode mode) {
-    switch (mode) {
-        case DerivedFlightMode::Normal:
+std::string observed_flight_profile_name(ObservedFlightProfile profile) {
+    switch (profile) {
+        case ObservedFlightProfile::Normal:
             return "Normal";
-        case DerivedFlightMode::Sport:
+        case ObservedFlightProfile::Sport:
             return "Sport";
-        case DerivedFlightMode::Cine:
+        case ObservedFlightProfile::Cine:
             return "Cine";
-        case DerivedFlightMode::Tripod:
+        case ObservedFlightProfile::Tripod:
             return "Tripod";
     }
     return "Normal"; // unreachable: the switch is exhaustive over the enum
@@ -210,10 +198,8 @@ void Telemetry::parse_osd(const Bytes& p) {
     if (auto mode = get_u8(p, 0x1e)) {
         st.flight_mode = *mode & 0x7F;
         st.flight_mode_name = flyc_state_name(*st.flight_mode);
-        // Keep-last: only a decisive FLYC_STATE overwrites the sticky user mode (roadmap T4); a
-        // transient state (derived_user_mode -> nullopt) leaves the previous value in place.
-        if (auto derived = derived_user_mode(*st.flight_mode))
-            st.user_mode = *derived;
+        if (auto observed = observed_flight_profile(*st.flight_mode))
+            st.observed_profile = *observed;
     }
     if (auto w = get_u32(p, 0x20)) {
         st.is_flying = ((*w >> 1) & 3) == 2; // groundOrSky==2 = flying

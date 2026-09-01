@@ -22,22 +22,19 @@ std::string sdk_ctrl_device_name(int code);
 // DataOsdGetPushCommon$FLYC_STATE code -> name (sparse; verified from the jar).
 std::string flyc_state_name(int code);
 
-// The user-facing mode we DERIVE from the live FLYC_STATE byte (roadmap T4) — as opposed to the
-// FlightMode a user asks for (flight_mode.hpp) or the RC gear we emit to select it. Kept separate
-// from FlightMode because the firmware reports a Tripod state (38) distinctly from Cinematic (19),
-// and the Cine<->Tripod equivalence is still an on-hardware open question: collapsing 38 into Cine
-// here would bake in an unverified guess, so Tripod is its own value until confirmed.
-enum class DerivedFlightMode { Normal, Sport, Cine, Tripod };
+// Flight profile explicitly observed in FLYC_STATE. This is not the selected RC gear: transient
+// and degraded states do not identify which config block remains selected.
+enum class ObservedFlightProfile { Normal, Sport, Cine, Tripod };
 
 // Map a raw FLYC_STATE code to the user mode it implies, or nullopt for a transient/action state
 // (takeoff, landing, RTH, virtual sticks, QuickShot, ...) during which the user's selected mode is
 // unchanged — the caller must then keep the previous value ("transient states keep last"). Total,
 // never throws.
-std::optional<DerivedFlightMode> derived_user_mode(int flyc_state);
+std::optional<ObservedFlightProfile> observed_flight_profile(int flyc_state);
 
 // Human-readable HUD label for a derived mode ("Normal"/"Sport"/"Cine"/"Tripod"); Capitalized for
 // display, distinct from flyc_state_name's raw enum labels. Total, never throws.
-std::string derived_flight_mode_name(DerivedFlightMode mode);
+std::string observed_flight_profile_name(ObservedFlightProfile profile);
 
 // Everything we extract from the various pushes, accumulated into one state.
 struct OsdState {
@@ -52,13 +49,9 @@ struct OsdState {
     std::optional<double> pitch, roll, yaw;
     std::optional<int> flight_mode;
     std::optional<std::string> flight_mode_name;
-    // Sticky user mode derived from FLYC_STATE (roadmap T4). A decisive state overwrites it; a
-    // transient ACTION (takeoff/land/RTH/joystick/QuickShot) leaves it, so the HUD (T5) does not
-    // flicker mid-manoeuvre. Sticky against actions, not against a real block change: losing GPS
-    // degrades Sport/Cine into Atti — a decisive Normal per roadmap — so the HUD then reads Normal
-    // by design (flag for the T9 hardware checklist). Not reset on land/disarm; nullopt until the
-    // first decisive state.
-    std::optional<DerivedFlightMode> user_mode;
+    // Last profile directly identified by FLYC_STATE. Ambiguous states such as Atti and Joystick
+    // preserve it; nullopt until an explicit Normal/Sport/Cine/Tripod state is observed.
+    std::optional<ObservedFlightProfile> observed_profile;
     std::optional<bool> is_flying;
     std::optional<bool> motors_on;
     std::optional<int> ctrl_device;
