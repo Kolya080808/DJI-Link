@@ -25,7 +25,7 @@ Hotkeys: Enter ARM/DISARM · T takeoff (auto-C) · C control on/off · L landing
         F1 help · F3 hide/show HUD (clean video) · F11 fullscreen
         (media list/download auto-enter playback; no manual B/zoom/stick-flag keys)
 Console (Tab): takeoff/land/rth · home here|<lat> <lon> · setalt <m>/setdist <m>/rthalt <m>
-        fmode disabled until verified · hspeed <m/s> · rp height|radius|tilt · iso <n>/shutter <N>|auto/ev <n>
+        fmode load <mode> <captured-frame>|send · hspeed <m/s> · rp height|radius|tilt
         rec start|stop · zoom <x> · gimbal <deg>|speed <dps> · raw <set> <id> <hex> [recv]
 """
 
@@ -63,6 +63,30 @@ def vlog(*a):
     if VERBOSE:
         print(f"[{time.strftime('%H:%M:%S')}] {line}", flush=True)
     _LOG.debug(line)
+
+
+def decode_flight_mode_capture(frame_hex: str) -> DumlPacket:
+    from duml import DumlError
+    try:
+        packet = DumlPacket.decode(bytes.fromhex(frame_hex))
+    except (DumlError, ValueError, TypeError) as exc:
+        raise ValueError(f"invalid captured DUML frame: {exc}") from exc
+    if packet.sender != 0x02 or packet.cmd_type != 0x40:
+        raise ValueError("capture must be a plaintext app request with ACK enabled")
+    if packet.receiver != 0x06 or packet.cmd_set != 0x06:
+        raise ValueError("flight-mode capture must target the RC on cmdset 0x06")
+    return packet
+
+
+def validate_flight_mode_captures(captures: dict[str, DumlPacket]) -> None:
+    if set(captures) != {"cine", "normal", "sport"}:
+        raise ValueError("load DJI Fly captures for cine, normal, and sport first")
+    packets = list(captures.values())
+    route = {(p.receiver, p.cmd_set, p.cmd_id, p.cmd_type, len(p.payload)) for p in packets}
+    if len(route) != 1:
+        raise ValueError("the three captures must use one command route and payload size")
+    if len({p.payload for p in packets}) != 3:
+        raise ValueError("the three captures must contain distinct mode payloads")
 
 
 class VideoSink:
@@ -177,6 +201,8 @@ class Client:
         self.return_to_menu = False  # set by "Exit to main menu": run_ui ends, main() re-shows menu
         self.show_hud = True         # F3 toggles the telemetry overlay (clean video when off)
         self.last_msg = ""
+        self._flight_mode_captures = {}
+        self._flight_mode_captures_locked = False
         self.gps_check_text = "GPS/SATS: waiting"
         self.gps_check_level = "warn"  # ok | warn | bad
         self.gps_check_at = 0.0
@@ -689,7 +715,36 @@ def run_console_cmd(cli: Client, line: str):
         elif c == "rthalt":
             d.set_rth_altitude(int(args[0])); cli.msg(f"RTH alt {args[0]} m")
         elif c in ("fmode", "flightmode"):
-            d.set_flight_mode(args[0])
+            if len(args) == 3 and args[0] == "load" and args[1] in ("cine", "normal", "sport"):
+                if cli.armed or cli.control or cli._airborne():
+                    cli.msg("fmode load blocked: load and review all captures before arming")
+                elif cli._flight_mode_captures_locked:
+                    cli.msg("fmode load blocked: capture set is locked for this session")
+                else:
+                    packet = decode_flight_mode_capture(args[2])
+                    proposed = dict(cli._flight_mode_captures)
+                    proposed[args[1]] = packet
+                    if len(proposed) == 3:
+                        validate_flight_mode_captures(proposed)
+                        cli._flight_mode_captures_locked = True
+                    cli._flight_mode_captures = proposed
+                    cli.msg(f"loaded captured {args[1]} request: {packet.receiver:#04x} "
+                            f"{packet.cmd_set:#04x}/{packet.cmd_id:#04x} "
+                            f"payload={packet.payload.hex()}; loaded={','.join(sorted(proposed))}" +
+                            ("; capture set locked" if cli._flight_mode_captures_locked else ""))
+            elif len(args) == 1 and args[0] in ("cine", "normal", "sport"):
+                if not cli.live:
+                    cli.msg("fmode blocked: start with --live after validating all captures")
+                else:
+                    validate_flight_mode_captures(cli._flight_mode_captures)
+                    packet = cli._flight_mode_captures[args[0]]
+                    d.send_raw(packet.cmd_set, packet.cmd_id, packet.payload,
+                               receiver=packet.receiver, ack=True)
+                    cli.msg(f"flight mode {args[0]} sent from DJI Fly capture; "
+                            f"watch live FLYC_STATE (currently {cli.tele.state.flight_mode_name})")
+            else:
+                cli.msg("usage: fmode load cine|normal|sport <captured_duml_frame_hex> | "
+                        "fmode cine|normal|sport")
         elif c in ("hspeed", "speed"):
             d.set_horizontal_speed(float(args[0])); cli.msg(f"horiz speed ~{args[0]} m/s (via tilt angle)")
         elif c == "photo": d.take_photo(); cli.msg("photo")
@@ -740,7 +795,7 @@ def run_console_cmd(cli: Client, line: str):
                 cli.msg("fetchmedia: done — liveview restored, check media_downloads/ + [media] log")
             _t.Thread(target=_sweep, daemon=True).start()
         elif c == "help":
-            cli.msg("takeoff land rth control on|off gs on|off gps sats home status|here|<lat> <lon> setalt <m> setdist <m> rthalt <m> rp height|radius hspeed <m/s> gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> fetchmedia <from> <to> [delay] raw <set> <id> <hex> [recv]")
+            cli.msg("takeoff land rth control on|off gs on|off gps sats home status|here|<lat> <lon> setalt <m> setdist <m> rthalt <m> rp height|radius hspeed <m/s> fmode load <mode> <captured-frame>|send gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> fetchmedia <from> <to> [delay] raw <set> <id> <hex> [recv]")
         else:
             cli.msg(f"unknown command: {c} (help)")
     except Exception as e:

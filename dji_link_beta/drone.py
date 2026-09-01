@@ -287,8 +287,8 @@ class Drone:
         if mode not in ("cine", "cinema", "cinematic", "normal", "sport"):
             raise ValueError(f"unknown mode {name!r}; use cine/normal/sport")
         raise NotImplementedError(
-            "WM160 flight-mode wire command is not confirmed; use flight_mode_probe.py on the "
-            "ground with an explicit hypothesis, or hspeed to change the Normal speed limit"
+            "WM160 flight-mode wire command is not confirmed; load reviewed DJI Fly captures "
+            "with pc_client.py fmode load, or use hspeed for the Normal speed limit"
         )
 
     # --- home point (DataFlycSetHomePoint 0x03/0x31, 18-byte payload) ---

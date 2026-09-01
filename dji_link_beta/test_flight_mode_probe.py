@@ -3,7 +3,8 @@
 import unittest
 
 from drone import Drone
-from flight_mode_probe import GroundSnapshot, build_probe, ground_state_is_fresh
+from duml import DumlPacket
+from pc_client import decode_flight_mode_capture, validate_flight_mode_captures
 
 
 class CaptureTransport:
@@ -22,26 +23,31 @@ class FlightModeProbeTest(unittest.TestCase):
             drone.set_flight_mode("sport")
         self.assertEqual(transport.frames, [])
 
-    def test_probe_contract_is_explicit(self):
-        packet = build_probe(0x06, 0x11, "sport")
-        self.assertEqual((packet.receiver, packet.cmd_set, packet.cmd_id), (0x06, 0x06, 0x11))
-        self.assertEqual(packet.payload, bytes.fromhex("00000000"))
+    def test_capture_is_replayed_without_guessing_fields(self):
+        captured = DumlPacket(sender=0x02, receiver=0x06, cmd_set=0x06, cmd_id=0xA4,
+                              seq=123, cmd_type=0x40, payload=bytes.fromhex("010203")).encode()
+        packet = decode_flight_mode_capture(captured.hex())
+        self.assertEqual((packet.receiver, packet.cmd_set, packet.cmd_id), (0x06, 0x06, 0xA4))
+        self.assertEqual(packet.payload, bytes.fromhex("010203"))
 
-    def test_probe_rejects_values_outside_research_set(self):
+    def test_capture_rejects_non_app_request(self):
+        response = DumlPacket(sender=0x06, receiver=0x02, cmd_set=0x06, cmd_id=0xA4,
+                              seq=123, cmd_type=0x80, payload=b"\x00").encode()
         with self.assertRaises(ValueError):
-            build_probe(0x03, 0x11, "sport")
-        with self.assertRaises(ValueError):
-            build_probe(0x06, 0x7A, "sport")
+            decode_flight_mode_capture(response.hex())
 
-    def test_ground_check_fails_closed(self):
-        self.assertFalse(ground_state_is_fresh(None, now=10.0))
-        ground = GroundSnapshot(9.0, False, False, 0.0, "GPS_Atti")
-        self.assertTrue(ground_state_is_fresh(ground, now=10.0))
-        self.assertFalse(ground_state_is_fresh(ground, now=12.0))
-        self.assertFalse(ground_state_is_fresh(
-            GroundSnapshot(9.0, True, False, 0.0, "GPS_Atti"), now=10.0))
-        self.assertFalse(ground_state_is_fresh(
-            GroundSnapshot(9.0, False, False, -1.0, "GPS_Atti"), now=10.0))
+    def test_three_captures_must_share_route_and_differ_in_payload(self):
+        def packet(payload, cmd_id=0xA4):
+            return DumlPacket(sender=0x02, receiver=0x06, cmd_set=0x06, cmd_id=cmd_id,
+                              cmd_type=0x40, payload=bytes([payload]))
+
+        validate_flight_mode_captures({"cine": packet(0), "normal": packet(1),
+                                       "sport": packet(2)})
+        with self.assertRaises(ValueError):
+            validate_flight_mode_captures({"cine": packet(0), "normal": packet(1)})
+        with self.assertRaises(ValueError):
+            validate_flight_mode_captures({"cine": packet(0), "normal": packet(1),
+                                           "sport": packet(2, cmd_id=0xA5)})
 
 
 if __name__ == "__main__":
