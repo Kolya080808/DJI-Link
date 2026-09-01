@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace djilink {
@@ -20,7 +21,12 @@ public:
     virtual void close() {}
 };
 
-// Loopback stub (the simulator): prints outgoing frames, never receives.
+// Loopback for the simulator (--sim): prints outgoing frames, and — for the flight-mode work
+// (roadmap T6) — models the one drone reaction the roadmap needs. It tracks a current FLYC_STATE
+// and, whenever send() sees a SoftSwitchMode gear frame (cmd_set 0x06), flips that state to match
+// the selected gear; recv() then streams a minimal OSD-common push carrying it, so switching
+// Normal/Sport/Cine is observable on --sim (previously recv() returned nothing, so the sim never
+// produced telemetry and the HUD mode stayed blank). Not a full drone model — only FLYC_STATE.
 class LogTransport : public Transport {
 public:
     explicit LogTransport(bool verbose = true, bool silent_repeat = true);
@@ -31,6 +37,10 @@ private:
     bool verbose_;
     bool silent_repeat_;
     Bytes last_;
+    // send() runs on the sender thread and recv() on the rx thread, so the reported state they
+    // share is mutex-guarded. Defaults to a decisive Normal (GPS_Atti) until a gear frame arrives.
+    std::mutex sim_mu_;
+    std::uint8_t flyc_state_;
 };
 
 // TCP client to the Pi bridge (bin/dji-bridge in the pi bundle). Transparently shuffles DUML bytes.
