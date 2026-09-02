@@ -8,6 +8,7 @@
   <a><img src="https://img.shields.io/badge/license-Apache--2.0-73f7c5.svg" alt="License"></a>
 </p>
 
+- **YouTube video:** https://youtu.be/LO0jjBHcsgo
 - **Project site:** https://dream-catcher-project.ru/
 - **Downloads:** https://dream-catcher-project.ru/downloads
 - **Documentation:** https://dream-catcher-project.ru/docs
