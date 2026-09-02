@@ -173,6 +173,9 @@ if(PROJECT_IS_TOP_LEVEL)
     add_executable(soft_switch_detect_test tests/soft_switch_detect_test.cpp)
     target_link_libraries(soft_switch_detect_test PRIVATE djilink_core)
     add_test(NAME soft_switch_detect COMMAND soft_switch_detect_test)
+    add_executable(console_mode_cmds_test tests/console_mode_cmds_test.cpp)
+    target_link_libraries(console_mode_cmds_test PRIVATE djilink_core)
+    add_test(NAME console_mode_cmds COMMAND console_mode_cmds_test)
 endif()
 
 # Release-time ffmpeg bundle. The release workflow sets these paths after preparing

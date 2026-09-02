@@ -175,6 +175,12 @@ void Drone::set_param(const std::string& name, const Bytes& value_bytes) {
     cmd(0x03, 0xF9, p, DEV_FC);
 }
 void Drone::set_horizontal_speed(double mps) {
+    // SPEED, not mode. This writes the Normal block's maximum tilt angle: the FC has no "max
+    // horizontal speed" parameter, and how fast the aircraft may lean is what caps its speed.
+    // 2.5 deg per m/s is the beta's empirical scale, clamped to the parameter's own 5..40 deg
+    // range. Until the roadmap T3 rewrite, set_flight_mode() wrote this same parameter to fake
+    // Sport, which is why Normal->Sport never switched: a faster Normal block is still the
+    // Normal block. Mode selection now goes through the RC gear frame below; keep the two apart.
     const double tilt = std::max(5.0, std::min(40.0, mps * 2.5));
     Bytes v;
     put_f32(v, static_cast<float>(tilt));

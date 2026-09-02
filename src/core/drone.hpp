@@ -70,15 +70,17 @@ public:
     void assistant_unlock();
     void get_limits(int mode = 1);
     void set_param(const std::string& name, const Bytes& value_bytes);
+    // Speed setting only: caps how far the Normal block may lean (there is no max-speed
+    // parameter). Never used to select a flight mode — see set_flight_mode below.
     void set_horizontal_speed(double mps);
     void unlock_no_gps(bool unlock = true);
     void get_param_info(int index);
     void read_param(const std::string& name);
     // Flight mode on the Mini is not a writable FC parameter: it selects a pre-loaded FC
     // config block via the RC gear channel, which DJI Fly emulates with the RC-component
-    // SoftSwitchMode frame (cmd_set 0x06) — NOT the old FLYC tilt write (that only sped up the
-    // Normal block, so Normal->Sport never switched). set_horizontal_speed stays the tilt/speed
-    // setting and is deliberately unrelated to mode selection now.
+    // SoftSwitchMode frame (cmd_set 0x06) — NOT a FLYC tilt write (that only sped up the Normal
+    // block, so Normal->Sport never switched). set_horizontal_speed above is the speed setting
+    // and is deliberately unrelated to mode selection.
     void set_flight_mode(FlightMode mode);
     void set_flight_mode(const std::string& name); // parse a mode name; throws on unknown
     // The SoftSwitchMode cmd_id is still unconfirmed on hardware (three candidates). Config /

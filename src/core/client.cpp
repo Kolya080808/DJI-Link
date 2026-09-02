@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cstdio>
 #include <ctime>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -51,6 +52,14 @@ std::size_t find_startcode(const Bytes& b, std::size_t from) {
 
 int to_int(const std::string& s, int base = 10) {
     return static_cast<int>(std::stol(s, nullptr, base));
+}
+
+// "0x06" — the form the roadmap, the reverse-engineering docs and the DUML captures all use for a
+// cmd_id, so mode messages can be pasted straight into a hardware log.
+std::string hex_byte(unsigned v) {
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "0x%02X", v & 0xFFu);
+    return buf;
 }
 
 std::vector<std::string> split(const std::string& line) {
@@ -462,9 +471,7 @@ std::optional<SoftSwitchCmdId> Client::auto_detect_mode_cmd_id() {
         // Put the aircraft back in the mode it started in (fall back to Normal when it was unknown,
         // never leaving it in the relaxed Sport probe), now using the confirmed cmd_id.
         drone_.set_flight_mode(flight_mode_for(baseline.value_or(DerivedFlightMode::Normal)));
-        char buf[8];
-        std::snprintf(buf, sizeof(buf), "0x%02X", static_cast<unsigned>(*r.cmd_id));
-        set_msg(std::string("flight-mode cmd_id detected: ") + buf);
+        set_msg("flight-mode cmd_id detected: " + hex_byte(static_cast<unsigned>(*r.cmd_id)));
     } else {
         drone_.set_soft_switch_cmd_id(original_cmd_id); // failed scan restores the prior selection
         set_msg("flight-mode cmd_id auto-detect failed (no candidate switched the mode)");
@@ -495,12 +502,15 @@ void run_console_cmd(Client& cli, const std::string& line) {
             cli.set_msg("ARMED=0");
         } else if (c == "readparam" || c == "rp" || c == "param") {
             if (a.empty()) {
-                cli.set_msg("usage: rp <name|height|radius|tilt>");
+                cli.set_msg("usage: rp <name|height|radius|tilt|speed|gpsenable|novice>");
                 return;
             }
             static const std::map<std::string, std::string> aliases = {
                 {"height", "g_config.flying_limit.max_height_0"},
                 {"radius", "g_config.flying_limit.max_radius_0"},
+                // tilt == speed on purpose: both read the Normal block's tilt limit, i.e. the
+                // horizontal speed setting that "hspeed" writes. Reading it tells you nothing
+                // about the active flight mode — that comes from FLYC_STATE (see "tele"/HUD).
                 {"tilt", "g_config.mode_normal_cfg.tilt_atti_range_0"},
                 {"speed", "g_config.mode_normal_cfg.tilt_atti_range_0"},
                 {"gpsenable", "g_config.gps_cfg.gps_enable_0"},
@@ -575,16 +585,51 @@ void run_console_cmd(Client& cli, const std::string& line) {
             d.set_rth_altitude(to_int(a[0]));
             cli.set_msg("RTH alt " + a[0] + " m");
         } else if (c == "fmode" || c == "flightmode") {
-            d.set_flight_mode(a[0]);
-            cli.set_msg("flight mode " + a[0]);
+            // Bare "fmode" used to index a[0] on an empty vector. Answer with the live derived
+            // mode instead: it comes from FLYC_STATE, so it is the only honest answer to "which
+            // mode am I in" (what we last commanded may not have taken effect).
+            if (a.empty()) {
+                const std::optional<DerivedFlightMode> now = cli.tele().state().user_mode;
+                cli.set_msg("usage: fmode cine|normal|sport (now: " +
+                            (now ? derived_flight_mode_name(*now) : std::string("?")) + ")");
+                return;
+            }
+            d.set_flight_mode(a[0]); // throws on an unknown name; the catch below reports it
+            cli.set_msg("flight mode " + a[0] + " -> SoftSwitchMode gear frame 0x06/" +
+                        hex_byte(static_cast<unsigned>(d.soft_switch_cmd_id())));
         } else if (c == "detectmode") {
             // Probe the three SoftSwitchMode cmd_id candidates and lock whichever one actually
             // moves FLYC_STATE (roadmap T7). Blocking (polls telemetry between sends) but bounded;
             // safe on --sim and on hardware it only toggles Normal/Sport. Sets its own HUD message.
             cli.auto_detect_mode_cmd_id();
+        } else if (c == "smid") {
+            // Hand-pick the SoftSwitchMode cmd_id. "detectmode" finds it automatically, but on
+            // hardware the owner needs to force a specific candidate (0x06 SetMachineMode,
+            // 0x11 SetFunctionSwitch, 0x19 SetControllerMode) and watch FLYC_STATE by eye.
+            if (a.empty()) {
+                cli.set_msg("SoftSwitchMode cmd_id " +
+                            hex_byte(static_cast<unsigned>(d.soft_switch_cmd_id())) +
+                            " (usage: smid 0x06|0x11|0x19)");
+                return;
+            }
+            const std::optional<SoftSwitchCmdId> id =
+                soft_switch_cmd_id_from(static_cast<unsigned>(to_int(a[0], 0)));
+            if (!id) {
+                cli.set_msg("unknown cmd_id " + a[0] + " (usage: smid 0x06|0x11|0x19)");
+                return;
+            }
+            d.set_soft_switch_cmd_id(*id);
+            cli.set_msg("SoftSwitchMode cmd_id -> " + hex_byte(static_cast<unsigned>(*id)));
         } else if (c == "hspeed" || c == "speed") {
+            // Speed only: this writes the Normal block's tilt limit and does NOT select a flight
+            // mode (that is "fmode"). The two were the same call before the roadmap T3 rewrite,
+            // which is exactly why Normal->Sport never switched.
+            if (a.empty()) {
+                cli.set_msg("usage: hspeed <m/s> (Normal-block tilt limit, not a mode change)");
+                return;
+            }
             d.set_horizontal_speed(std::stod(a[0]));
-            cli.set_msg("horiz speed ~" + a[0] + " m/s");
+            cli.set_msg("horiz speed ~" + a[0] + " m/s (speed setting, not a mode change)");
         } else if (c == "photo") {
             d.take_photo();
             cli.set_msg("photo");
@@ -641,9 +686,9 @@ void run_console_cmd(Client& cli, const std::string& line) {
         } else if (c == "help") {
             cli.set_msg(
                 "arm disarm takeoff land rth control on|off gs on|off home here|<lat> <lon> "
-                "setalt setdist rthalt rp gimbal <deg>|speed recenter photo rec start|stop zoom "
-                "mode iso shutter ev videofmt codec keyframe unlock tele detectmode raw <set> <id> "
-                "<hex>");
+                "setalt setdist rthalt rp fmode cine|normal|sport detectmode smid 0x06|0x11|0x19 "
+                "hspeed <m/s> gimbal <deg>|speed recenter photo rec start|stop zoom mode iso "
+                "shutter ev videofmt codec keyframe unlock tele raw <set> <id> <hex>");
         } else if (c == "quit" || c == "exit") {
             cli.set_msg("quitting");
         } else {

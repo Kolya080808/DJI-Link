@@ -76,6 +76,22 @@ enum class SoftSwitchCmdId : std::uint8_t {
     SetControllerMode = 0x19,
 };
 
+// Validate a raw byte (config value, console argument, capture) as one of the candidates above.
+// Returns nullopt for anything else: a typo must never latch an arbitrary cmd_id onto the control
+// path, where it would be sent to the RC as an unknown command.
+constexpr std::optional<SoftSwitchCmdId> soft_switch_cmd_id_from(unsigned value) {
+    switch (value) {
+        case 0x06:
+            return SoftSwitchCmdId::SetMachineMode;
+        case 0x11:
+            return SoftSwitchCmdId::SetFunctionSwitch;
+        case 0x19:
+            return SoftSwitchCmdId::SetControllerMode;
+        default:
+            return std::nullopt;
+    }
+}
+
 // Wire byte the firmware expects for each gear. These are the *firmware* ordinals
 // (SPORT=0, POSITION=1, TRIPOD=2) and deliberately differ from RcSoftSwitchMode's C++
 // declaration order — never cast the enum to a byte; always go through this mapping.
