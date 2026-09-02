@@ -8,6 +8,11 @@ Only the Transport implementation changes; the upper layers are untouched.
 
 from __future__ import annotations
 import abc
+import threading
+import time
+
+from duml import DumlPacket
+from flight_mode import RC_CMD_SET, SoftSwitchCmdId
 
 
 class Transport(abc.ABC):
@@ -22,24 +27,84 @@ class Transport(abc.ABC):
         pass
 
 
+# --- simulator feedback ------------------------------------------------------------------
+# The one drone reaction the flight-mode work needs: a current FLYC_STATE that follows the
+# gear we select. Not a full drone model.
+_OSD_PAYLOAD_LEN = 0x34     # DataOsdGetPushCommon; the decoder needs >= 0x34 bytes
+_FLYC_STATE_OFFSET = 0x1e
+_FLYC_SPORT = 31            # SPORT
+_FLYC_NORMAL = 6            # GPS_Atti — a decisive "Normal" state
+_FLYC_TRIPOD = 38           # TRIPOD_GPS (how the Mini reports the gentle/Cine block)
+_SIM_DEFAULT_FLYC_STATE = _FLYC_NORMAL
+
+# SoftSwitchMode wire value (SPORT=0 / POSITION=1 / TRIPOD=2) -> the FLYC_STATE the firmware
+# would then report. None for an unknown value: the state is left unchanged.
+_FLYC_STATE_FOR_WIRE = {0: _FLYC_SPORT, 1: _FLYC_NORMAL, 2: _FLYC_TRIPOD}
+
+
+def _is_soft_switch(pkt: DumlPacket) -> bool:
+    """Is this frame a SoftSwitchMode gear command?
+
+    It must be an RC-component command (cmd_set 0x06) with a u32 payload and one of the three
+    candidate cmd_ids; the sim accepts all three so auto-detection can settle on one. receiver
+    and cmd_type are deliberately NOT gated — the exact RC-DUML wrapper is still an open
+    unknown, and being lenient keeps the sim from rejecting a frame real hardware accepts.
+    """
+    if pkt.cmd_set != RC_CMD_SET or len(pkt.payload) < 4:
+        return False
+    return pkt.cmd_id in tuple(int(c) for c in SoftSwitchCmdId)
+
+
 class LogTransport(Transport):
     """Stub without hardware: prints outgoing frames. For the keyboard/API demo
-    and for debugging — a 'rough sanity check' that commands are formed correctly."""
+    and for debugging — a 'rough sanity check' that commands are formed correctly.
+
+    It also models the flight-mode loop: send() watches for a SoftSwitchMode gear frame and
+    flips the FLYC_STATE that recv() reports, so `--sim` shows Normal/Sport/Cine actually take
+    effect. Before this, recv() returned b"" — the sim produced no telemetry at all and the HUD
+    mode stayed blank, which is exactly what made the mode work impossible to check without a
+    drone.
+    """
 
     def __init__(self, verbose: bool = True, silent_repeat: bool = True):
         self.verbose = verbose
         self.silent_repeat = silent_repeat
         self._last = None
         self.sent: list[bytes] = []
+        # send() runs on the caller/UI thread and recv() on the rx thread, so the state they
+        # share is lock-guarded. Starts at a decisive Normal until a gear frame arrives.
+        self._sim_lock = threading.Lock()
+        self._flyc_state = _SIM_DEFAULT_FLYC_STATE
 
     def send(self, frame: bytes) -> None:
         self.sent.append(frame)
         if self.verbose and not (self.silent_repeat and frame == self._last):
             print(f"  TX {frame.hex()}")
         self._last = frame
+        pkt = DumlPacket.decode(frame)
+        if pkt is not None and _is_soft_switch(pkt):
+            wire = int.from_bytes(pkt.payload[:4], "little")
+            state = _FLYC_STATE_FOR_WIRE.get(wire)
+            if state is not None:
+                with self._sim_lock:
+                    self._flyc_state = state
 
     def recv(self, timeout_ms: int = 1000) -> bytes:
-        return b""
+        # Pace the synthetic telemetry to the caller's poll timeout instead of returning
+        # instantly, so the sim rx loop blocks like a real link rather than spinning at 100% CPU.
+        # Each call yields one OSD-common push carrying the current FLYC_STATE.
+        time.sleep(max(1, int(timeout_ms)) / 1000)
+        with self._sim_lock:
+            state = self._flyc_state
+        payload = bytearray(_OSD_PAYLOAD_LEN)
+        payload[_FLYC_STATE_OFFSET] = state
+        return DumlPacket(
+            sender=0x03,      # FC; the parse path only gates on cmd_set/cmd_id/size
+            receiver=0x02,    # app
+            cmd_set=0x03,
+            cmd_id=0x43,      # DataOsdGetPushCommon
+            payload=bytes(payload),
+        ).encode()
 
 
 class SerialTransport(Transport):

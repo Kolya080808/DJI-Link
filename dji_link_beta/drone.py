@@ -22,11 +22,15 @@ import threading
 from duml import DumlPacket, DumlStream
 from transport import Transport
 from control import Sticks, FlightProfile, sticks_to_payload
+from flight_mode import (FlightMode, RC_CMD_SET, RC_RECEIVER, SoftSwitchCmdId,
+                         flight_mode_from_name, soft_switch_for, soft_switch_payload)
 
 DEV_APP = 0x02     # us = the MOBILE APP address (the drone pushes to 0x02 on the wire).
 # 0x0a is the PC/DJI-Assistant address; sending as 0x0a makes the FC think a debug
 # assistant is attached and it locks the motors (MotorStartFailedCause=2 AssistantProtected).
-DEV_RC = 0x02      # remote controller
+DEV_RC = 0x06      # remote controller. NOT 0x02 — that is the app's own address
+# (DEV_APP), so RC-addressed frames used to be sent back at ourselves. RC-component
+# commands (cmd_set 0x06, e.g. SoftSwitchMode) must be addressed to 0x06.
 DEV_FC = 0x03      # flight controller
 DEV_GIMBAL = 0x04
 DEV_CAMERA = 0x01
@@ -61,6 +65,10 @@ class Drone:
         self._tx_lock = threading.Lock()
         self._alive = True
         self._shutter_denom = None   # last user-set 1/N shutter (None = auto); see set_iso/set_shutter
+        # Which of the three candidate RC cmd_ids carries SoftSwitchMode (flight-mode gear).
+        # Unconfirmed on hardware, so it stays swappable at runtime: the operator can set it
+        # from the console and soft_switch_detect.py can probe all three (see set_flight_mode).
+        self.soft_switch_cmd_id = SoftSwitchCmdId.SET_MACHINE_MODE
         self._stream = DumlStream()
         self._rx_thread: threading.Thread | None = None
         self._running = False
@@ -277,18 +285,32 @@ class Drone:
         import struct as _s
         self._cmd(0x03, 0xF8, _s.pack("<I", param_hash(name)), receiver=DEV_FC)
 
-    # Cine/Normal/Sport on WM160 are NOT a DUML mode command — the FC picks a pre-stored
-    # block via the RC GEAR channel, which the float joystick 0x03/0x8E has no slot for. So
-    # we EMULATE the gears by writing the active (Normal) block's max lean angle = the speed
-    # cap. tilt higher -> faster. Param persists (RW+EE); write 20 to restore stock Normal.
-    FLIGHT_MODE_TILT = {"cine": 10.0, "cinema": 10.0, "cinematic": 10.0,
-                        "normal": 20.0, "sport": 30.0, "max": 40.0}
+    # --- flight mode (Cine / Normal / Sport) ---
+    # Selecting a mode means selecting which pre-loaded FC config block is ACTIVE, and that is
+    # driven by the RC GEAR channel — there is no writable "flight mode" FC param on the Mini.
+    # DJI Fly emulates the gear with RemoteController/SoftSwitchMode on the RC component
+    # (cmd_set 0x06), so that is what we send. The previous implementation instead wrote the
+    # Normal block's tilt limit (g_config.mode_normal_cfg.tilt_atti_range_0), which only ever
+    # produced a "sped-up Normal" and never activated the Sport/Gentle blocks — that param is a
+    # SPEED setting and now belongs to set_horizontal_speed alone.
+    def set_flight_mode(self, mode: FlightMode | str) -> None:
+        """Select Cine/Normal/Sport by emulating the RC gear switch (SoftSwitchMode).
 
-    def set_flight_mode(self, name: str) -> None:
-        tilt = self.FLIGHT_MODE_TILT.get(str(name).strip().lower())
-        if tilt is None:
-            raise ValueError(f"unknown mode {name!r}; use cine/normal/sport/max")
-        self.set_param("g_config.mode_normal_cfg.tilt_atti_range_0", struct.pack("<f", tilt))
+        Accepts a FlightMode or a user string ("cine"/"cinema", "normal"/"position", "sport");
+        raises ValueError on anything else. Routed through _cmd() — not make_soft_switch_packet()
+        — so the frame shares the single _tx_lock/_next_seq send funnel; test_flight_mode.py
+        asserts both paths stay byte-identical.
+        """
+        m = mode if isinstance(mode, FlightMode) else flight_mode_from_name(mode)
+        if m is None:
+            raise ValueError(f"unknown flight mode {mode!r}; use cine/normal/sport")
+        gear = soft_switch_for(m)
+        self._cmd(RC_CMD_SET, int(self.soft_switch_cmd_id), soft_switch_payload(gear),
+                  receiver=RC_RECEIVER, ack=True)
+
+    def set_soft_switch_cmd_id(self, cmd_id: SoftSwitchCmdId | int) -> None:
+        """Pick which candidate cmd_id set_flight_mode uses (console `smid`, auto-detector)."""
+        self.soft_switch_cmd_id = SoftSwitchCmdId(int(cmd_id))
 
     # --- home point (DataFlycSetHomePoint 0x03/0x31, 18-byte payload) ---
     # doPack confirmed byte-for-byte from DJI bytecode (HOME_POINT_RESEARCH_2026_v2.md §3):
