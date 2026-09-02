@@ -29,7 +29,7 @@ import aoa
 
 # DUML roles (device addresses). Approximate values, from public DUML dumps.
 DEV_APP = 0x02      # mobile app / PC; 0x0a is the Assistant-style sender
-DEV_RC = 0x02       # remote controller
+DEV_RC = 0x06       # remote controller (0x02 is the app itself, see drone.py)
 DEV_FC = 0x03       # flight controller
 
 # A couple of the most common startup requests from the app:

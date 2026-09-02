@@ -25,7 +25,8 @@ Hotkeys: Enter ARM/DISARM · T takeoff (auto-C) · C control on/off · L landing
         F1 help · F3 hide/show HUD (clean video) · F11 fullscreen
         (media list/download auto-enter playback; no manual B/zoom/stick-flag keys)
 Console (Tab): takeoff/land/rth · home here|<lat> <lon> · setalt <m>/setdist <m>/rthalt <m>
-        fmode cine|normal|sport · hspeed <m/s> · rp height|radius|tilt · iso <n>/shutter <N>|auto/ev <n>
+        fmode cine|normal|sport · detectmode · smid 0x06|0x11|0x19 · hspeed <m/s> · rp height|radius|tilt
+        iso <n>/shutter <N>|auto/ev <n>
         rec start|stop · zoom <x> · gimbal <deg>|speed <dps> · raw <set> <id> <hex> [recv]
 """
 
@@ -38,6 +39,8 @@ import threading
 import time
 
 from duml import DumlPacket, DumlStream
+from flight_mode import SoftSwitchCmdId, flight_mode_from_name
+from soft_switch_detect import auto_detect_mode_cmd_id
 from drone import Drone, DEV_FC, DEV_CAMERA, DEV_GIMBAL
 from telemetry import Telemetry
 from control import keys_to_sticks
@@ -689,9 +692,37 @@ def run_console_cmd(cli: Client, line: str):
         elif c == "rthalt":
             d.set_rth_altitude(int(args[0])); cli.msg(f"RTH alt {args[0]} m")
         elif c in ("fmode", "flightmode"):
-            d.set_flight_mode(args[0]); cli.msg(f"flight mode {args[0]} (tilt/speed; verify: rp tilt or watch ground speed)")
+            # Real SoftSwitchMode gear frame now (cmd_set 0x06), not the old tilt write. Verify by
+            # watching MODE in the HUD / `status`: it is derived from the live FLYC_STATE.
+            if not args:
+                cli.msg(f"usage: fmode cine|normal|sport  (current: "
+                        f"{cli.tele.state.user_mode.value if cli.tele.state.user_mode else '—'})")
+            elif flight_mode_from_name(args[0]) is None:
+                cli.msg(f"unknown mode {args[0]!r}; use cine|normal|sport")
+            else:
+                d.set_flight_mode(args[0])
+                cli.msg(f"flight mode {args[0]} -> gear frame 0x06/0x{int(d.soft_switch_cmd_id):02X}"
+                        f" (watch MODE / FLYC_STATE to confirm)")
+        elif c == "detectmode":
+            # Probe the three SoftSwitchMode cmd_id candidates and lock whichever one actually moves
+            # FLYC_STATE. Blocking but bounded (~7 s worst case); safe on --sim, and on hardware it
+            # only toggles Normal/Sport gears — never takeoff/land/RTH.
+            cli.msg("detecting flight-mode cmd_id (probing 0x06/0x11/0x19)...")
+            auto_detect_mode_cmd_id(d, cli.tele, log=cli.msg)
+        elif c == "smid":
+            # Manual override for the same choice, for hardware bring-up: `smid 0x19`.
+            if not args:
+                cli.msg(f"flight-mode cmd_id = 0x{int(d.soft_switch_cmd_id):02X}"
+                        f" (candidates: {', '.join(f'0x{int(c_):02X}' for c_ in SoftSwitchCmdId)})")
+            else:
+                d.set_soft_switch_cmd_id(int(args[0], 0))
+                cli.msg(f"flight-mode cmd_id = 0x{int(d.soft_switch_cmd_id):02X}")
         elif c in ("hspeed", "speed"):
-            d.set_horizontal_speed(float(args[0])); cli.msg(f"horiz speed ~{args[0]} m/s (via tilt angle)")
+            if not args:
+                cli.msg("usage: hspeed <m/s>")
+            else:
+                d.set_horizontal_speed(float(args[0]))
+                cli.msg(f"horiz speed ~{args[0]} m/s (Normal-block tilt angle; not a mode change)")
         elif c == "photo": d.take_photo(); cli.msg("photo")
         elif c == "rec": (d.start_record() if args and args[0] == "start" else d.stop_record()); cli.msg("rec " + (args[0] if args else ""))
         elif c == "zoom": d.set_zoom(float(args[0])); cli.msg(f"zoom {args[0]}x")
@@ -740,7 +771,7 @@ def run_console_cmd(cli: Client, line: str):
                 cli.msg("fetchmedia: done — liveview restored, check media_downloads/ + [media] log")
             _t.Thread(target=_sweep, daemon=True).start()
         elif c == "help":
-            cli.msg("takeoff land rth control on|off gs on|off gps sats home status|here|<lat> <lon> setalt <m> setdist <m> rthalt <m> rp height|radius gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> fetchmedia <from> <to> [delay] raw <set> <id> <hex> [recv]")
+            cli.msg("takeoff land rth control on|off gs on|off gps sats home status|here|<lat> <lon> setalt <m> setdist <m> rthalt <m> fmode cine|normal|sport detectmode smid <id> hspeed <m/s> rp height|radius gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> fetchmedia <from> <to> [delay] raw <set> <id> <hex> [recv]")
         else:
             cli.msg(f"unknown command: {c} (help)")
     except Exception as e:
@@ -787,7 +818,11 @@ class SettingsPanel:
         d = cli.d
         self.w = [
             _W("choice", "Flight mode", lambda v: self._try(lambda: d.set_flight_mode(v), f"mode {v}"),
-               opts=["normal", "cinema", "sport"]),
+               opts=["normal", "cine", "sport"]),
+            _W("button", "Detect mode cmd_id",
+               lambda v: self._try(lambda: threading.Thread(
+                   target=lambda: auto_detect_mode_cmd_id(d, cli.tele, log=cli.msg),
+                   daemon=True).start(), "probing flight-mode cmd_id (~7 s)")),
             _W("slider", "Max altitude (m)", lambda v: self._try(lambda: (d.set_max_altitude(v), d.read_param("g_config.flying_limit.max_height_0")), f"max alt {v} m"),
                lo=15, hi=500, step=5, val=120),
             _W("slider", "Max distance (m)", lambda v: self._try(lambda: (d.set_max_distance(v), d.read_param("g_config.flying_limit.max_radius_0")), f"max dist {v} m"),
@@ -1316,7 +1351,11 @@ def _draw_flight_hud(screen, cli):
     cell(c1, "FLY TIME", _ft)
     y += 40
     cell(c0, "SATS · GPS", f"{st.satellites if st.satellites is not None else '—'} · {st.gps_level if st.gps_level is not None else '—'}")
-    cell(c1, "MODE", st.flight_mode_name or "—")
+    # MODE: the sticky DERIVED user mode (the flight block the pilot selected) is the primary
+    # value; the raw FLYC_STATE name sits beside it, so a transient state (Joystick during virtual
+    # sticks, AutoTakeoff, GoHome, ...) stays visible for diagnosis while the headline holds steady.
+    _um = st.user_mode.value if st.user_mode else "—"
+    cell(c1, "MODE", f"{_um}  ({st.flight_mode_name})" if st.flight_mode_name else _um)
     y += 40
     # Aircraft GPS position (drone_lat/lon from OSD 0x43) + home-set flag (coordinate
     # readback for home was dropped — never worked on WM160; only "recorded yes/no" is shown).
