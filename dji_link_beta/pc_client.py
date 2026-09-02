@@ -39,7 +39,7 @@ import threading
 import time
 
 from duml import DumlPacket, DumlStream
-from flight_mode import SoftSwitchCmdId, flight_mode_from_name
+from flight_mode import SoftSwitchCmdId, flight_mode_from_name, soft_switch_cmd_id_from
 from soft_switch_detect import auto_detect_mode_cmd_id
 from drone import Drone, DEV_FC, DEV_CAMERA, DEV_GIMBAL
 from telemetry import Telemetry
@@ -638,7 +638,12 @@ def run_console_cmd(cli: Client, line: str):
                 cli.msg(f"param read sweep done ({len(_sel)} names) -> params_table.txt")
             _t.Thread(target=_dump, daemon=True).start()
             cli.msg(f"reading {len(_sel)} params by hash (start={start}); valid ones reply multi-byte")
-        elif c in ("readparam", "rp", "param") and args:
+        elif c in ("readparam", "rp", "param") and not args:
+            cli.msg("usage: rp <name|height|radius|tilt|speed|gpsenable|novice>")
+        elif c in ("readparam", "rp", "param"):
+            # tilt and speed are the same parameter on purpose: both read the Normal block's tilt
+            # limit, i.e. the horizontal speed cap that `hspeed` writes. It says nothing about the
+            # active flight mode — that comes from FLYC_STATE (see MODE in the HUD / `status`).
             aliases = {"height": "g_config.flying_limit.max_height_0",
                        "radius": "g_config.flying_limit.max_radius_0",
                        "tilt": "g_config.mode_normal_cfg.tilt_atti_range_0",
@@ -714,12 +719,14 @@ def run_console_cmd(cli: Client, line: str):
             if not args:
                 cli.msg(f"flight-mode cmd_id = 0x{int(d.soft_switch_cmd_id):02X}"
                         f" (candidates: {', '.join(f'0x{int(c_):02X}' for c_ in SoftSwitchCmdId)})")
+            elif soft_switch_cmd_id_from(int(args[0], 0)) is None:
+                cli.msg(f"unknown cmd_id {args[0]} (usage: smid 0x06|0x11|0x19)")
             else:
                 d.set_soft_switch_cmd_id(int(args[0], 0))
                 cli.msg(f"flight-mode cmd_id = 0x{int(d.soft_switch_cmd_id):02X}")
         elif c in ("hspeed", "speed"):
             if not args:
-                cli.msg("usage: hspeed <m/s>")
+                cli.msg("usage: hspeed <m/s> (Normal-block tilt limit, not a mode change)")
             else:
                 d.set_horizontal_speed(float(args[0]))
                 cli.msg(f"horiz speed ~{args[0]} m/s (Normal-block tilt angle; not a mode change)")
@@ -771,7 +778,7 @@ def run_console_cmd(cli: Client, line: str):
                 cli.msg("fetchmedia: done — liveview restored, check media_downloads/ + [media] log")
             _t.Thread(target=_sweep, daemon=True).start()
         elif c == "help":
-            cli.msg("takeoff land rth control on|off gs on|off gps sats home status|here|<lat> <lon> setalt <m> setdist <m> rthalt <m> fmode cine|normal|sport detectmode smid <id> hspeed <m/s> rp height|radius gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> fetchmedia <from> <to> [delay] raw <set> <id> <hex> [recv]")
+            cli.msg("takeoff land rth control on|off gs on|off gps sats home status|here|<lat> <lon> setalt <m> setdist <m> rthalt <m> fmode cine|normal|sport detectmode smid 0x06|0x11|0x19 hspeed <m/s> rp height|radius|tilt|speed gimbal <deg>|speed <dps> recenter photo rec start|stop zoom <x> mode photo|video iso ev videofmt <r> <f> fetchmedia <from> <to> [delay] raw <set> <id> <hex> [recv]")
         else:
             cli.msg(f"unknown command: {c} (help)")
     except Exception as e:

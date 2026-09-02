@@ -121,6 +121,18 @@ RC_CMD_SET = 0x06    # RC-component command set
 RC_RECEIVER = 0x06   # RC device DUML address (drone.py's DEV_RC was 0x02 = the app; fixed)
 
 
+def soft_switch_cmd_id_from(value: int) -> SoftSwitchCmdId | None:
+    """Validate a raw byte as one of the three candidates, or None.
+
+    Mirrors the C++ soft_switch_cmd_id_from(): a typo in `smid` must never latch an arbitrary
+    cmd_id onto the control path, where it would go out to the RC as an unknown command.
+    """
+    try:
+        return SoftSwitchCmdId(value)
+    except ValueError:
+        return None
+
+
 def soft_switch_payload(gear: RcSoftSwitchMode) -> bytes:
     """Payload: the wire value as one little-endian u32 (value is 0..2, so signedness is moot)."""
     return struct.pack("<I", soft_switch_wire_value(gear))

@@ -34,10 +34,13 @@ discovery:    netfind.py     find the Pi on the LAN or join its access point
 | `duml.py` | DUML frame encode/decode, verified against real frames |
 | `composite.py` | AOA composite mux demux/wrap |
 | `telemetry.py` | decode the FC state push into readable fields |
+| `flight_mode.py` | flight-mode model + the SoftSwitchMode gear frame (mode is an RC gear choice, not an FC parameter) |
+| `soft_switch_detect.py` | probe the three candidate SoftSwitchMode cmd_ids and lock the one that really moves `FLYC_STATE` |
 | `diag_codes.py` / `diag_codes_full.py` | fault-code names and 743 diagnostic-code texts |
 | `control.py` | map held keys to stick axes |
 | `transport.py` | swappable transports |
 | `netfind.py` | PC-side Pi discovery |
+| `test_flight_mode.py` | `python3 test_flight_mode.py` — checks the whole flight-mode path (model, gear frame, `Drone`, derived mode, sim, cmd_id detection) with no hardware |
 | `flyc_param_infos.json` | 687 flight-controller parameters (limits, gains) |
 | `pi/` | code that runs on the Pi (see `pi/README.md`) |
 | `reverse_docs/` | the reverse-engineering write-ups |
