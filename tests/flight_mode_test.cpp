@@ -101,6 +101,23 @@ int main() {
             require(decoded->payload == pkt.payload, "round-trip payload");
         }
 
+        // The exact frames printed in reverse_docs/FLIGHT_MODE_SOFTSWITCH_2026.md section 2. That
+        // document is what the owner takes to the aircraft (and what a capture is compared
+        // against), so the bytes are pinned here: a change in field order, cmd_type, payload width
+        // or CRC would leave the doc quietly lying. seq=1, sender 0x02, cmd_id 0x06.
+        struct DocumentedFrame {
+            RcSoftSwitchMode gear;
+            const char* hex;
+        };
+        for (const DocumentedFrame& f :
+             {DocumentedFrame{RcSoftSwitchMode::Position, "551104920206010040060601000000fdd8"},
+              DocumentedFrame{RcSoftSwitchMode::Sport, "55110492020601004006060000000046c4"},
+              DocumentedFrame{RcSoftSwitchMode::Tripod, "55110492020601004006060200000030fd"}}) {
+            const Bytes frame =
+                make_soft_switch_packet(f.gear, SoftSwitchCmdId::SetMachineMode, 0x02, 1).encode();
+            require(to_hex(frame) == f.hex, "documented frame bytes");
+        }
+
         // A non-Sport gear travels through encode->decode with its (non-zero) payload intact,
         // so the round-trip above is not just exercising the all-zero Sport buffer.
         const DumlPacket normal_pkt = make_soft_switch_packet(

@@ -60,3 +60,7 @@ an I-frame request (`0x02/0xB3`) on connect and re-injects cached VPS/SPS/PPS.
 `reverse_docs/` — `MASTER_REPORT.md` (overview), `FLIGHT_GATING.md` (what's needed to fly:
 login, calibration, modes, home point, limits, virtual stick), `ERROR_CODES.md`,
 `TELEMETRY_TABLE.txt`, and the command tables.
+
+Flight mode specifically: `FLIGHT_MODE_SOFTSWITCH_2026.md` (the mechanism as implemented — mode is
+an RC gear frame on cmd_set `0x06`, read back from `FLYC_STATE`) and `FLIGHT_MODE_HW_CHECKLIST.md`
+(the on-drone procedure for the parts only hardware can answer).

@@ -4,14 +4,25 @@ Dedicated reverse pass, 2026-07-18. Ground truth = `dji-sdk-provided-4.18.jar`
 (`scratchpad/msdk/all/`), the WM160 live param table (`PARAM_TABLE_WM160.md`, 132 params
 that actually answer on this airframe), and `flyc_param_infos.json` (dji-firmware-tools).
 
+> **★ Update 2026-09-05 — the mode-switch half of this document is SUPERSEDED by
+> `FLIGHT_MODE_SOFTSWITCH_2026.md`.** Flight mode *is* switchable from the app: the gear channel is
+> driven by the RC-component key `RemoteController/SoftSwitchMode` (cmd_set `0x06`, receiver `0x06`,
+> plaintext, payload = u32 LE gear value), which this repo now implements and confirms via
+> `FLYC_STATE`. What stays true below: there is no *FLYC* (`0x03`) mode setter, the modes are
+> pre-stored config blocks, and — the reason to keep this file — **max horizontal speed** is
+> `mode_normal_cfg.tilt_atti_range_0`. Treat every "we cannot switch, so rewrite the Normal block"
+> conclusion as history; the tilt param is a **speed** setting only.
+
 --------------------------------------------------------------------------------
 ## TL;DR — what to implement
 
-**There is NO single "set flight mode" DUML command on the Mavic Mini.** Cine / Normal /
+**There is NO "set flight mode" command in the FLYC (`0x03`) command set.** Cine / Normal /
 Sport are three flight-controller **parameter presets**, selected on a normal aircraft by
-the RC's *gear channel* (`COMMAND_GEAR` → `g_config.control.control_mode[0..2]`). We do not
-transmit a gear channel (our float joystick `0x03/0x8E` carries no gear), so the FC runs the
-**Normal preset** and the only reliable lever we have is to **write the preset params directly**.
+the RC's *gear channel* (`COMMAND_GEAR` → `g_config.control.control_mode[0..2]`). Our float
+joystick `0x03/0x8E` carries no gear field — but the gear can be driven directly on the **RC**
+command set (`0x06`), which is what `FLIGHT_MODE_SOFTSWITCH_2026.md` documents and the code now
+does. Rewriting the preset params, described below, is therefore the **speed** lever, not a mode
+switch.
 
 **Max horizontal speed on WM160 is set by the max lean/attitude angle** — the param
 `tilt_atti_range` (degrees). There is **no dedicated horizontal-velocity (m/s) limit param on
@@ -54,8 +65,10 @@ Switching mode does **not** rewrite these blocks at runtime — the RC/app just 
 (mapped from `COMMAND_GEAR`, mapper hash `0x2dba613c`; live gear value in
 `g_real.input.channel[COMMAND_GEAR]`). A drone with a physical 3-position switch drives the gear
 channel from the RC; the **switchless Mini emulates the same channel in software** when you tap
-P/S/C in DJI Fly. There is **no public SDK/DUML "set gear" opcode** — cross-checked and confirmed
-(even Litchi/MSDK cannot set mode programmatically). *Cross-check confirms our live capture: on
+P/S/C in DJI Fly. *(Corrected 2026-09-05: that software gear is reachable — DJI Fly's
+`RemoteController/SoftSwitchMode` key goes out on the RC command set `0x06`. The claim below that
+no "set gear" opcode exists holds only for the **public MSDK/FLYC** surface, which is why Litchi
+cannot do it.)* *Cross-check confirms our live capture: on
 WM160 `control_mode[0/1/2]` = 12 / 8 / 7 exactly (444A49/minifindings Mini dump).*
 
 Because we never inject a gear channel (our float joystick `0x03/0x8E` has no gear field), the FC
@@ -130,13 +143,21 @@ to these; RO params silently drop the write. Write mechanics, hashing (gbk, `h=(
    `DataOsdGetPushCommon.getModeChannel()` → `RcModeChannel` = CHANNEL_MANUAL/A/P/NAV/FPV/FARM/
    S/F/M/G/T. This mirrors the **RC gear channel**, which we do not drive, so it will keep
    reading its default (e.g. CHANNEL_P) even after we change speed. Confirm via (1)+(2), not the
-   mode channel. `flyc_state` in OSD (`@0x1e & 0x7F`) is the *flying* state, not the user gear —
-   also not a mode-change confirmation. Citations:
+   mode channel. `flyc_state` in OSD (`@0x1e & 0x7F`) is the *flying* state, not the user gear, so
+   it does not confirm a **tilt/speed** write either. *(2026-09-05: it IS the confirmation for a
+   real gear switch — Sport 31 / Cinematic 19 / Tripod 38 — see `FLIGHT_MODE_SOFTSWITCH_2026.md`
+   §3. The point that stands here is narrower: a tilt param write leaves `flyc_state` unchanged.)*
+   Citations:
    `all/dji/midware/data/model/P3/DataOsdGetPushCommon.class` (`getModeChannel`, `getFlycState`),
    `all/dji/midware/data/model/P3/DataOsdGetPushCommon$RcModeChannel.class`.
 
 --------------------------------------------------------------------------------
-## 4) Exact drone.py replacement
+## 4) Exact drone.py replacement — HISTORY (do not re-apply the mode part)
+
+> **Superseded 2026-09-05.** `set_flight_mode()` now sends the SoftSwitchMode gear frame
+> (`FLIGHT_MODE_SOFTSWITCH_2026.md`); the `_MODE_TILT` table below would silently turn a mode
+> switch back into a speed change. Only `set_max_tilt_angle()` / `set_horizontal_speed()` — the
+> speed half — reflect the shipped code, which keeps mode and speed strictly separate.
 
 Replace the current no-op `set_horizontal_speed()` (writes the absent
 `g_config.control.horiz_vel_atti_range_0`) and the `NotImplementedError` `set_flight_mode()`:
