@@ -17,7 +17,14 @@ selects. List records, transfer completion/ACK behavior, and delete remain captu
 These supersede earlier guesses where they disagree — the jar is DJI's own un-obfuscated DUML layer.
 - **`VIRTUAL_STICK_RESEARCH_2026.md`** — controlled flight SOLVED: `0x03/0x8E` DataFlycJoystick (17-byte
   float payload, flag byte, WM160 pitch/roll + yaw/throttle swaps), authority via `0x03/0x80` (open=1/close=2).
-- **`FLIGHT_MODE_SPEED_RESEARCH_2026.md`** — Cine/Normal/Sport + speed via `mode_normal_cfg.tilt_atti_range_0`.
+- **`FLIGHT_MODE_SOFTSWITCH_2026.md`** — ★ flight mode IS switchable: the mode is an RC **gear**
+  choice, sent as `0x06/<cmd_id>` to receiver `0x06` (payload = u32 LE gear, SPORT=0/POSITION=1/TRIPOD=2,
+  plaintext, sender `0x02`), confirmed by `FLYC_STATE` (31 Sport / 19 Cine / 38 Tripod), with three
+  candidate cmd_ids and an auto-detector. Supersedes the "cannot switch" verdict below.
+- **`FLIGHT_MODE_HW_CHECKLIST.md`** — ★ the on-drone procedure that settles the remaining unknowns
+  (winning cmd_id, FLYC_STATE per mode, Cine↔Tripod, gating, virtual sticks).
+- **`FLIGHT_MODE_SPEED_RESEARCH_2026.md`** — max horizontal speed via `mode_normal_cfg.tilt_atti_range_0`
+  (still authoritative for *speed*); its mode-switch section is superseded by `FLIGHT_MODE_SOFTSWITCH_2026.md`.
 - **`HOME_POINT_RESEARCH_2026_v2.md`** — ★ latest. SET home = `0x03/0x31` 18B, type+LAT+LON (HOMETYPE
   APP=2/AIRCRAFT=0, MSDK-confirmed). NOTE: home-coordinate READBACK (`DataOsdGetPushHome` 0x44 lat/lon) was
   DROPPED in code — never read reliably on WM160; only the home-recorded flag (u16@0x14 bit0) is kept → HUD
@@ -53,6 +60,7 @@ These supersede earlier guesses where they disagree — the jar is DJI's own un-
 - **`VIRTUAL_STICK_NATIVE.md`** — ★ byte-perfect `0x01/0x0A` VirtualJoyStickHelper payload from `libsdk_jni.so`, channel order, preconditions.
 - **`MSDK_FLIGHT_UNLOCK.md`**, **`MSDK_FULL_REFERENCE.md`**, **`MSDK_MEDIA_SEQUENCE.md`** — DJI MSDK (4.13) reference: virtual-stick/flight-control API, KeyManager, media sequence, mapped to our DUML.
 - **`TAKEOFF_UNLOCK.md`** — every motor-start / takeoff gate and how each clears.
+- **`FLIGHT_MODE_HW_CHECKLIST.md`** — ground checks + flight steps for the mode switch (novice off, GPS fix, `gear_cfg.*`).
 - **`DARK_NOGPS_TRUTH.md`** — verified: dark/no-GPS takeoff IS unlockable — write FC param `fc_dark_need_gps_0 = 0` (takes off in ATTI, drifts).
 - **`INTELLIGENT_AND_PARAMS.md`** — QuickShots/IOC/panorama + the param name→hash path.
 - **`CAMERA_AND_NOGPS.md`** — camera exposure enums (ISO/EV/mode), gimbal recenter.

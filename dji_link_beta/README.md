@@ -34,10 +34,13 @@ discovery:    netfind.py     find the Pi on the LAN or join its access point
 | `duml.py` | DUML frame encode/decode, verified against real frames |
 | `composite.py` | AOA composite mux demux/wrap |
 | `telemetry.py` | decode the FC state push into readable fields |
+| `flight_mode.py` | flight-mode model + the SoftSwitchMode gear frame (mode is an RC gear choice, not an FC parameter) |
+| `soft_switch_detect.py` | probe the three candidate SoftSwitchMode cmd_ids and lock the one that really moves `FLYC_STATE` |
 | `diag_codes.py` / `diag_codes_full.py` | fault-code names and 743 diagnostic-code texts |
 | `control.py` | map held keys to stick axes |
 | `transport.py` | swappable transports |
 | `netfind.py` | PC-side Pi discovery |
+| `test_flight_mode.py` | `python3 test_flight_mode.py` — checks the whole flight-mode path (model, gear frame, `Drone`, derived mode, sim, cmd_id detection) with no hardware |
 | `flyc_param_infos.json` | 687 flight-controller parameters (limits, gains) |
 | `pi/` | code that runs on the Pi (see `pi/README.md`) |
 | `reverse_docs/` | the reverse-engineering write-ups |
@@ -57,3 +60,7 @@ an I-frame request (`0x02/0xB3`) on connect and re-injects cached VPS/SPS/PPS.
 `reverse_docs/` — `MASTER_REPORT.md` (overview), `FLIGHT_GATING.md` (what's needed to fly:
 login, calibration, modes, home point, limits, virtual stick), `ERROR_CODES.md`,
 `TELEMETRY_TABLE.txt`, and the command tables.
+
+Flight mode specifically: `FLIGHT_MODE_SOFTSWITCH_2026.md` (the mechanism as implemented — mode is
+an RC gear frame on cmd_set `0x06`, read back from `FLYC_STATE`) and `FLIGHT_MODE_HW_CHECKLIST.md`
+(the on-drone procedure for the parts only hardware can answer).

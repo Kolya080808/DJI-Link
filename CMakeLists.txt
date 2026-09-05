@@ -53,6 +53,8 @@ add_library(djilink_core STATIC
     src/core/diag_codes.cpp
     src/core/diag_codes_full.cpp
     src/core/transport.cpp
+    src/core/flight_mode.cpp
+    src/core/soft_switch_detect.cpp
     src/core/drone.cpp
     src/core/applog.cpp
     src/core/netfind.cpp
@@ -150,12 +152,30 @@ endif()
 # Skipped when this project is consumed as a subproject.
 if(PROJECT_IS_TOP_LEVEL)
     enable_testing()
+    add_executable(flight_mode_test tests/flight_mode_test.cpp)
+    target_link_libraries(flight_mode_test PRIVATE djilink_core)
+    add_test(NAME flight_mode COMMAND flight_mode_test)
     add_executable(netctl_parse_test tests/netctl_parse_test.cpp)
     target_link_libraries(netctl_parse_test PRIVATE djilink_core)
     add_test(NAME netctl_parse COMMAND netctl_parse_test)
     add_executable(home_rth_test tests/home_rth_test.cpp)
     target_link_libraries(home_rth_test PRIVATE djilink_core)
     add_test(NAME home_rth COMMAND home_rth_test)
+    add_executable(derived_flight_mode_test tests/derived_flight_mode_test.cpp)
+    target_link_libraries(derived_flight_mode_test PRIVATE djilink_core)
+    add_test(NAME derived_flight_mode COMMAND derived_flight_mode_test)
+    add_executable(set_flight_mode_send_test tests/set_flight_mode_send_test.cpp)
+    target_link_libraries(set_flight_mode_send_test PRIVATE djilink_core)
+    add_test(NAME set_flight_mode_send COMMAND set_flight_mode_send_test)
+    add_executable(sim_flight_mode_test tests/sim_flight_mode_test.cpp)
+    target_link_libraries(sim_flight_mode_test PRIVATE djilink_core)
+    add_test(NAME sim_flight_mode COMMAND sim_flight_mode_test)
+    add_executable(soft_switch_detect_test tests/soft_switch_detect_test.cpp)
+    target_link_libraries(soft_switch_detect_test PRIVATE djilink_core)
+    add_test(NAME soft_switch_detect COMMAND soft_switch_detect_test)
+    add_executable(console_mode_cmds_test tests/console_mode_cmds_test.cpp)
+    target_link_libraries(console_mode_cmds_test PRIVATE djilink_core)
+    add_test(NAME console_mode_cmds COMMAND console_mode_cmds_test)
 endif()
 
 # Release-time ffmpeg bundle. The release workflow sets these paths after preparing

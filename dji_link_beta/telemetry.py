@@ -11,6 +11,7 @@ Usage: DumlStream -> DumlPacket -> feed_packet(pkt) -> updates OsdState.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
+from enum import Enum
 import math
 import struct
 
@@ -60,6 +61,55 @@ FLYC_STATE = {
     50: "POI_WITH_VISION", 51: "SMART_TRACK", 52: "LOST_POWER_FORCE_LANDING", 100: "OTHER",
 }
 
+
+class DerivedFlightMode(Enum):
+    """The user-facing mode we DERIVE from the live FLYC_STATE byte.
+
+    Distinct from FlightMode (flight_mode.py), which is what the user ASKS for: the firmware
+    reports Tripod (38) separately from Cinematic (19) and the Cine<->Tripod equivalence is
+    still an on-hardware open question, so folding 38 into Cine here would bake in a guess.
+    The value is the HUD label.
+    """
+
+    NORMAL = "Normal"
+    SPORT = "Sport"
+    CINE = "Cine"
+    TRIPOD = "Tripod"
+
+
+# FLYC_STATE -> the user mode it implies. Absent code = transient/action state (Manual,
+# AutoTakeoff, AutoLanding, GoHome, Joystick, QuickShot, Pano, GPS_HotPoint, ...) during which
+# the user's selected mode is unchanged, so the caller must keep the previous value.
+_DERIVED_BY_STATE = {
+    31: DerivedFlightMode.SPORT,    # SPORT
+    19: DerivedFlightMode.CINE,     # Cinematic
+    38: DerivedFlightMode.TRIPOD,   # TRIPOD_GPS — kept distinct from Cine until confirmed on HW
+    # Ordinary controlled flight: GPS position hold, its Atti/Hover degradations and the Novice
+    # variant. Decisive (not transient) states, so they resolve the mode. Consequence to flag on
+    # the hardware checklist: losing GPS drops Sport/Cine into Atti, so the HUD then reads Normal
+    # by design — the stickiness below guards against transient ACTIONS, not a real block change.
+    1: DerivedFlightMode.NORMAL,    # Atti
+    2: DerivedFlightMode.NORMAL,    # Atti_CL
+    3: DerivedFlightMode.NORMAL,    # Atti_Hover
+    4: DerivedFlightMode.NORMAL,    # Hover
+    5: DerivedFlightMode.NORMAL,    # GPS_Blake
+    6: DerivedFlightMode.NORMAL,    # GPS_Atti
+    7: DerivedFlightMode.NORMAL,    # GPS_CL
+    8: DerivedFlightMode.NORMAL,    # GPS_HomeLock
+    23: DerivedFlightMode.NORMAL,   # Atti_Limited
+    32: DerivedFlightMode.NORMAL,   # NOVICE — position hold with beginner limits
+}
+
+
+def derived_user_mode(flyc_state: int | None) -> DerivedFlightMode | None:
+    """Map a raw FLYC_STATE code to the user mode it implies, or None for a transient state."""
+    return _DERIVED_BY_STATE.get(flyc_state) if flyc_state is not None else None
+
+
+def derived_flight_mode_name(mode: DerivedFlightMode) -> str:
+    """Human-readable HUD label ("Normal"/"Sport"/"Cine"/"Tripod")."""
+    return mode.value
+
 # Motor start failure cause (payload +0x33) — standard DJI enum (low codes)
 # The motor-failure cause is decoded by diag_codes.motor_fail_text, which walks the whole
 # chain (name -> DiagnosticCode -> code text) from the tables reversed out of libsdk_jni.
@@ -86,6 +136,11 @@ class OsdState:
     yaw: float | None = None
     flight_mode: int | None = None
     flight_mode_name: str | None = None
+    # Sticky user mode derived from FLYC_STATE: a decisive state overwrites it, a transient
+    # ACTION (takeoff/land/RTH/joystick/QuickShot) leaves it, so the HUD does not flicker
+    # mid-manoeuvre. Sticky against actions, not against a real block change. Not reset on
+    # land/disarm; None until the first decisive state.
+    user_mode: DerivedFlightMode | None = None
     is_flying: bool | None = None
     motors_on: bool | None = None
     ctrl_device: int | None = None      # SDKCtrlDevice: 1=APP => FC accepted our sticks
@@ -113,8 +168,9 @@ class OsdState:
 
     def summary(self) -> str:
         m = self.flight_mode_name or self.flight_mode
+        um = self.user_mode.value if self.user_mode else "—"
         parts = [
-            f"mode={m}",
+            f"mode={um}", f"flyc={m}",
             f"satellites={self.satellites}", f"gps={self.gps_level}",
             f"pos={None if self.drone_lat is None else f'{self.drone_lat:.6f},{self.drone_lon:.6f}'}",
             f"battery={self.battery_pct}%",
@@ -233,6 +289,10 @@ class Telemetry:
         if mode is not None:
             st.flight_mode = mode & 0x7F
             st.flight_mode_name = FLYC_STATE.get(st.flight_mode, f"?{st.flight_mode}")
+            # Keep-last: only a decisive FLYC_STATE overwrites the sticky user mode.
+            derived = derived_user_mode(st.flight_mode)
+            if derived is not None:
+                st.user_mode = derived
         w = u32(p, 0x20)
         if w is not None:
             st.is_flying = ((w >> 1) & 3) == 2   # groundOrSky==2 = flying (DataOsdGetPushCommon)

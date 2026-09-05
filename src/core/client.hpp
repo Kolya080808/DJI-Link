@@ -22,6 +22,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 
@@ -50,6 +51,17 @@ public:
     bool live() const {
         return live_;
     }
+
+    // Auto-detect which SoftSwitchMode cmd_id actually switches this aircraft's flight mode
+    // (roadmap T7). Sends probe switches through each candidate and watches the derived FLYC_STATE
+    // mode (T4) for the expected transition; the winner is locked on the Drone for the rest of the
+    // session (Drone::set_soft_switch_cmd_id) and returned, or nullopt if none of the candidates
+    // moved the mode. Blocking — it polls telemetry between sends, so call it off the render/sender
+    // threads (the console runs it from run_console_cmd). Sets its own HUD message with the result.
+    // Safe on --sim; on real hardware it only toggles Normal/Sport, never a takeoff/land/RTH or any
+    // geofence change. Needs a telemetry feed to observe (works on --sim, since the sim now streams
+    // FLYC_STATE — roadmap T6).
+    std::optional<SoftSwitchCmdId> auto_detect_mode_cmd_id();
 
     // flags shared with the UI (atomics: touched from UI + sender threads)
     std::atomic<bool> armed{false};

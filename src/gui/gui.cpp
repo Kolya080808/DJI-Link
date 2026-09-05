@@ -3,7 +3,9 @@
 #include "core/applog.hpp"
 #include "core/client.hpp"
 #include "core/ffmpeg.hpp"
+#include "core/flight_mode.hpp"
 #include "core/netfind.hpp"
+#include "core/telemetry.hpp"
 #include "core/transport.hpp"
 #include "core/updater.hpp"
 
@@ -1668,15 +1670,35 @@ struct Settings {
                                              : "shutter 1/" + std::to_string(shutters[shutter_i]));
             });
 
-        b.push_back({{p.x + 26, y + 8, 190, 42}, "Flight normal", false, true, [&] {
-                         call(cli, [&] { cli.drone().set_flight_mode("normal"); }, "mode normal");
-                     }});
-        b.push_back({{p.x + 226, y + 8, 190, 42}, "Flight cinema", false, true, [&] {
-                         call(cli, [&] { cli.drone().set_flight_mode("cinema"); }, "mode cinema");
-                     }});
-        b.push_back({{p.x + 426, y + 8, 190, 42}, "Flight sport", false, true, [&] {
-                         call(cli, [&] { cli.drone().set_flight_mode("sport"); }, "mode sport");
-                     }});
+        // Highlight the button matching the mode the FC currently reports (T4's sticky user_mode),
+        // and send the typed FlightMode API (T3) instead of a string. Tripod (no button) lights
+        // none. Reading state() unlocked matches draw_hud below — a torn read only mis-tints a
+        // frame.
+        const auto cur_mode = cli.tele().state().user_mode;
+        b.push_back(
+            {{p.x + 26, y + 8, 190, 42},
+             "Flight normal",
+             cur_mode == DerivedFlightMode::Normal,
+             true,
+             [&] {
+                 call(cli, [&] { cli.drone().set_flight_mode(FlightMode::Normal); }, "mode normal");
+             }});
+        b.push_back(
+            {{p.x + 226, y + 8, 190, 42},
+             "Flight cinema",
+             cur_mode == DerivedFlightMode::Cine,
+             true,
+             [&] {
+                 call(cli, [&] { cli.drone().set_flight_mode(FlightMode::Cine); }, "mode cinema");
+             }});
+        b.push_back(
+            {{p.x + 426, y + 8, 190, 42},
+             "Flight sport",
+             cur_mode == DerivedFlightMode::Sport,
+             true,
+             [&] {
+                 call(cli, [&] { cli.drone().set_flight_mode(FlightMode::Sport); }, "mode sport");
+             }});
         y += 58;
         b.push_back({{p.x + 26, y, 190, 42}, "Recenter gimbal", false, true, [&] {
                          call(cli, [&] { cli.drone().gimbal_recenter(); }, "gimbal recenter");
@@ -1824,11 +1846,21 @@ struct Settings {
         };
         std::vector<Click> clicks = {
             {{p.x + 26, y, 190, 42},
-             [&] { call(cli, [&cli] { cli.drone().set_flight_mode("normal"); }, "mode normal"); }},
+             [&] {
+                 call(
+                     cli, [&cli] { cli.drone().set_flight_mode(FlightMode::Normal); },
+                     "mode normal");
+             }},
             {{p.x + 226, y, 190, 42},
-             [&] { call(cli, [&cli] { cli.drone().set_flight_mode("cinema"); }, "mode cinema"); }},
+             [&] {
+                 call(
+                     cli, [&cli] { cli.drone().set_flight_mode(FlightMode::Cine); }, "mode cinema");
+             }},
             {{p.x + 426, y, 190, 42},
-             [&] { call(cli, [&cli] { cli.drone().set_flight_mode("sport"); }, "mode sport"); }},
+             [&] {
+                 call(
+                     cli, [&cli] { cli.drone().set_flight_mode(FlightMode::Sport); }, "mode sport");
+             }},
             {{p.x + 26, y + 58, 190, 42},
              [&] { call(cli, [&cli] { cli.drone().gimbal_recenter(); }, "gimbal recenter"); }},
             {{p.x + 226, y + 58, 190, 42},
@@ -1969,7 +2001,26 @@ void draw_hud(SDL_Renderer* r, Client& cli, int sw, int sh) {
         (st.satellites ? std::to_string(*st.satellites) : std::string("-")) + " / " +
         (st.gps_level ? std::to_string(*st.gps_level) : std::string("-"));
     cell(c0, "SATS / GPS", sats_gps);
-    cell(c1, "MODE", st.flight_mode_name.value_or("-"));
+    // MODE: the DERIVED user mode (roadmap T4/T5) — the flight block the pilot selected — is the
+    // primary value; the raw FLYC_STATE name sits small beside it. This way a transient state
+    // (Joystick during virtual sticks, AutoTakeoff, GoHome, ...) stays visible for diagnosis while
+    // the headline mode holds steady on the sticky user_mode instead of flickering mid-manoeuvre.
+    const std::string user_m =
+        st.user_mode ? derived_flight_mode_name(*st.user_mode) : std::string("-");
+    text(r, c1, y + 4, "MODE", 1, MUTED);
+    text(r, c1, y + 18, user_m, 2, TEXT);
+    if (st.flight_mode_name) {
+        const int raw_x = c1 + text_w(user_m, 2) + 8;
+        // Clip the secondary raw FLYC_STATE name to the card's right edge (rx): the long transient
+        // labels this readout exists to surface (AssistedTakeoff, LOST_POWER_FORCE_LANDING, ...)
+        // would otherwise spill past the card and draw over the video. Names are ASCII, so a
+        // trailing byte-wise trim never splits a glyph.
+        std::string raw = *st.flight_mode_name;
+        while (!raw.empty() && raw_x + text_w(raw, 1) > rx)
+            raw.pop_back();
+        if (!raw.empty())
+            text(r, raw_x, y + 22, raw, 1, MUTED);
+    }
     y += 42;
 
     // home + limits + hint
