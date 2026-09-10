@@ -689,7 +689,10 @@ def run_console_cmd(cli: Client, line: str):
         elif c == "rthalt":
             d.set_rth_altitude(int(args[0])); cli.msg(f"RTH alt {args[0]} m")
         elif c in ("fmode", "flightmode"):
-            d.set_flight_mode(args[0]); cli.msg(f"flight mode {args[0]} (tilt/speed; verify: rp tilt or watch ground speed)")
+            gear = d.flight_mode_gear(args[0])
+            d.set_flight_mode(args[0])
+            cli.msg(f"flight mode {args[0]}: gear={gear}, virtual-RC burst @20Hz "
+                    f"(expect FLYC_STATE {d.GEAR_FLYC_STATE_HINT[gear]})")
         elif c in ("hspeed", "speed"):
             d.set_horizontal_speed(float(args[0])); cli.msg(f"horiz speed ~{args[0]} m/s (via tilt angle)")
         elif c == "photo": d.take_photo(); cli.msg("photo")

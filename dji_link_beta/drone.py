@@ -60,6 +60,11 @@ class Drone:
         self._seq = 0
         self._tx_lock = threading.Lock()
         self._alive = True
+        # The running set_flight_mode() gear burst (see _gear_burst): one Event per burst,
+        # guarded by its own lock so a newer mode call replaces an older burst cleanly.
+        self._mode_burst_lock = threading.Lock()
+        self._mode_burst_stop: threading.Event | None = None
+        self._mode_burst_thread: threading.Thread | None = None
         self._shutter_denom = None   # last user-set 1/N shutter (None = auto); see set_iso/set_shutter
         self._stream = DumlStream()
         self._rx_thread: threading.Thread | None = None
@@ -103,6 +108,7 @@ class Drone:
     def stop(self) -> None:
         self._alive = False
         self._running = False
+        self.stop_mode_burst()
 
     def _rx_loop(self) -> None:
         while self._running:
@@ -277,18 +283,73 @@ class Drone:
         import struct as _s
         self._cmd(0x03, 0xF8, _s.pack("<I", param_hash(name)), receiver=DEV_FC)
 
-    # Cine/Normal/Sport on WM160 are NOT a DUML mode command — the FC picks a pre-stored
-    # block via the RC GEAR channel, which the float joystick 0x03/0x8E has no slot for. So
-    # we EMULATE the gears by writing the active (Normal) block's max lean angle = the speed
-    # cap. tilt higher -> faster. Param persists (RW+EE); write 20 to restore stock Normal.
-    FLIGHT_MODE_TILT = {"cine": 10.0, "cinema": 10.0, "cinematic": 10.0,
-                        "normal": 20.0, "sport": 30.0, "max": 40.0}
+    # Cine/Normal/Sport on the switchless Mini are the RC GEAR channel the FC samples from
+    # the RC stream (g_config.control.control_mode[0..2] = 12/8/7 maps gear 0/1/2 onto the
+    # pre-stored config blocks). The remote exposes NO app command to set it: the RC160
+    # firmware's app-facing dispatch table has 0x06/0x19 "Set_Mode" stubbed (return -1) and
+    # 0x06/0x06 + 0x06/0x11 not registered at all (apsrv, reverse_docs/
+    # FLIGHT_MODE_VIRTUAL_GEAR_2026.md §2). The gear therefore rides INSIDE the virtual-RC
+    # frame: byte[12] bits 2-3 of the mobile-RC frame (0x01/0x02) — byte-exact both from the
+    # app's DataFlycSetJoyStickParams.doPack (uav.midware, dex classes_0451d00c) and the
+    # native MobileRCHandler::SendCmd ([11..12] u16 LE = 0x0200 | mode<<10), and consistent
+    # with the DJI Fly default stick stream (TLV byte[12]=0x06 == mode 1 = Position).
+    #
+    # Wire values = RcSoftSwitchMode ordinals from the app (uav/sdk/keyvalue, dex 0451):
+    GEAR_SPORT = 0
+    GEAR_NORMAL = 1
+    GEAR_CINE = 2
+    # Gear -> what FLYC_STATE (OSD byte @0x1e) should read once the FC applies the block.
+    GEAR_FLYC_STATE_HINT = {GEAR_SPORT: "SPORT(31)", GEAR_NORMAL: "GPS/Normal codes",
+                            GEAR_CINE: "Cinematic(19) or TRIPOD_GPS(38)"}
+
+    # Emulating a physical switch flip: the FC samples the gear like a real channel, so a
+    # single frame is not enough — repeat the frame (sticks centered, gear = target) at a
+    # RC-like cadence for a bounded burst. Tunables are class attributes so tests can run
+    # the burst without real sleeps.
+    MODE_BURST_FRAMES = 30          # ~1.5 s at 20 Hz
+    MODE_BURST_INTERVAL_S = 0.05
+
+    @staticmethod
+    def flight_mode_gear(name: str) -> int:
+        key = str(name).strip().lower()
+        if key in ("cine", "cinema", "cinematic"):
+            return Drone.GEAR_CINE
+        if key in ("normal", "position"):
+            return Drone.GEAR_NORMAL
+        if key == "sport":
+            return Drone.GEAR_SPORT
+        raise ValueError(f"unknown mode {name!r}; use cine/normal/sport")
 
     def set_flight_mode(self, name: str) -> None:
-        tilt = self.FLIGHT_MODE_TILT.get(str(name).strip().lower())
-        if tilt is None:
-            raise ValueError(f"unknown mode {name!r}; use cine/normal/sport/max")
-        self.set_param("g_config.mode_normal_cfg.tilt_atti_range_0", struct.pack("<f", tilt))
+        """Select Cine/Normal/Sport by driving the RC gear channel (mode_sw) in the
+        virtual-RC stream (0x01/0x02). Non-blocking: a background thread repeats the
+        centered-sticks frame with the target gear (MODE_BURST_FRAMES x
+        MODE_BURST_INTERVAL_S, like flipping the physical switch); a newer call replaces
+        the running burst. This is a MODE switch — max horizontal speed stays a separate
+        setting (set_horizontal_speed / the tilt param), never mixed in here."""
+        gear = self.flight_mode_gear(name)
+        with self._mode_burst_lock:
+            if self._mode_burst_stop is not None:
+                self._mode_burst_stop.set()
+            stop = threading.Event()
+            self._mode_burst_stop = stop
+        t = threading.Thread(target=self._gear_burst, args=(gear, stop), daemon=True)
+        self._mode_burst_thread = t
+        t.start()
+
+    def _gear_burst(self, gear: int, stop: threading.Event) -> None:
+        for _ in range(self.MODE_BURST_FRAMES):
+            if stop.is_set() or not self._alive:
+                return
+            self.set_sticks_mobilerc(0.0, 0.0, 0.0, 0.0, mode=gear)
+            if stop.wait(self.MODE_BURST_INTERVAL_S):
+                return
+
+    def stop_mode_burst(self) -> None:
+        with self._mode_burst_lock:
+            if self._mode_burst_stop is not None:
+                self._mode_burst_stop.set()
+                self._mode_burst_stop = None
 
     # --- home point (DataFlycSetHomePoint 0x03/0x31, 18-byte payload) ---
     # doPack confirmed byte-for-byte from DJI bytecode (HOME_POINT_RESEARCH_2026_v2.md §3):
