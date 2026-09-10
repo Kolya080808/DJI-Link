@@ -101,6 +101,14 @@ NetTransport::NetTransport(const std::string& host, int port) {
     freeaddrinfo(res);
     int one = 1;
     ::setsockopt(s, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&one), sizeof(one));
+#ifndef _WIN32
+    // Commands share the Pi's Wi-Fi hop with the video bulk. Marking this (command)
+    // direction DSCP CS6 moves the 20 Hz frames into the WMM voice queue, so they stop
+    // queuing behind video whenever the hotspot link is contended (see
+    // findings/2026-09-10 — Pi hotspot latency).
+    constexpr int kTosCs6 = 0xC0; // DSCP CS6 (48) << 2
+    ::setsockopt(s, IPPROTO_IP, IP_TOS, reinterpret_cast<const char*>(&kTosCs6), sizeof(kTosCs6));
+#endif
     fd_ = static_cast<std::intptr_t>(s);
 }
 
