@@ -71,19 +71,33 @@ So the three T1–T8 candidate cmd_ids are dead on this hardware: two never reac
 one reaches a handler that ignores the frame. The auto-detector could only ever mis-attribute
 osd noise or a physical-gear move to a candidate.
 
-## 3) What is still hardware-verifiable
+## 3) Bench result (2026-09-11, grounded, no flight) and what is still open
 
-1. **Does the WM160 FC accept 0x01/0x02?** It is the app's own fallback when
-   `IsSupportVirtualJoyStick` is false; on WM160 the primary path is 0x03/0x8E, so the
-   fallback acceptance on this airframe is the one open wire question. A rejected frame is
-   safe (centered sticks, gear = current).
-2. **Gear→block order**: expect 0=Sport, 1=Normal, 2=Cine (RcSoftSwitchMode ordinals +
-   `control_mode[0..2]`=12/8/7), confirm via FLYC_STATE per burst.
-3. **Cine ↔ TRIPOD**: `FLYC_STATE` may read 19 (Cinematic) or 38 (TRIPOD_GPS); both are the
-   gentle block — record which one this airframe reports.
-4. **Burst length**: 30 × 50 ms is the RC-switch emulation window; if the FC debounces the
-   channel longer, raise `MODE_BURST_FRAMES` (the field must persist like a held switch, not
-   a pulse).
+**Observed on the bench.** In the flight UI the top-left HUD "MODE" reads the live
+`FLYC_STATE` (OSD byte @0x1e; `src/core/telemetry.cpp:160`, `dji_link_beta/telemetry.py:232`).
+When the mode is changed **in the DJI Fly app, that HUD value changes** (and the change is
+what our client displays) — so the HUD mode is a live, ground-valid indicator of the real
+mode block. When the mode is changed **by our gear burst (`fmode`), nothing in the HUD
+changes** — the `0x01/0x02` mode_sw frame is not being applied by this FC.
+
+**Interpretation.** The readback side is proven (FLYC_STATE moves when the real mechanism
+moves the block), so the failure is on the send side: either (a) the FC ignores
+`0x01/0x02` without control authority — the documented precondition for the whole
+mobile-RC emulation (`0x49/0x80 [0x01]` first, see `VIRTUAL_STICK_NATIVE.md` §2a) — or
+(b) the mode_sw bits in this frame are not the gear on WM160. The OSD gear readback
+(`[mode] RC gear channel -> …`, OSD dword @0x20 bits 13-14) separates the two: if the
+gear channel never moved during a burst, the frame was rejected outright (case (a) is
+testable: wrap the burst in authority request/release); if it moved while the HUD mode
+stayed, mode_sw carried something else (case (b)).
+
+**Still open (hardware):**
+1. Whether the FC accepts `0x01/0x02` at all on WM160, and with which preconditions
+   (control authority first? motors armed?).
+2. Gear→block order (expect 0=Sport, 1=Normal, 2=Cine per RcSoftSwitchMode ordinals +
+   `control_mode[0..2]`=12/8/7), confirm via FLYC_STATE once a burst is accepted.
+3. Cine ↔ TRIPOD: `FLYC_STATE` 19 (Cinematic) or 38 (TRIPOD_GPS).
+4. Burst length: 30 × 50 ms emulates a held switch; raise `MODE_BURST_FRAMES` if the FC
+   debounces longer.
 
 ### On-drone checklist (props off first)
 
