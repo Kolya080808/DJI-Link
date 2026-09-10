@@ -316,6 +316,47 @@ void arg_parse_error(const char* prog, const char* fmt, ...) {
     std::exit(2);
 }
 
+// ---- Wi-Fi power save -----------------------------------------------------
+// Power save is the dominant latency source on the Pi's AP path: the brcmfmac netdev
+// dozes between beacons, so frames from/to an associated laptop wait for the next wake
+// and every command picks up 100-500 ms spikes. NetworkManager's wifi.powersave=2 only
+// covers NM-managed interfaces; uap0 is deliberately UNMANAGED (setup_pi.sh), and NM
+// re-enables power save on wlan0 at every (re)connection — so this is re-asserted on
+// every client connect, not just once at startup.
+std::vector<std::string> wifi_ifaces() {
+    // Every 802.11 netdev hangs off /sys/class/ieee80211/<phy>/device/net/<iface> —
+    // this catches both wlan0 (station/AP uplink) and uap0 (hostapd AP) without
+    // hardcoding names.
+    std::vector<std::string> names;
+    if (DIR* phy_dir = ::opendir("/sys/class/ieee80211")) {
+        while (dirent* phy = readdir(phy_dir)) {
+            if (phy->d_name[0] == '.')
+                continue;
+            std::string net_path =
+                std::string("/sys/class/ieee80211/") + phy->d_name + "/device/net";
+            if (DIR* net_dir = ::opendir(net_path.c_str())) {
+                while (dirent* e = readdir(net_dir))
+                    if (e->d_name[0] != '.')
+                        names.emplace_back(e->d_name);
+                closedir(net_dir);
+            }
+        }
+        closedir(phy_dir);
+    }
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+void disable_wifi_powersave() {
+    for (const std::string& iface : wifi_ifaces()) {
+        // No user input in the command line, so system() is safe here. iw is part of the
+        // Pi bundle (ap.sh already depends on it); a missing iw just logs a failure.
+        std::string cmd = "iw dev " + iface + " set power_save off 2>&1";
+        int rc = std::system(cmd.c_str());
+        logf("INFO", "wifi", "iw dev %s set power_save off -> rc=%d", iface.c_str(), rc);
+    }
+}
+
 void print_help(const char* prog) {
     std::printf("usage: %s [-h] [--udc UDC] [--udc-driver UDC_DRIVER] [--host HOST]\n"
                 "          [--port PORT] [--model MODEL]\n"
@@ -341,6 +382,9 @@ int main(int argc, char** argv) {
 
     log_open();
     log_starting();
+    // Power save off before the first client: see disable_wifi_powersave() for why this
+    // is the bridge's business and not just ap.sh's.
+    disable_wifi_powersave();
 
     // sigaction WITHOUT SA_RESTART, so accept()/recv() return EINTR when SIGINT/SIGTERM
     // land — otherwise Ctrl-C / systemctl stop hang until the next client packet.
@@ -467,8 +511,12 @@ int main(int argc, char** argv) {
             ::inet_ntop(AF_INET, &peer.sin_addr, ip, sizeof(ip));
             // Python print: f"[bridge] connected {addr}" where addr is ('ip', port)
             print_tee("[bridge] connected ('%s', %u)", ip, ntohs(peer.sin_port));
+            disable_wifi_powersave(); // NM may have re-enabled it on a recent reconnect
             one = 1;
             ::setsockopt(conn, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+            // ACK immediately: a delayed ACK on the Pi side stalls the laptop's command
+            // stream for up to 40 ms per exchange. Not sticky on Linux — best effort.
+            ::setsockopt(conn, IPPROTO_TCP, TCP_QUICKACK, &one, sizeof(one));
 
             std::atomic<bool> stop{false};
             std::thread t(usb_to_tcp, &state, conn, &stop);
