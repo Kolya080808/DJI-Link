@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from duml import DumlPacket
 from drone import Drone
+from telemetry import Telemetry
 
 PASSED = 0
 
@@ -156,11 +157,26 @@ def test_mode_and_speed_are_separate():
         ok(mode_of(payload) == 1, "no gear change from speed writes")
 
 
+def test_mode_channel_parse():
+    """The gear readback the bench test relies on: OSD dword@0x20 bits 13-14 must surface
+    as state.mode_channel (getModeChannel), so a grounded gear check is observable."""
+    tel = Telemetry()
+    payload = bytearray(0x35)          # OSD-common minimum is 0x34
+    payload[0x1e] = 4                  # flyc_state = Hover (typical grounded)
+    w = 0 | (2 << 13)                  # groundOrSky=0, gear=2 (tripod)
+    payload[0x20:0x24] = struct.pack("<I", w)
+    tel.feed_packet(DumlPacket(sender=0x03, receiver=0x02, cmd_set=0x03, cmd_id=0x43,
+                               seq=1, cmd_type=0x00, payload=bytes(payload)))
+    ok(tel.state.mode_channel == 2, "OSD dword@0x20 bits 13-14 parsed as mode_channel")
+    ok(tel.state.flight_mode == 4, "synthetic flyc_state parsed alongside")
+
+
 def main() -> None:
     test_gear_mapping()
     test_frame_layout()
     test_burst_and_replacement()
     test_mode_and_speed_are_separate()
+    test_mode_channel_parse()
     print(f"OK: {PASSED} checks passed (no hardware needed)")
 
 

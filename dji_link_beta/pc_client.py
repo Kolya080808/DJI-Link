@@ -413,7 +413,14 @@ class Client:
                         self._ptable_f.flush()
                     except Exception:
                         pass
+            _gear_before = self.tele.state.mode_channel
             self.tele.feed_packet(p)
+            # Bench signal for set_flight_mode(): the OSD gear channel flipping is the
+            # direct readback that a gear burst was accepted (FLYC_STATE may not move on
+            # the ground). 0=sport, 1=position/normal, 2=tripod/cine (RcSoftSwitchMode).
+            if self.tele.state.mode_channel != _gear_before:
+                log(f"[mode] RC gear channel -> {self.tele.state.mode_channel} "
+                    f"(0=sport, 1=normal, 2=cine)")
             # SAT debug: green LED means GPS-locked, but HUD shows SAT=0 → the sat-count
             # offset (0x24, reverse-guessed) is likely wrong. Log the raw OSD-common push
             # + the parsed values once per second so the true offset can be found offline.

@@ -86,6 +86,7 @@ class OsdState:
     yaw: float | None = None
     flight_mode: int | None = None
     flight_mode_name: str | None = None
+    mode_channel: int | None = None      # RC gear channel: OSD dword@0x20 bits 13-14
     is_flying: bool | None = None
     motors_on: bool | None = None
     ctrl_device: int | None = None      # SDKCtrlDevice: 1=APP => FC accepted our sticks
@@ -115,6 +116,7 @@ class OsdState:
         m = self.flight_mode_name or self.flight_mode
         parts = [
             f"mode={m}",
+            f"gear={self.mode_channel}",
             f"satellites={self.satellites}", f"gps={self.gps_level}",
             f"pos={None if self.drone_lat is None else f'{self.drone_lat:.6f},{self.drone_lon:.6f}'}",
             f"battery={self.battery_pct}%",
@@ -238,6 +240,9 @@ class Telemetry:
             st.is_flying = ((w >> 1) & 3) == 2   # groundOrSky==2 = flying (DataOsdGetPushCommon)
             st.motors_on = bool((w >> 3) & 1)
             st.gps_level = (w >> 18) & 0xF   # getGpsLevel: (u32@0x20 >> 0x12) & 0xF
+            # getModeChannel(): the RC gear the FC currently samples — the direct readback
+            # for set_flight_mode() gear bursts (raw 2-bit value: 0/1/2 as sent).
+            st.mode_channel = (w >> 13) & 3
         sats = u8(p, 0x24)                   # getGpsNum is 1 BYTE @0x24 (the "Short" is boxing,
         if sats is not None: st.satellites = sats   # not width; u16 here inflates when p[0x25]!=0)
         vps = s8(p, 0x29)                    # getSwaveHeight (VPS) is 1 signed BYTE @0x29 (s16 spilled into flyTime)
