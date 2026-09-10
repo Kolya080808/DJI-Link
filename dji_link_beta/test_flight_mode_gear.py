@@ -76,8 +76,9 @@ def test_gear_mapping():
     ok(Drone.flight_mode_gear(" normal ") == 1, "normal -> gear 1 (POSITION)")
     ok(Drone.flight_mode_gear("Cine") == 2, "cine -> gear 2 (TRIPOD)")
     ok(Drone.flight_mode_gear("cinema") == 2, "cinema alias")
+    ok(Drone.flight_mode_gear("tripod") == 2, "tripod alias (wire value name)")
     ok(Drone.flight_mode_gear("position") == 1, "position alias")
-    for bad in ("max", "", "tripod", "40"):
+    for bad in ("max", "", "40"):
         try:
             Drone.flight_mode_gear(bad)
             ok(False, f"{bad!r} must be rejected")
@@ -171,12 +172,40 @@ def test_mode_channel_parse():
     ok(tel.state.flight_mode == 4, "synthetic flyc_state parsed alongside")
 
 
+def test_fmodeauth_sequence():
+    """fmodeauth = request authority (x2: 0x00 + FLYC) -> burst -> release (x2), in order,
+    with every step logged through the injected hook."""
+    logs: list[str] = []
+    d = Drone(FakeTransport())
+    d.MODE_BURST_FRAMES = 3
+    d.MODE_BURST_INTERVAL_S = 0.0
+    d.AUTH_SETTLE_S = 0.0
+    d.log_fn = logs.append
+    d.set_flight_mode_with_authority("tripod")
+
+    frames = [DumlPacket.decode(f) for f in d.t.sent()]
+    ok(frames[0].cmd_set == 0x49 and frames[0].cmd_id == 0x80 and frames[0].payload == b"\x01",
+       "fmodeauth starts with authority request [0x01]")
+    ok(frames[1].cmd_set == 0x49 and frames[1].cmd_id == 0x80 and frames[1].payload == b"\x01",
+       "authority request also goes to FLYC")
+    burst = [p for p in frames
+             if p.cmd_set == 0x01 and p.cmd_id == 0x02]
+    ok(len(burst) == 3, "exactly the burst frames between auth request and release")
+    ok(all(p.payload[12] & 0b1100 == 2 << 2 for p in burst),
+       "every burst frame carries gear 2 (tripod)")
+    ok(frames[-1].cmd_set == 0x49 and frames[-1].cmd_id == 0x80 and frames[-1].payload == b"\x00",
+       "fmodeauth ends with authority release [0x00]")
+    ok(any("authority" in m for m in logs) and any("burst 3/3" in m for m in logs),
+       "deep logging captured the auth and burst steps")
+
+
 def main() -> None:
     test_gear_mapping()
     test_frame_layout()
     test_burst_and_replacement()
     test_mode_and_speed_are_separate()
     test_mode_channel_parse()
+    test_fmodeauth_sequence()
     print(f"OK: {PASSED} checks passed (no hardware needed)")
 
 

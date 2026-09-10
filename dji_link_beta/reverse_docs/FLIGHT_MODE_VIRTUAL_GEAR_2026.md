@@ -99,16 +99,21 @@ stayed, mode_sw carried something else (case (b)).
 4. Burst length: 30 × 50 ms emulates a held switch; raise `MODE_BURST_FRAMES` if the FC
    debounces longer.
 
-### On-drone checklist (props off first)
+### Bench procedure (props off first)
 
 ```bash
-python3 dji_link_beta/test_flight_mode_gear.py      # 28 byte/behaviour checks, no hardware
-# fly (or bench with motors armed), then:
-fmode sport   # HUD FLYC_STATE -> 31? ground speed cap -> ~13 m/s?
-fmode normal  # -> GPS/Normal codes, ~8 m/s?
-fmode cine    # -> 19 or 38, ~4 m/s?
+python3 dji_link_beta/test_flight_mode_gear.py      # 36 byte/behaviour checks, no hardware
+# client up and telemetry visible, then per gear:
+fmode sport            # non-blocking burst; watch "[mode] RC gear channel -> 0"
+fmodeauth tripod       # BENCH variant: authority 0x49/0x80 [0x01] -> burst -> release;
+fmodeauth normal       #   logs every frame ([mode] + [mode-dbg] rx dump for 10 s)
+fmodeauth sport
 # cross-check that hspeed (tilt param) and fmode are independent:
-hspeed 10     # speed changes, FLYC_STATE unchanged
+hspeed 10              # speed changes, gear/FLYC_STATE unchanged
+# then send logs/latest.log — it contains the whole auditable sequence.
 ```
 
-Record the results here and in `FLIGHT_MODE_HW_CHECKLIST.md` style notes.
+`[mode] RC gear channel -> N` (OSD dword @0x20 bits 13-14) = the frame was accepted.
+`[mode] FLYC_STATE a -> b` = the active block actually changed (what the HUD shows).
+No gear movement at all → the FC rejected the frame even with authority; that is a
+falsifying result for the 0x01/0x02 vehicle and points back to a capture of the real app.

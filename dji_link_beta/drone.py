@@ -65,6 +65,10 @@ class Drone:
         self._mode_burst_lock = threading.Lock()
         self._mode_burst_stop: threading.Event | None = None
         self._mode_burst_thread: threading.Thread | None = None
+        # Deep mode-path logging: the client injects its timestamped logger (pc_client.log,
+        # which also appends to logs/latest.log) so a bench log shows every frame of a
+        # switch. Library itself stays print-free.
+        self.log_fn = None
         self._shutter_denom = None   # last user-set 1/N shutter (None = auto); see set_iso/set_shutter
         self._stream = DumlStream()
         self._rx_thread: threading.Thread | None = None
@@ -309,16 +313,20 @@ class Drone:
     MODE_BURST_FRAMES = 30          # ~1.5 s at 20 Hz
     MODE_BURST_INTERVAL_S = 0.05
 
+    def _mlog(self, msg: str) -> None:
+        if self.log_fn:
+            self.log_fn(msg)
+
     @staticmethod
     def flight_mode_gear(name: str) -> int:
         key = str(name).strip().lower()
-        if key in ("cine", "cinema", "cinematic"):
+        if key in ("cine", "cinema", "cinematic", "tripod"):
             return Drone.GEAR_CINE
         if key in ("normal", "position"):
             return Drone.GEAR_NORMAL
         if key == "sport":
             return Drone.GEAR_SPORT
-        raise ValueError(f"unknown mode {name!r}; use cine/normal/sport")
+        raise ValueError(f"unknown mode {name!r}; use cine/tripod/normal/sport")
 
     def set_flight_mode(self, name: str) -> None:
         """Select Cine/Normal/Sport by driving the RC gear channel (mode_sw) in the
@@ -350,6 +358,34 @@ class Drone:
             if self._mode_burst_stop is not None:
                 self._mode_burst_stop.set()
                 self._mode_burst_stop = None
+
+    # Bench tunables for the authority variant (tests set them to zero).
+    AUTH_SETTLE_S = 0.3
+
+    def set_flight_mode_with_authority(self, name: str) -> None:
+        """BENCH switch: control authority -> gear burst -> release, synchronous.
+
+        The documented precondition for the mobile-RC emulation is control authority
+        (0x49/0x80, VIRTUAL_STICK_NATIVE.md §2a); while it is held the physical RC sticks
+        are overridden by our centered frame. So: props off, bench only, never mid-flight.
+        Synchronous on purpose — the log then reads top-to-bottom in one block.
+        """
+        import time
+        gear = self.flight_mode_gear(name)
+        self._mlog(f"fmodeauth: target gear={gear} ({name!r}); "
+                   f"requesting control authority 0x49/0x80 [0x01]")
+        self.request_control()
+        time.sleep(self.AUTH_SETTLE_S)
+        self._mlog(f"fmodeauth: authority requested; burst start — "
+                   f"{self.MODE_BURST_FRAMES} frames @ {self.MODE_BURST_INTERVAL_S}s, "
+                   f"sticks centered")
+        for i in range(self.MODE_BURST_FRAMES):
+            self.set_sticks_mobilerc(0.0, 0.0, 0.0, 0.0, mode=gear)
+            self._mlog(f"fmodeauth: burst {i + 1}/{self.MODE_BURST_FRAMES} mode={gear}")
+            time.sleep(self.MODE_BURST_INTERVAL_S)
+        self._mlog("fmodeauth: burst end; releasing authority 0x49/0x80 [0x00]")
+        self.release_control()
+        self._mlog("fmodeauth: done — watch [mode] gear/FLYC_STATE lines and [mode-dbg] frames")
 
     # --- home point (DataFlycSetHomePoint 0x03/0x31, 18-byte payload) ---
     # doPack confirmed byte-for-byte from DJI bytecode (HOME_POINT_RESEARCH_2026_v2.md §3):

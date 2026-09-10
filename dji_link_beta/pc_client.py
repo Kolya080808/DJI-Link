@@ -25,7 +25,7 @@ Hotkeys: Enter ARM/DISARM · T takeoff (auto-C) · C control on/off · L landing
         F1 help · F3 hide/show HUD (clean video) · F11 fullscreen
         (media list/download auto-enter playback; no manual B/zoom/stick-flag keys)
 Console (Tab): takeoff/land/rth · home here|<lat> <lon> · setalt <m>/setdist <m>/rthalt <m>
-        fmode cine|normal|sport · hspeed <m/s> · rp height|radius|tilt · iso <n>/shutter <N>|auto/ev <n>
+        fmode cine|normal|sport · fmodeauth sport|normal|tripod (BENCH: authority+burst) · hspeed <m/s> · rp height|radius|tilt · iso <n>/shutter <N>|auto/ev <n>
         rec start|stop · zoom <x> · gimbal <deg>|speed <dps> · raw <set> <id> <hex> [recv]
 """
 
@@ -141,6 +141,10 @@ class Client:
         self.mode = mode            # 'pi' | 'serial' | 'sim'
         self.live = live
         self.d = Drone(transport)
+        # Deep mode logging: everything the Drone mode path logs goes through the
+        # timestamped log() (console + logs/latest.log), so a bench session is auditable.
+        self.d.log_fn = lambda m: log(f"[mode] {m}")
+        self._mode_dbg_until = 0.0   # while set, EVERY rx DUML frame is logged ([mode-dbg])
         self.tele = Telemetry()
         self.duml = DumlStream()
         self.video = VideoSink() if mode == "pi" else None
@@ -413,6 +417,10 @@ class Client:
                         self._ptable_f.flush()
                     except Exception:
                         pass
+            if time.time() < self._mode_dbg_until:
+                log(f"[mode-dbg] rx src=0x{p.sender:02x} set=0x{p.cmd_set:02x} "
+                    f"id=0x{p.cmd_id:02x} len={len(p.payload)} {p.payload[:24].hex()}")
+            _fm_before = self.tele.state.flight_mode
             _gear_before = self.tele.state.mode_channel
             self.tele.feed_packet(p)
             # Bench signal for set_flight_mode(): the OSD gear channel flipping is the
@@ -421,6 +429,13 @@ class Client:
             if self.tele.state.mode_channel != _gear_before:
                 log(f"[mode] RC gear channel -> {self.tele.state.mode_channel} "
                     f"(0=sport, 1=normal, 2=cine)")
+            # FLYC_STATE moves = the FC actually changed the active mode block (what the
+            # HUD shows). Throttled so in-flight action states don't spam the log.
+            if (self.tele.state.flight_mode != _fm_before
+                    and time.time() - getattr(self, "_fm_log_t", 0) > 1.0):
+                self._fm_log_t = time.time()
+                log(f"[mode] FLYC_STATE {_fm_before} -> {self.tele.state.flight_mode} "
+                    f"({self.tele.state.flight_mode_name})")
             # SAT debug: green LED means GPS-locked, but HUD shows SAT=0 → the sat-count
             # offset (0x24, reverse-guessed) is likely wrong. Log the raw OSD-common push
             # + the parsed values once per second so the true offset can be found offline.
@@ -700,6 +715,12 @@ def run_console_cmd(cli: Client, line: str):
             d.set_flight_mode(args[0])
             cli.msg(f"flight mode {args[0]}: gear={gear}, virtual-RC burst @20Hz "
                     f"(expect FLYC_STATE {d.GEAR_FLYC_STATE_HINT[gear]})")
+        elif c == "fmodeauth" and args:
+            # BENCH command: control authority -> gear burst -> release, fully logged.
+            # Props off, physical RC is overridden while authority is held — not for flight.
+            cli._mode_dbg_until = time.time() + 10.0
+            d.set_flight_mode_with_authority(args[0])
+            cli.msg("fmodeauth done — send logs/latest.log ([mode]/*[mode-dbg] lines)")
         elif c in ("hspeed", "speed"):
             d.set_horizontal_speed(float(args[0])); cli.msg(f"horiz speed ~{args[0]} m/s (via tilt angle)")
         elif c == "photo": d.take_photo(); cli.msg("photo")
