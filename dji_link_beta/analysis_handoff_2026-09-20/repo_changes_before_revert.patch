@@ -1,0 +1,870 @@
+diff --git a/dji_link_beta/drone.py b/dji_link_beta/drone.py
+index 3fd96f07..82d8bbc1 100644
+--- a/dji_link_beta/drone.py
++++ b/dji_link_beta/drone.py
+@@ -60,14 +60,9 @@ class Drone:
+         self._seq = 0
+         self._tx_lock = threading.Lock()
+         self._alive = True
+-        # The running set_flight_mode() gear burst (see _gear_burst): one Event per burst,
+-        # guarded by its own lock so a newer mode call replaces an older burst cleanly.
+-        self._mode_burst_lock = threading.Lock()
+-        self._mode_burst_stop: threading.Event | None = None
+-        self._mode_burst_thread: threading.Thread | None = None
+-        # Deep mode-path logging: the client injects its timestamped logger (pc_client.log,
+-        # which also appends to logs/latest.log) so a bench log shows every frame of a
+-        # switch. Library itself stays print-free.
++        # Подробный журнал пути переключения: клиент передаёт сюда логгер с временными
++        # метками (pc_client.log также пишет в logs/latest.log), поэтому в журнале стенда
++        # виден точный запрос режима. Библиотека сама ничего не печатает.
+         self.log_fn = None
+         self._shutter_denom = None   # last user-set 1/N shutter (None = auto); see set_iso/set_shutter
+         self._stream = DumlStream()
+@@ -81,7 +76,7 @@ class Drone:
+         return self._seq
+ 
+     def _cmd(self, cmd_set: int, cmd_id: int, payload: bytes = b"",
+-             receiver: int = DEV_FC, ack: bool = True) -> None:
++             receiver: int = DEV_FC, ack: bool = True) -> int | None:
+         if not self._alive:
+             return
+         # Matches the C++ v0.8.6 Drone transport contract: one complete DUML frame per
+@@ -102,6 +97,7 @@ class Drone:
+                 from duml import encrypt_frame
+                 frame = encrypt_frame(frame)
+             self.t.send(frame)
++            return pkt.seq
+ 
+     # ---- background telemetry reception ----
+     def start_rx(self) -> None:
+@@ -112,7 +108,6 @@ class Drone:
+     def stop(self) -> None:
+         self._alive = False
+         self._running = False
+-        self.stop_mode_burst()
+ 
+     def _rx_loop(self) -> None:
+         while self._running:
+@@ -287,31 +282,17 @@ class Drone:
+         import struct as _s
+         self._cmd(0x03, 0xF8, _s.pack("<I", param_hash(name)), receiver=DEV_FC)
+ 
+-    # Cine/Normal/Sport on the switchless Mini are the RC GEAR channel the FC samples from
+-    # the RC stream (g_config.control.control_mode[0..2] = 12/8/7 maps gear 0/1/2 onto the
+-    # pre-stored config blocks). The remote exposes NO app command to set it: the RC160
+-    # firmware's app-facing dispatch table has 0x06/0x19 "Set_Mode" stubbed (return -1) and
+-    # 0x06/0x06 + 0x06/0x11 not registered at all (apsrv, reverse_docs/
+-    # FLIGHT_MODE_VIRTUAL_GEAR_2026.md §2). The gear therefore rides INSIDE the virtual-RC
+-    # frame: byte[12] bits 2-3 of the mobile-RC frame (0x01/0x02) — byte-exact both from the
+-    # app's DataFlycSetJoyStickParams.doPack (uav.midware, dex classes_0451d00c) and the
+-    # native MobileRCHandler::SendCmd ([11..12] u16 LE = 0x0200 | mode<<10), and consistent
+-    # with the DJI Fly default stick stream (TLV byte[12]=0x06 == mode 1 = Position).
+-    #
+-    # Wire values = RcSoftSwitchMode ordinals from the app (uav/sdk/keyvalue, dex 0451):
++    # Путь DJI Fly для WM160/UAV59: OPR59RCAbstraction::SetSoftSwitchMode
++    # (libsdk_jni.so @0x27a986c). CmdSet RC не означает, что получатель — RC:
++    # этот конструктор явно адресует пакет FLYC 0x03. Цепочка подтверждений DEX/native
++    # описана в reverse_docs/FLIGHT_MODE_SOFTSWITCH_FIX_2026.md.
+     GEAR_SPORT = 0
+     GEAR_NORMAL = 1
+     GEAR_CINE = 2
+-    # Gear -> what FLYC_STATE (OSD byte @0x1e) should read once the FC applies the block.
+-    GEAR_FLYC_STATE_HINT = {GEAR_SPORT: "SPORT(31)", GEAR_NORMAL: "GPS/Normal codes",
+-                            GEAR_CINE: "Cinematic(19) or TRIPOD_GPS(38)"}
+-
+-    # Emulating a physical switch flip: the FC samples the gear like a real channel, so a
+-    # single frame is not enough — repeat the frame (sticks centered, gear = target) at a
+-    # RC-like cadence for a bounded burst. Tunables are class attributes so tests can run
+-    # the burst without real sleeps.
+-    MODE_BURST_FRAMES = 30          # ~1.5 s at 20 Hz
+-    MODE_BURST_INTERVAL_S = 0.05
++    GEAR_NAMES = {GEAR_SPORT: "sport", GEAR_NORMAL: "normal", GEAR_CINE: "cine"}
++    # Подтверждать выбор можно только явными состояниями OSD; Joystick(17), взлёт, RTH
++    # и прочие состояния нельзя выдавать за подтверждённую смену Normal/Sport/Cine.
++    GEAR_FLYC_STATES = {GEAR_SPORT: {31}, GEAR_NORMAL: {1, 4, 6}, GEAR_CINE: {19, 38}}
+ 
+     def _mlog(self, msg: str) -> None:
+         if self.log_fn:
+@@ -319,6 +300,7 @@ class Drone:
+ 
+     @staticmethod
+     def flight_mode_gear(name: str) -> int:
++        """Значение SoftSwitchMode, а не raw OSD mode_channel или mobile-RC FlycMode."""
+         key = str(name).strip().lower()
+         if key in ("cine", "cinema", "cinematic", "tripod"):
+             return Drone.GEAR_CINE
+@@ -328,64 +310,26 @@ class Drone:
+             return Drone.GEAR_SPORT
+         raise ValueError(f"unknown mode {name!r}; use cine/tripod/normal/sport")
+ 
+-    def set_flight_mode(self, name: str) -> None:
+-        """Select Cine/Normal/Sport by driving the RC gear channel (mode_sw) in the
+-        virtual-RC stream (0x01/0x02). Non-blocking: a background thread repeats the
+-        centered-sticks frame with the target gear (MODE_BURST_FRAMES x
+-        MODE_BURST_INTERVAL_S, like flipping the physical switch); a newer call replaces
+-        the running burst. This is a MODE switch — max horizontal speed stays a separate
+-        setting (set_horizontal_speed / the tilt param), never mixed in here."""
+-        gear = self.flight_mode_gear(name)
+-        with self._mode_burst_lock:
+-            if self._mode_burst_stop is not None:
+-                self._mode_burst_stop.set()
+-            stop = threading.Event()
+-            self._mode_burst_stop = stop
+-        t = threading.Thread(target=self._gear_burst, args=(gear, stop), daemon=True)
+-        self._mode_burst_thread = t
+-        t.start()
+-
+-    def _gear_burst(self, gear: int, stop: threading.Event) -> None:
+-        for _ in range(self.MODE_BURST_FRAMES):
+-            if stop.is_set() or not self._alive:
+-                return
+-            self.set_sticks_mobilerc(0.0, 0.0, 0.0, 0.0, mode=gear)
+-            if stop.wait(self.MODE_BURST_INTERVAL_S):
+-                return
+-
+-    def stop_mode_burst(self) -> None:
+-        with self._mode_burst_lock:
+-            if self._mode_burst_stop is not None:
+-                self._mode_burst_stop.set()
+-                self._mode_burst_stop = None
+-
+-    # Bench tunables for the authority variant (tests set them to zero).
+-    AUTH_SETTLE_S = 0.3
+-
+-    def set_flight_mode_with_authority(self, name: str) -> None:
+-        """BENCH switch: control authority -> gear burst -> release, synchronous.
+-
+-        The documented precondition for the mobile-RC emulation is control authority
+-        (0x49/0x80, VIRTUAL_STICK_NATIVE.md §2a); while it is held the physical RC sticks
+-        are overridden by our centered frame. So: props off, bench only, never mid-flight.
+-        Synchronous on purpose — the log then reads top-to-bottom in one block.
++    def set_flight_mode(self, name: str) -> int:
++        """Запросить режим через 0x06/0x59 и вернуть seq для сопоставления ACK.
++
++        Виртуальные стики, authority и запись параметров FC не используются. Отправка
++        сама по себе не подтверждает смену: клиент проверяет ответ и новый OSD-пакет.
+         """
+-        import time
+         gear = self.flight_mode_gear(name)
+-        self._mlog(f"fmodeauth: target gear={gear} ({name!r}); "
+-                   f"requesting control authority 0x49/0x80 [0x01]")
+-        self.request_control()
+-        time.sleep(self.AUTH_SETTLE_S)
+-        self._mlog(f"fmodeauth: authority requested; burst start — "
+-                   f"{self.MODE_BURST_FRAMES} frames @ {self.MODE_BURST_INTERVAL_S}s, "
+-                   f"sticks centered")
+-        for i in range(self.MODE_BURST_FRAMES):
+-            self.set_sticks_mobilerc(0.0, 0.0, 0.0, 0.0, mode=gear)
+-            self._mlog(f"fmodeauth: burst {i + 1}/{self.MODE_BURST_FRAMES} mode={gear}")
+-            time.sleep(self.MODE_BURST_INTERVAL_S)
+-        self._mlog("fmodeauth: burst end; releasing authority 0x49/0x80 [0x00]")
+-        self.release_control()
+-        self._mlog("fmodeauth: done — watch [mode] gear/FLYC_STATE lines and [mode-dbg] frames")
++        if not self._alive:
++            raise RuntimeError("cannot switch mode: drone connection is stopped")
++        seq = self._cmd(0x06, 0x59, bytes([gear]), receiver=DEV_FC, ack=True)
++        if seq is None:
++            raise RuntimeError("mode request was not sent: drone connection is stopped")
++        self._mlog(f"request {self.GEAR_NAMES[gear]}: tx src=0x02 dst=0x03 "
++                   f"set=0x06 id=0x59 seq={seq} payload={gear:02x}; awaiting telemetry")
++        return seq
++
++    def set_flight_mode_with_authority(self, name: str) -> int:
++        """Совместимое имя; старый эксперимент с authority и центрированными стиками удалён."""
++        self._mlog("fmodeauth is deprecated; using SoftSwitchMode without taking authority")
++        return self.set_flight_mode(name)
+ 
+     # --- home point (DataFlycSetHomePoint 0x03/0x31, 18-byte payload) ---
+     # doPack confirmed byte-for-byte from DJI bytecode (HOME_POINT_RESEARCH_2026_v2.md §3):
+@@ -664,8 +608,8 @@ class Drone:
+ 
+     # UNIVERSAL: send any DUML command (the whole surface from reverse_docs).
+     def send_raw(self, cmd_set: int, cmd_id: int, payload: bytes = b"",
+-                 receiver: int = DEV_FC, ack: bool = True) -> None:
+-        self._cmd(cmd_set, cmd_id, payload, receiver=receiver, ack=ack)
++                 receiver: int = DEV_FC, ack: bool = True) -> int | None:
++        return self._cmd(cmd_set, cmd_id, payload, receiver=receiver, ack=ack)
+ 
+     # Registry of "all functions" — an extensible name->method map so that command
+     # sources (UI/neural net/script) can call functions by name.
+diff --git a/dji_link_beta/pc_client.py b/dji_link_beta/pc_client.py
+index 17827c67..6fb52e23 100644
+--- a/dji_link_beta/pc_client.py
++++ b/dji_link_beta/pc_client.py
+@@ -25,7 +25,7 @@ Hotkeys: Enter ARM/DISARM · T takeoff (auto-C) · C control on/off · L landing
+         F1 help · F3 hide/show HUD (clean video) · F11 fullscreen
+         (media list/download auto-enter playback; no manual B/zoom/stick-flag keys)
+ Console (Tab): takeoff/land/rth · home here|<lat> <lon> · setalt <m>/setdist <m>/rthalt <m>
+-        fmode cine|normal|sport · fmodeauth sport|normal|tripod (BENCH: authority+burst) · hspeed <m/s> · rp height|radius|tilt · iso <n>/shutter <N>|auto/ev <n>
++        fmode cine|tripod|normal|sport (SoftSwitchMode; fmodeauth is a deprecated alias) · hspeed <m/s> · rp height|radius|tilt · iso <n>/shutter <N>|auto/ev <n>
+         rec start|stop · zoom <x> · gimbal <deg>|speed <dps> · raw <set> <id> <hex> [recv]
+ """
+ 
+@@ -141,10 +141,12 @@ class Client:
+         self.mode = mode            # 'pi' | 'serial' | 'sim'
+         self.live = live
+         self.d = Drone(transport)
+-        # Deep mode logging: everything the Drone mode path logs goes through the
+-        # timestamped log() (console + logs/latest.log), so a bench session is auditable.
++        # Подробный журнал режима: всё из пути Drone проходит через log() с временными
++        # метками (консоль и logs/latest.log), поэтому сессию стенда можно проверить.
+         self.d.log_fn = lambda m: log(f"[mode] {m}")
+         self._mode_dbg_until = 0.0   # while set, EVERY rx DUML frame is logged ([mode-dbg])
++        self._mode_lock = threading.Lock()  # запросы UI, ответы RX и таймер подтверждения
++        self._mode_request = None
+         self.tele = Telemetry()
+         self.duml = DumlStream()
+         self.video = VideoSink() if mode == "pi" else None
+@@ -214,6 +216,57 @@ class Client:
+         self.mouse_yaw = 0.0            # yaw axis from the latest mouse motion
+         self._frame_dx = 0.0           # horizontal mouse travel accumulated within the current frame
+ 
++    def set_flight_mode(self, name):
++        gear = self.d.flight_mode_gear(name)
++        with self._mode_lock:
++            # Устанавливаем запрос под тем же lock, что использует RX: быстрый ответ не
++            # должен обогнать запись sequence. Автоматических повторов режима нет.
++            self._mode_request = None
++            seq = self.d.set_flight_mode(name)
++            self._mode_request = {"gear": gear, "seq": seq, "ack": None,
++                                  "deadline": time.monotonic() + 4.0}
++            self.msg(f"mode {self.d.GEAR_NAMES[gear]} requested; awaiting OSD confirmation")
++
++    def _note_mode_packet(self, p):
++        with self._mode_lock:
++            req = self._mode_request
++            if (p.cmd_set, p.cmd_id) == (0x06, 0x59):
++                # Эхо запроса не является ACK. Сохраняем адресацию, тип и seq целиком,
++                # чтобы на стенде видеть различия прошивки и маршрутизации.
++                log(f"[mode] reply src=0x{p.sender:02x} dst=0x{p.receiver:02x} "
++                    f"type=0x{p.cmd_type:02x} seq={p.seq} payload={p.payload.hex()}")
++                if (req is not None and p.seq == req["seq"] and p.cmd_type & 0x80
++                        and p.sender == DEV_FC and p.receiver == 0x02 and p.payload):
++                    req["ack"] = p.payload[0]
++                    if req["ack"] != 0:
++                        self._mode_request = None
++                        self.msg(f"mode {self.d.GEAR_NAMES[req['gear']]} rejected: "
++                                 f"ACK=0x{req['ack']:02x}")
++                    else:
++                        log("[mode] ACK OK; waiting for actual FLYC_STATE")
++                return
++            is_osd = ((p.cmd_set, p.cmd_id) in ((3, 0x43), (9, 1))
++                      and len(p.payload) >= 0x34 and p.sender in (3, 9)
++                      and p.receiver == 2)
++            if req is not None and is_osd:
++                # Проверяем ИМЕННО этот пакет, а не состояние, сохранённое до запроса.
++                mode = p.payload[0x1e] & 0x7f
++                if (time.monotonic() < req["deadline"]
++                        and mode in self.d.GEAR_FLYC_STATES[req["gear"]]):
++                    self._mode_request = None
++                    self.msg(f"mode {self.d.GEAR_NAMES[req['gear']]} confirmed by OSD "
++                             f"FLYC_STATE={mode}")
++
++    def _check_mode_timeout(self):
++        with self._mode_lock:
++            req = self._mode_request
++            if req is not None and time.monotonic() >= req["deadline"]:
++                self._mode_request = None
++                ack = "none" if req["ack"] is None else f"0x{req['ack']:02x}"
++                self.msg(f"mode {self.d.GEAR_NAMES[req['gear']]} unconfirmed: ACK={ack}, "
++                         f"FLYC_STATE={self.tele.state.flight_mode_name}; "
++                         "see [mode] log (Joystick/RTH/takeoff can mask selection)")
++
+     def start_stats(self):
+         """Heartbeat so a silent link is visibly silent rather than ambiguous."""
+         def loop():
+@@ -330,6 +383,7 @@ class Client:
+ 
+     def _on_duml_payload(self, payload: bytes):
+         for p in self.duml.feed(payload):
++            self._note_mode_packet(p)
+             self.n_duml += 1
+             if p.sender != 0x02:
+                 self.responders[p.sender] = time.time()
+@@ -423,22 +477,18 @@ class Client:
+             _fm_before = self.tele.state.flight_mode
+             _gear_before = self.tele.state.mode_channel
+             self.tele.feed_packet(p)
+-            # Bench signal for set_flight_mode(): the OSD gear channel flipping is the
+-            # direct readback that a gear burst was accepted (FLYC_STATE may not move on
+-            # the ground). 0=sport, 1=position/normal, 2=tripod/cine (RcSoftSwitchMode).
++            # Сырой OSD-селектор НЕ является enum команды RcSoftSwitchMode. Его таблица
++            # зависит от версии и конфигурации FC; нельзя называть raw 2 режимом Cine.
+             if self.tele.state.mode_channel != _gear_before:
+-                log(f"[mode] RC gear channel -> {self.tele.state.mode_channel} "
+-                    f"(0=sport, 1=normal, 2=cine)")
+-            # FLYC_STATE moves = the FC actually changed the active mode block (what the
+-            # HUD shows). Throttled so in-flight action states don't spam the log.
+-            if (self.tele.state.flight_mode != _fm_before
+-                    and time.time() - getattr(self, "_fm_log_t", 0) > 1.0):
+-                self._fm_log_t = time.time()
++                log(f"[mode] OSD mode channel (raw) -> {self.tele.state.mode_channel}")
++            # Оставляем каждое фактическое изменение: ограничение частоты могло бы скрыть
++            # быстрый откат после отказа. HUD всегда использует это живое состояние OSD.
++            if self.tele.state.flight_mode != _fm_before:
+                 log(f"[mode] FLYC_STATE {_fm_before} -> {self.tele.state.flight_mode} "
+                     f"({self.tele.state.flight_mode_name})")
+-            # SAT debug: green LED means GPS-locked, but HUD shows SAT=0 → the sat-count
+-            # offset (0x24, reverse-guessed) is likely wrong. Log the raw OSD-common push
+-            # + the parsed values once per second so the true offset can be found offline.
++            # Отладка SAT: зелёный индикатор означает GPS-lock, но HUD показывает SAT=0,
++            # поэтому смещение счётчика (0x24, пока восстановлено гипотезой) может быть
++            # неверным. Раз в секунду пишем сырой OSD-пакет и разобранные значения.
+             if (p.cmd_set == 0x03 and p.cmd_id == 0x43 and p.sender != 0x02
+                     and time.time() - getattr(self, "_sat_dbg_t", 0) > 1.0):
+                 self._sat_dbg_t = time.time()
+@@ -524,6 +574,7 @@ class Client:
+         from telemetry import SDK_CTRL_DEVICE
+         last_diag = 0.0
+         while self.running:
++            self._check_mode_timeout()
+             # Auto-enable control (C) once the auto-takeoff has SETTLED. We must not enable
+             # mid-takeoff (FC not yet in joystick state -> the uncommanded-climb trap), so we
+             # wait for: airborne + a settle delay + out of Assisted/Auto-Takeoff state
+@@ -710,17 +761,16 @@ def run_console_cmd(cli: Client, line: str):
+             d.set_max_distance(int(args[0])); cli.msg(f"max dist {args[0]} m (verify: rp radius)")
+         elif c == "rthalt":
+             d.set_rth_altitude(int(args[0])); cli.msg(f"RTH alt {args[0]} m")
+-        elif c in ("fmode", "flightmode"):
+-            gear = d.flight_mode_gear(args[0])
+-            d.set_flight_mode(args[0])
+-            cli.msg(f"flight mode {args[0]}: gear={gear}, virtual-RC burst @20Hz "
+-                    f"(expect FLYC_STATE {d.GEAR_FLYC_STATE_HINT[gear]})")
+-        elif c == "fmodeauth" and args:
+-            # BENCH command: control authority -> gear burst -> release, fully logged.
+-            # Props off, physical RC is overridden while authority is held — not for flight.
+-            cli._mode_dbg_until = time.time() + 10.0
+-            d.set_flight_mode_with_authority(args[0])
+-            cli.msg("fmodeauth done — send logs/latest.log ([mode]/*[mode-dbg] lines)")
++        elif c in ("fmode", "flightmode", "fmodeauth"):
++            if not args:
++                cli.msg("usage: fmode cine|tripod|normal|sport")
++            else:
++                # На десять секунд включаем подробный приём в журнале стенда Pi: там будут
++                # источник/тип/seq ACK и OSD-кадры подтверждения без постоянного шума.
++                cli._mode_dbg_until = time.time() + 10.0
++                if c == "fmodeauth":
++                    log("[mode] fmodeauth compatibility alias -> SoftSwitchMode; no authority")
++                cli.set_flight_mode(args[0])
+         elif c in ("hspeed", "speed"):
+             d.set_horizontal_speed(float(args[0])); cli.msg(f"horiz speed ~{args[0]} m/s (via tilt angle)")
+         elif c == "photo": d.take_photo(); cli.msg("photo")
+@@ -817,7 +867,7 @@ class SettingsPanel:
+         self.dragging = None              # a slider widget while the mouse button is held
+         d = cli.d
+         self.w = [
+-            _W("choice", "Flight mode", lambda v: self._try(lambda: d.set_flight_mode(v), f"mode {v}"),
++            _W("choice", "Flight mode", self._set_flight_mode,
+                opts=["normal", "cinema", "sport"]),
+             _W("slider", "Max altitude (m)", lambda v: self._try(lambda: (d.set_max_altitude(v), d.read_param("g_config.flying_limit.max_height_0")), f"max alt {v} m"),
+                lo=15, hi=500, step=5, val=120),
+@@ -972,6 +1022,12 @@ class SettingsPanel:
+ 
+         threading.Thread(target=run, daemon=True).start()
+ 
++    def _set_flight_mode(self, name):
++        try:
++            self.cli.set_flight_mode(name)
++        except Exception as e:
++            self.cli.msg(f"mode {name}: {e}")
++
+     def _try(self, fn, msg):
+         try:
+             fn(); self.cli.msg(msg)
+diff --git a/dji_link_beta/reverse_docs/FLIGHT_GATING.md b/dji_link_beta/reverse_docs/FLIGHT_GATING.md
+index 9d824799..e56f5631 100644
+--- a/dji_link_beta/reverse_docs/FLIGHT_GATING.md
++++ b/dji_link_beta/reverse_docs/FLIGHT_GATING.md
+@@ -122,14 +122,19 @@ it in one capture.
+ 
+ ## C. FLIGHT MODES (Normal / Cine / Sport)
+ 
+-**There is NO single clean "set flight mode" DUML in the midware layer.** On WM160 the mode is a
+-combination of (1) the RC's physical gear switch and (2) a set of FC control-gain parameters. Evidence:
++**Setter режима WM160 — запрос DJI Fly SoftSwitchMode `0x06/0x59` получателю FLYC
++`0x03` (payload `0x00=Sport`, `0x01=Position/Normal`, `0x02=Tripod/Cine`).** В старых
++заметках midware это легко пропустить, потому что command set — RC, а получатель — FLYC.
++Живой режим остаётся полем OSD `FLYC_STATE`; сырые биты OSD mode-channel не являются
++wire enum. Исторический текст ниже описывает прежнюю неопределённость. Старые заметки о
++gain-параметрах относятся к настройке скорости/экспозиции и не являются setter беты.
++Подтверждения:
+ 
+ - Reported in telemetry: key `Flight.FlightOSD.FlightMode.Value` and `KeyFlightMode`; enum
+   `uav/component/device/flightmode/UAVFlightMode`. In the OSD push the mode is **byte +0x1e & 0x7F**
+   (`FLYC_STATE` in `diag_codes.py`: e.g. 6=GPS_ATTI, 17=JOYSTICK). This is the "how it is reported"
+   answer.
+-- Selecting Normal/Sport/Cine changes **control-gain FC params** (all in `flyc_param_infos.json`,
++- Selecting Normal/Sport/Cine may also change **control-gain FC params** internally (all in `flyc_param_infos.json`,
+   hash-writable via 0x03/0xF9 — see §E), e.g.:
+   `mode_sport_cfg_vert_vel_up_0` [999], `g_config.control.vert_up_vel_0` [318] def5/max10,
+   `g_config.control.horiz_vel_atti_range_0` [312], and the app's
+diff --git a/dji_link_beta/reverse_docs/FLIGHT_MODE_VIRTUAL_GEAR_2026.md b/dji_link_beta/reverse_docs/FLIGHT_MODE_VIRTUAL_GEAR_2026.md
+index 3c77b4ed..18648a2b 100644
+--- a/dji_link_beta/reverse_docs/FLIGHT_MODE_VIRTUAL_GEAR_2026.md
++++ b/dji_link_beta/reverse_docs/FLIGHT_MODE_VIRTUAL_GEAR_2026.md
+@@ -1,25 +1,26 @@
+-# Flight-Mode Switching (Cine / Normal / Sport) — WM160, the gear inside the virtual-RC stream
++# Переключение режима (Cine / Normal / Sport) WM160: шестерня в потоке virtual-RC
+ 
+-Status 2026-09-10: **implemented in `drone.py` (`set_flight_mode` → 0x01/0x02 gear burst)**,
+-branch `feature/flight-mode-virtual-gear`. The mode field placement is byte-verified from
+-the app decompile AND the native SDK notes; the FC-side acceptance and the gear→block order
+-are hardware checks (checklist at the bottom).
++Статус 2026-09-19: **для WM160 заменено документом `FLIGHT_MODE_SOFTSWITCH_FIX_2026.md`.**
++Пакетная передача gear через 0x01/0x02 была полезным запасным экспериментом, но журнал
++стенда не показал изменения gear или FLYC_STATE даже при удержании authority. Здесь это
++оставлено как история исследования; `drone.py` больше не использует её в `set_flight_mode`.
+ 
+-This supersedes the cmd_id-candidate approach of `FLIGHT_MODE_SOFTSWITCH_2026.md`: the
+-standalone RC `0x06` gear frame **does not exist on the RC160** (§2 below is firmware proof),
+-so there is no cmd_id to auto-detect. The tilt/speed research in
+-`FLIGHT_MODE_SPEED_RESEARCH_2026.md` stays authoritative for max horizontal speed and is NOT
+-a mode switch.
++Прежний вывод о standalone-RC был неполным: нативный путь DJI Fly v1.21.4
++`OPR59RCAbstraction::SetSoftSwitchMode` для UAV59 строит `0x06/0x59` с получателем FLYC.
++Исправленная команда описана в `FLIGHT_MODE_SOFTSWITCH_FIX_2026.md`.
+ 
+-## TL;DR — what the code does now
++Исследование наклона и скорости в `FLIGHT_MODE_SPEED_RESEARCH_2026.md` по-прежнему
++определяет максимальную горизонтальную скорость и не является переключением режима.
+ 
+-The switchless Mini's flight mode is the **RC gear channel** the FC samples from the RC
++## Historical virtual-RC experiment
++
++The original experiment assumed the switchless Mini's flight mode was the **RC gear channel** the FC samples from the RC
+ stream: `g_config.control.control_mode[0..2]` = 12/8/7 (live WM160 values,
+ `PARAM_TABLE_WM160.md`) maps gear position 0/1/2 onto the pre-stored config blocks. The wire
+ values are the app's own `RcSoftSwitchMode` ordinals: **SPORT = 0, POSITION = 1, TRIPOD = 2**
+ (dex `classes_0451d00c`, `uav/sdk/keyvalue/value/remotecontroller/RcSoftSwitchMode`).
+ 
+-The RC exposes **no** app command to set the gear (§2), so the gear rides INSIDE the
++The old hypothesis said the RC exposed **no** app command to set the gear (§2), so the gear rides INSIDE the
+ virtual-RC stick frame — the mobile-RC fallback `uav_action_virtual_rc_joystick`
+ (**cmd_set 0x01, cmd_id 0x02**, receiver FLYC 0x03, 13-byte payload) carries it in
+ **byte[12] bits 2-3** (`[11..12] u16 LE = 0x0200 | ((mode & 3) << 10)`). Switching a mode =
+diff --git a/dji_link_beta/telemetry.py b/dji_link_beta/telemetry.py
+index 4c64390c..0bce7472 100644
+--- a/dji_link_beta/telemetry.py
++++ b/dji_link_beta/telemetry.py
+@@ -86,7 +86,7 @@ class OsdState:
+     yaw: float | None = None
+     flight_mode: int | None = None
+     flight_mode_name: str | None = None
+-    mode_channel: int | None = None      # RC gear channel: OSD dword@0x20 bits 13-14
++    mode_channel: int | None = None      # raw OSD selector; NOT RcSoftSwitchMode wire enum
+     is_flying: bool | None = None
+     motors_on: bool | None = None
+     ctrl_device: int | None = None      # SDKCtrlDevice: 1=APP => FC accepted our sticks
+@@ -240,8 +240,8 @@ class Telemetry:
+             st.is_flying = ((w >> 1) & 3) == 2   # groundOrSky==2 = flying (DataOsdGetPushCommon)
+             st.motors_on = bool((w >> 3) & 1)
+             st.gps_level = (w >> 18) & 0xF   # getGpsLevel: (u32@0x20 >> 0x12) & 0xF
+-            # getModeChannel(): the RC gear the FC currently samples — the direct readback
+-            # for set_flight_mode() gear bursts (raw 2-bit value: 0/1/2 as sent).
++            # getModeChannel() переводит эти сырые биты таблицами, зависящими от версии
++            # и конфигурации FC. Это НЕ значения команды SoftSwitchMode 0/1/2.
+             st.mode_channel = (w >> 13) & 3
+         sats = u8(p, 0x24)                   # getGpsNum is 1 BYTE @0x24 (the "Short" is boxing,
+         if sats is not None: st.satellites = sats   # not width; u16 here inflates when p[0x25]!=0)
+diff --git a/dji_link_beta/test_flight_mode_gear.py b/dji_link_beta/test_flight_mode_gear.py
+index 45abbd91..39600dff 100644
+--- a/dji_link_beta/test_flight_mode_gear.py
++++ b/dji_link_beta/test_flight_mode_gear.py
+@@ -1,213 +1,193 @@
+ #!/usr/bin/env python3
+-"""Hardware-free tests for the flight-mode gear path (set_flight_mode -> 0x01/0x02).
+-
+-Covers:
+-  - gear mapping (names -> RcSoftSwitchMode wire values SPORT=0 / NORMAL=1 / CINE=2);
+-  - the byte layout of the mode field in the mobile-RC virtual-RC frame
+-    (byte[12] bits 2-3 == bits 10-11 of the u16 LE flags word == mode & 3);
+-  - agreement with the DJI Fly default stream (mode=1 -> byte[12] == 0x06, the value the
+-    app's own 0x01/0x0A TLV stick frame carries);
+-  - burst behaviour: bounded frame count, replacement by a newer call, cancellation by
+-    stop();
+-  - separation of concerns: a mode switch never touches the tilt/speed parameter
+-    (0x03/0xF9), and set_horizontal_speed never carries a gear field.
+-
+-Run: python3 dji_link_beta/test_flight_mode_gear.py  (no hardware, no serial).
+-Evidence chain lives in reverse_docs/FLIGHT_MODE_VIRTUAL_GEAR_2026.md.
+-"""
+-from __future__ import annotations
++"""Офлайн-регрессии команды SoftSwitchMode WM160 (без оборудования)."""
+ import struct
+-import sys
+-import threading
+-import time
+-import os
++import unittest
++from unittest.mock import patch
+ 
+-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+-
+-from duml import DumlPacket
+ from drone import Drone
++from duml import DumlPacket
+ from telemetry import Telemetry
+-
+-PASSED = 0
+-
+-
+-def ok(cond: bool, label: str) -> None:
+-    global PASSED
+-    if not cond:
+-        raise AssertionError(label)
+-    PASSED += 1
++from pc_client import Client, SettingsPanel, run_console_cmd
+ 
+ 
+ class FakeTransport:
+-    """Records everything Drone.send() puts out; nothing touches a real link."""
+-
+     def __init__(self):
+-        self.frames: list[bytes] = []
+-        self.lock = threading.Lock()
+-
+-    def send(self, frame: bytes) -> None:
+-        with self.lock:
+-            self.frames.append(bytes(frame))
+-
+-    def sent(self) -> list[bytes]:
+-        with self.lock:
+-            return list(self.frames)
+-
+-
+-def gear_frames(d: Drone) -> list[tuple[DumlPacket, bytes]]:
+-    """All 0x01/0x02 frames sent so far, decoded to (packet, payload)."""
+-    out = []
+-    for frame in d.t.sent():
+-        pkt = DumlPacket.decode(frame)
+-        if pkt.cmd_set == 0x01 and pkt.cmd_id == 0x02:
+-            out.append((pkt, bytes(pkt.payload)))
+-    return out
+-
+-
+-def mode_of(payload: bytes) -> int:
+-    # [11..12] u16 LE = 0x0200 | ((mode & 3) << 10)  ->  byte[12] bits 2-3.
+-    flags = struct.unpack("<H", payload[11:13])[0]
+-    assert flags & 0x0200, f"0x0200 base flag missing: {flags:#06x}"
+-    return (flags >> 10) & 3
+-
+-
+-def test_gear_mapping():
+-    ok(Drone.flight_mode_gear("sport") == 0, "sport -> gear 0 (RcSoftSwitchMode.SPORT)")
+-    ok(Drone.flight_mode_gear(" normal ") == 1, "normal -> gear 1 (POSITION)")
+-    ok(Drone.flight_mode_gear("Cine") == 2, "cine -> gear 2 (TRIPOD)")
+-    ok(Drone.flight_mode_gear("cinema") == 2, "cinema alias")
+-    ok(Drone.flight_mode_gear("tripod") == 2, "tripod alias (wire value name)")
+-    ok(Drone.flight_mode_gear("position") == 1, "position alias")
+-    for bad in ("max", "", "40"):
+-        try:
+-            Drone.flight_mode_gear(bad)
+-            ok(False, f"{bad!r} must be rejected")
+-        except ValueError:
+-            ok(True, f"{bad!r} rejected")
+-
+-
+-def test_frame_layout():
+-    d = Drone(FakeTransport())
+-    d.set_sticks_mobilerc(0.0, 0.0, 0.0, 0.0, mode=Drone.GEAR_NORMAL)
+-    frames = gear_frames(d)
+-    ok(len(frames) == 1, "one 0x01/0x02 frame sent")
+-    pkt, payload = frames[0]
+-    ok(pkt.sender == 0x02, "sender = APP 0x02")
+-    ok(pkt.receiver == 0x03, "receiver = FLYC 0x03")
+-    ok(pkt.cmd_type == 0x00, "no ack requested (stream frame)")
+-    ok(len(payload) == 13, "13-byte mobile-RC payload")
+-    ok(payload[0] == 0x00, "byte0 = 0x00")
+-    ok(payload[9:11] == b"\x00\x00", "bytes 9..10 = 0x0000")
+-    # channels centered: 4 x 1024 at 11-bit offsets 0/11/22/33
+-    packed = int.from_bytes(payload[1:9], "little")
+-    ok(all((packed >> (11 * i)) & 0x7FF == 1024 for i in range(4)),
+-       "all four channels centered at 1024")
+-    ok(mode_of(payload) == 1, "mode field carries gear 1")
+-    # byte-exact agreement with the DJI Fly default stream: mode=1 -> byte[12] == 0x06
+-    ok(payload[12] == 0x06, "mode=1 encodes to byte[12]=0x06 (matches TLV stick stream)")
+-
+-
+-def test_burst_and_replacement():
+-    d = Drone(FakeTransport())
+-    d.MODE_BURST_FRAMES = 5
+-    d.MODE_BURST_INTERVAL_S = 0.0
+-    d.set_flight_mode("sport")
+-    d._mode_burst_thread.join(timeout=5)
+-    ok(not d._mode_burst_thread.is_alive(), "burst finished on its own")
+-    frames = gear_frames(d)
+-    ok(len(frames) == 5, f"burst sent MODE_BURST_FRAMES frames (got {len(frames)})")
+-    ok(all(mode_of(p) == 0 for _, p in frames), "every burst frame carries gear 0")
+-
+-    # A newer mode call replaces a running burst: the old burst stops early.
+-    d2 = Drone(FakeTransport())
+-    d2.MODE_BURST_FRAMES = 10_000
+-    d2.MODE_BURST_INTERVAL_S = 0.001
+-    d2.set_flight_mode("cine")
+-    time.sleep(0.05)
+-    d2.set_flight_mode("normal")
+-    d2._mode_burst_thread.join(timeout=5)
+-    cine = [p for _, p in gear_frames(d2) if mode_of(p) == 2]
+-    normal = [p for _, p in gear_frames(d2) if mode_of(p) == 1]
+-    ok(len(cine) < 100 and len(normal) >= 1,
+-       "old burst was replaced, new gear is being sent")
+-
+-    # stop() cancels a running burst.
+-    d3 = Drone(FakeTransport())
+-    d3.MODE_BURST_FRAMES = 10_000
+-    d3.MODE_BURST_INTERVAL_S = 0.001
+-    d3.set_flight_mode("sport")
+-    time.sleep(0.05)
+-    d3.stop()
+-    d3._mode_burst_thread.join(timeout=5)
+-    ok(not d3._mode_burst_thread.is_alive(), "stop() cancelled the burst")
+-
+-
+-def test_mode_and_speed_are_separate():
+-    d = Drone(FakeTransport())
+-    d.MODE_BURST_FRAMES = 2
+-    d.MODE_BURST_INTERVAL_S = 0.0
+-    d.set_flight_mode("normal")
+-    d._mode_burst_thread.join(timeout=5)
+-    for frame in d.t.sent():
+-        pkt = DumlPacket.decode(frame)
+-        ok(not (pkt.cmd_set == 0x03 and pkt.cmd_id == 0xF9),
+-           "mode switch never writes the tilt/speed param")
+-    # ... and the speed setter never carries a gear field.
+-    d.set_horizontal_speed(10.0)
+-    for pkt, payload in gear_frames(d):
+-        ok(mode_of(payload) == 1, "no gear change from speed writes")
+-
+-
+-def test_mode_channel_parse():
+-    """The gear readback the bench test relies on: OSD dword@0x20 bits 13-14 must surface
+-    as state.mode_channel (getModeChannel), so a grounded gear check is observable."""
+-    tel = Telemetry()
+-    payload = bytearray(0x35)          # OSD-common minimum is 0x34
+-    payload[0x1e] = 4                  # flyc_state = Hover (typical grounded)
+-    w = 0 | (2 << 13)                  # groundOrSky=0, gear=2 (tripod)
+-    payload[0x20:0x24] = struct.pack("<I", w)
+-    tel.feed_packet(DumlPacket(sender=0x03, receiver=0x02, cmd_set=0x03, cmd_id=0x43,
+-                               seq=1, cmd_type=0x00, payload=bytes(payload)))
+-    ok(tel.state.mode_channel == 2, "OSD dword@0x20 bits 13-14 parsed as mode_channel")
+-    ok(tel.state.flight_mode == 4, "synthetic flyc_state parsed alongside")
+-
+-
+-def test_fmodeauth_sequence():
+-    """fmodeauth = request authority (x2: 0x00 + FLYC) -> burst -> release (x2), in order,
+-    with every step logged through the injected hook."""
+-    logs: list[str] = []
+-    d = Drone(FakeTransport())
+-    d.MODE_BURST_FRAMES = 3
+-    d.MODE_BURST_INTERVAL_S = 0.0
+-    d.AUTH_SETTLE_S = 0.0
+-    d.log_fn = logs.append
+-    d.set_flight_mode_with_authority("tripod")
+-
+-    frames = [DumlPacket.decode(f) for f in d.t.sent()]
+-    ok(frames[0].cmd_set == 0x49 and frames[0].cmd_id == 0x80 and frames[0].payload == b"\x01",
+-       "fmodeauth starts with authority request [0x01]")
+-    ok(frames[1].cmd_set == 0x49 and frames[1].cmd_id == 0x80 and frames[1].payload == b"\x01",
+-       "authority request also goes to FLYC")
+-    burst = [p for p in frames
+-             if p.cmd_set == 0x01 and p.cmd_id == 0x02]
+-    ok(len(burst) == 3, "exactly the burst frames between auth request and release")
+-    ok(all(p.payload[12] & 0b1100 == 2 << 2 for p in burst),
+-       "every burst frame carries gear 2 (tripod)")
+-    ok(frames[-1].cmd_set == 0x49 and frames[-1].cmd_id == 0x80 and frames[-1].payload == b"\x00",
+-       "fmodeauth ends with authority release [0x00]")
+-    ok(any("authority" in m for m in logs) and any("burst 3/3" in m for m in logs),
+-       "deep logging captured the auth and burst steps")
+-
+-
+-def main() -> None:
+-    test_gear_mapping()
+-    test_frame_layout()
+-    test_burst_and_replacement()
+-    test_mode_and_speed_are_separate()
+-    test_mode_channel_parse()
+-    test_fmodeauth_sequence()
+-    print(f"OK: {PASSED} checks passed (no hardware needed)")
+-
+-
+-if __name__ == "__main__":
+-    main()
++        self.frames = []
++
++    def send(self, frame):
++        self.frames.append(bytes(frame))
++
++    def packets(self):
++        return [DumlPacket.decode(f) for f in self.frames]
++
++
++def osd(mode, channel=2, sender=9):
++    payload = bytearray(55)
++    payload[0x1e] = mode
++    struct.pack_into('<I', payload, 0x20, channel << 13)
++    return DumlPacket(sender=sender, receiver=2, cmd_set=3, cmd_id=0x43,
++                      payload=bytes(payload))
++
++
++class FlightModeTests(unittest.TestCase):
++    def test_exact_soft_switch_command(self):
++        # OPR59RCAbstraction::SetSoftSwitchMode @0x27a986c, ctor @0x27aa72c и
++        # DEX enum RcSoftSwitchMode подтверждают это независимо от кодировщика беты.
++        for name, value in [('sport', 0), (' normal ', 1), ('Cine', 2),
++                            ('cinema', 2), ('cinematic', 2), ('tripod', 2), ('position', 1)]:
++            with self.subTest(name=name):
++                t = FakeTransport()
++                seq = Drone(t).set_flight_mode(name)
++                self.assertEqual(len(t.frames), 1)
++                p = t.packets()[0]
++                self.assertEqual((p.sender, p.receiver, p.cmd_set, p.cmd_id, p.cmd_type),
++                                 (2, 3, 6, 0x59, 0x40))
++                self.assertEqual(p.payload, bytes([value]))
++                self.assertEqual(seq, p.seq)
++
++    def test_invalid_mode_sends_nothing(self):
++        t = FakeTransport()
++        d = Drone(t)
++        for name in ['max', '', '40']:
++            with self.assertRaises(ValueError):
++                d.set_flight_mode(name)
++        self.assertEqual(t.frames, [])
++
++    def test_legacy_alias_does_not_take_authority(self):
++        t = FakeTransport()
++        Drone(t).set_flight_mode_with_authority('sport')
++        self.assertEqual([(p.cmd_set, p.cmd_id) for p in t.packets()], [(6, 0x59)])
++
++    def test_mode_does_not_interrupt_sticks_or_write_speed(self):
++        t = FakeTransport()
++        d = Drone(t)
++        d.encrypt_config = False
++        d.set_sticks_float(0.2, -0.3, 0.4, 0.1)
++        d.set_flight_mode('sport')
++        d.set_sticks_float(0.2, -0.3, 0.4, 0.1)
++        p = t.packets()
++        self.assertEqual([(x.cmd_set, x.cmd_id) for x in p], [(3, 0x8e), (6, 0x59), (3, 0x8e)])
++        self.assertEqual(p[0].payload, p[2].payload)
++        d.set_horizontal_speed(10)
++        self.assertEqual((t.packets()[-1].cmd_set, t.packets()[-1].cmd_id), (3, 0xf9))
++
++    def test_stopped_drone_rejects_mode_change(self):
++        t = FakeTransport()
++        d = Drone(t)
++        d.stop()
++        with self.assertRaises(RuntimeError):
++            d.set_flight_mode('normal')
++        self.assertEqual(t.frames, [])
++
++    def test_osd_is_not_the_soft_switch_enum(self):
++        tel = Telemetry()
++        tel.feed_packet(osd(6, channel=2))
++        self.assertEqual(tel.state.mode_channel, 2)
++        self.assertEqual(tel.state.flight_mode_name, 'GPS_Atti')
++        tel.feed_packet(osd(31))
++        self.assertEqual(tel.state.flight_mode_name, 'SPORT')
++
++
++class ModeConfirmationTests(unittest.TestCase):
++    def setUp(self):
++        self.t = FakeTransport()
++        self.cli = Client(self.t, mode='sim', live=False)
++        self.log_patch = patch('pc_client.log')
++        self.log_patch.start()
++        self.addCleanup(self.log_patch.stop)
++        self.messages = []
++        self.cli.msg = self.messages.append
++
++    def reply(self, code=0, **kw):
++        fields = dict(sender=3, receiver=2, cmd_set=6, cmd_id=0x59,
++                      seq=self.t.packets()[-1].seq, cmd_type=0x80,
++                      payload=bytes([code]))
++        fields.update(kw)
++        self.cli._on_duml_payload(DumlPacket(**fields).encode())
++
++    def test_ack_is_not_osd_confirmation(self):
++        self.cli.set_flight_mode('sport')
++        self.reply()
++        self.assertEqual(self.cli._mode_request['ack'], 0)
++        self.assertNotIn('confirmed', self.messages[-1])
++        self.cli._on_duml_payload(osd(31).encode())
++        self.assertIsNone(self.cli._mode_request)
++        self.assertIn('confirmed by OSD', self.messages[-1])
++        self.assertEqual(self.cli.tele.state.flight_mode_name, 'SPORT')
++
++    def test_rejection_is_visible(self):
++        self.cli.set_flight_mode('cine')
++        self.reply(0xe0)
++        self.assertIsNone(self.cli._mode_request)
++        self.assertIn('rejected: ACK=0xe0', self.messages[-1])
++
++    def test_echo_wrong_source_sequence_and_empty_ack_are_ignored(self):
++        self.cli.set_flight_mode('normal')
++        for overrides in [dict(cmd_type=0x40), dict(sender=2), dict(receiver=1),
++                          dict(seq=999), dict(payload=b'')]:
++            self.reply(**overrides)
++            self.assertIsNone(self.cli._mode_request['ack'])
++
++    def test_cached_mode_and_other_packets_do_not_confirm(self):
++        self.cli._on_duml_payload(osd(31).encode())
++        self.cli.set_flight_mode('sport')
++        self.reply()
++        self.assertIsNotNone(self.cli._mode_request)
++        self.cli._on_duml_payload(osd(31, sender=2).encode())
++        self.assertIsNotNone(self.cli._mode_request)
++        self.cli._on_duml_payload(osd(31, sender=1).encode())
++        self.assertIsNotNone(self.cli._mode_request)
++
++    def test_timeout_does_not_change_hud_or_retry(self):
++        self.cli._on_duml_payload(osd(6).encode())
++        with patch('pc_client.time.monotonic', return_value=10):
++            self.cli.set_flight_mode('sport')
++        with patch('pc_client.time.monotonic', return_value=15):
++            self.cli._check_mode_timeout()
++        self.assertIn('unconfirmed: ACK=none', self.messages[-1])
++        self.assertEqual(self.cli.tele.state.flight_mode_name, 'GPS_Atti')
++        self.assertEqual(len(self.t.frames), 1)
++        self.assertIsNone(self.cli._mode_request)
++
++    def test_joystick_is_not_normal_confirmation(self):
++        self.cli.set_flight_mode('normal')
++        self.cli._on_duml_payload(osd(17).encode())
++        self.assertIsNotNone(self.cli._mode_request)
++        self.assertEqual(self.cli.tele.state.flight_mode_name, 'Joystick')
++
++    def test_cine_and_normal_readback(self):
++        for name, state in [('cine', 19), ('tripod', 38), ('normal', 6)]:
++            self.cli.set_flight_mode(name)
++            self.cli._on_duml_payload(osd(state).encode())
++            self.assertIsNone(self.cli._mode_request)
++            self.assertIn('confirmed by OSD', self.messages[-1])
++
++    def test_latest_request_replaces_previous(self):
++        self.cli.set_flight_mode('sport')
++        old_seq = self.t.packets()[-1].seq
++        self.cli.set_flight_mode('cine')
++        self.reply(0xe0, seq=old_seq)
++        self.cli._on_duml_payload(osd(31).encode())
++        self.assertEqual(self.cli._mode_request['gear'], 2)
++        self.cli._on_duml_payload(osd(38).encode())
++        self.assertIsNone(self.cli._mode_request)
++
++    def test_failed_send_does_not_leave_pending_request(self):
++        with patch.object(self.t, 'send', side_effect=OSError('disconnected')):
++            with self.assertRaises(OSError):
++                self.cli.set_flight_mode('sport')
++        self.assertIsNone(self.cli._mode_request)
++        self.assertEqual(self.messages, [])
++
++    def test_console_and_settings_use_same_command(self):
++        for command in ['fmode sport', 'flightmode normal', 'fmodeauth tripod']:
++            run_console_cmd(self.cli, command)
++        panel = SettingsPanel(self.cli)
++        panel.w[0].action('cinema')
++        self.assertEqual([(p.cmd_set, p.cmd_id, p.payload) for p in self.t.packets()],
++                         [(6, 0x59, b'\x00'), (6, 0x59, b'\x01'),
++                          (6, 0x59, b'\x02'), (6, 0x59, b'\x02')])
++
++
++if __name__ == '__main__':
++    unittest.main()

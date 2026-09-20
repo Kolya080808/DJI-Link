@@ -1,0 +1,8 @@
+ M dji_link_beta/drone.py
+ M dji_link_beta/pc_client.py
+ M dji_link_beta/reverse_docs/FLIGHT_GATING.md
+ M dji_link_beta/reverse_docs/FLIGHT_MODE_VIRTUAL_GEAR_2026.md
+ M dji_link_beta/telemetry.py
+ M dji_link_beta/test_flight_mode_gear.py
+?? dji_link_beta/reverse_docs/FLIGHT_MODE_SOFTSWITCH_FIX_2026.md
+?? dji_link_beta/reverse_docs/verify_softswitch_native.py
