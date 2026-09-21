@@ -6,6 +6,8 @@ Remote: `origin/feature/flight-mode-virtual-gear`
 
 ## Current stopping point
 
+Update, 2026-09-21: the rebuilt APK with fresh runtime DEX and blocked `libmsaoaidsec.so` loading sustained Frida instrumentation and emitted real USB-descriptor DUML discovery traffic. `native_IsDataLinkAvailable` returned true. A later probe received `connected(0)` even while `sdk.g()` stayed empty, so that list alone is not a reliable connection check. Injecting **FC type 53** set native category 0 / internal product type 59; **camera type 44** maps to the same product in the dispatch table. Despite these mocks and an RC-type update, requests still returned `-1`, without a hit on `OPR59RCAbstraction::SetSoftSwitchMode`. See [guard bypass and discovery capture](runtime/GUARD_AND_DISCOVERY_2026-09-21.md). The mode command itself remains uncaptured.
+
 The DJI Fly UI path is confirmed through JNI `SoftSwitchMode`. The actual WM160 DUML packet is not confirmed yet. In the resumed API 35 runtime, explicit SDK initialization succeeded without USB, but the product list remained empty and three direct mode requests produced three callback errors (`-1`, `SoftSwitchMode`). See [runtime initialization findings](runtime/SDK_INIT_AND_MODE_CALLBACKS_2026-09-20.md).
 
 Research is ongoing. The current runtime work extracts commands from DJI Fly by following `SoftSwitchMode` through JNI and the SDK transport until the outgoing DUML bytes are captured. `0x06/0x59` remains a hypothesis for WM160 until raw runtime capture exists.
@@ -21,7 +23,7 @@ Research is ongoing. The current runtime work extracts commands from DJI Fly by 
 
 ## Next runtime steps
 
-1. Keep the original APK runtime alive, reproduce the successful explicit SDK initialization, and establish native product discovery for `UAV59`. A socket-pair USB notification returned, but the process exited before capture; it is not a working accessory mock yet.
+1. Use the fresh-Dex research APK and block `msaoaidsec` before loading; this combination now permits socket-pair capture. Trace native key dispatch and RC abstraction creation for connected product 0: FC=53 and RC-type=59 mocks did not reach the setter. Observe connection callbacks, not just `sdk.g()`. The older socket-pair failure predates this working instrumentation setup.
 2. Prefer capture at the native USB descriptor/SDK transport. The actual Java bridge class is `uav.sdk.datalink.bridge.jni.JNIDataLinkBridgeServer`; its `native_bridge_send_raw_data(String, byte[], int)` receives the array length as its third argument. Its participation in ordinary USB mode sends is not established.
 3. Trigger Sport, Normal, and Tripod and save the raw composite/DUML bytes.
 4. Only then change the beta command and test it on the Pi.
