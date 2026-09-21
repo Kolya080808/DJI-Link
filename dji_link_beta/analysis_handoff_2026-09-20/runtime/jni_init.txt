@@ -1,0 +1,437 @@
+
+CLASS Luav/jni/callback/key/JNISetCallback;
+
+METHOD onResult(I Ljava/lang/String;)V
+
+CLASS Luav/jni/JNISdk$1;
+FIELD val$callback Luav/sdk/common/CallBack2;
+
+METHOD <init>(Luav/sdk/common/CallBack2;)V
+iput-object v1, v0, Luav/jni/JNISdk$1;->val$callback Luav/sdk/common/CallBack2;
+invoke-direct v0, Ljava/lang/Object;-><init>()V
+return-void 
+
+METHOD onVideoDataComing(I I [B [B)V
+const-class v2, Luav/sdk/keyvalue/value/media/VideoBufferInfo;
+invoke-static v2, v4, Luav/sdk/keyvalue/value/UAVValueHelper;->a(Ljava/lang/Class; [B)Luav/sdk/keyvalue/value/base/UAVValue;
+move-result-object v2
+check-cast v2, Luav/sdk/keyvalue/value/media/VideoBufferInfo;
+if-eqz v2, +00ch
+if-eqz v5, +00ah
+iget-object v3, v1, Luav/jni/JNISdk$1;->val$callback Luav/sdk/common/CallBack2;
+if-eqz v3, +006h
+invoke-interface v3, v2, v5, Luav/sdk/common/CallBack2;->invoke(Ljava/lang/Object; Ljava/lang/Object;)V
+goto +37h
+new-instance v3, Ljava/lang/StringBuilder;
+invoke-direct v3, Ljava/lang/StringBuilder;-><init>()V
+const-string v4, "[videocore][input] info is null: "
+invoke-virtual v3, v4, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+const/4 v4, 1
+const/4 v0, 0
+if-nez v2, +004h
+move v2, v4
+goto +2h
+move v2, v0
+invoke-virtual v3, v2, Ljava/lang/StringBuilder;->append(I)Ljava/lang/StringBuilder;
+const-string v2, ", data is null: "
+invoke-virtual v3, v2, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+if-nez v5, +004h
+move v2, v4
+goto +2h
+move v2, v0
+invoke-virtual v3, v2, Ljava/lang/StringBuilder;->append(I)Ljava/lang/StringBuilder;
+const-string v2, "callback is null: "
+invoke-virtual v3, v2, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+iget-object v2, v1, Luav/jni/JNISdk$1;->val$callback Luav/sdk/common/CallBack2;
+if-nez v2, +003h
+goto +2h
+move v4, v0
+invoke-virtual v3, v4, Ljava/lang/StringBuilder;->append(I)Ljava/lang/StringBuilder;
+invoke-virtual v3, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
+move-result-object v2
+invoke-static v2, Luav/sdk/utils/SDKLogger;->f(Ljava/lang/String;)V
+return-void 
+
+CLASS Luav/jni/JNISdk$2;
+FIELD val$callback Luav/sdk/common/CallBack2;
+
+METHOD <init>(Luav/sdk/common/CallBack2;)V
+iput-object v1, v0, Luav/jni/JNISdk$2;->val$callback Luav/sdk/common/CallBack2;
+invoke-direct v0, Ljava/lang/Object;-><init>()V
+return-void 
+
+METHOD onAudioDataComing(I [B [B)V
+const-class v1, Luav/sdk/keyvalue/value/media/AudioBufferInfo;
+invoke-static v1, v2, Luav/sdk/keyvalue/value/UAVValueHelper;->a(Ljava/lang/Class; [B)Luav/sdk/keyvalue/value/base/UAVValue;
+move-result-object v1
+check-cast v1, Luav/sdk/keyvalue/value/media/AudioBufferInfo;
+iget-object v2, v0, Luav/jni/JNISdk$2;->val$callback Luav/sdk/common/CallBack2;
+invoke-interface v2, v1, v3, Luav/sdk/common/CallBack2;->invoke(Ljava/lang/Object; Ljava/lang/Object;)V
+return-void 
+
+CLASS Luav/jni/JNISdk;
+
+METHOD <clinit>()V
+invoke-static Luav/sdk/jni/LibraryLoader;->b()V
+return-void 
+
+METHOD <init>()V
+invoke-direct v0, Ljava/lang/Object;-><init>()V
+return-void 
+
+METHOD changeDatalinkUpgradeToV1(I Luav/jni/callback/JNIChangeDatalinkCallback;)V
+invoke-static v0, v1, Luav/jni/JNISdk;->native_changeDatalinkUpgradeToV1(I Luav/jni/callback/JNIChangeDatalinkCallback;)V
+return-void 
+
+METHOD changeDatalinkV1ToUpgrade(I Luav/jni/callback/JNIChangeDatalinkCallback;)V
+invoke-static v0, v1, Luav/jni/JNISdk;->native_changeDatalinkV1ToUpgrade(I Luav/jni/callback/JNIChangeDatalinkCallback;)V
+return-void 
+
+METHOD getAppLocation()Luav/sdk/keyvalue/value/common/LocationCoordinate2D;
+invoke-static Luav/jni/JNISdk;->native_getAppLocation()Ljava/lang/String;
+move-result-object v0
+invoke-static v0, Luav/sdk/keyvalue/value/common/LocationCoordinate2D;->fromJson(Ljava/lang/String;)Luav/sdk/keyvalue/value/common/LocationCoordinate2D;
+move-result-object v0
+return-object v0
+
+METHOD getAppPackManagerPointer()J
+invoke-static Luav/jni/JNISdk;->native_getAppPackManagerPointer()J
+move-result-wide v0
+return-wide v0
+
+METHOD getCSDKVersion()Ljava/lang/String;
+invoke-static Luav/jni/JNISdk;->native_getCSDKVersion()Ljava/lang/String;
+move-result-object v0
+return-object v0
+
+METHOD initialize(Luav/jni/value/InitializeInfo; Luav/sdk/keyvalue/value/common/SDKInitializeInfo; Luav/jni/callback/JNIProductConnectionCallback;)Z
+const-class v0, Luav/jni/JNISdk;
+monitor-enter v0
+invoke-virtual v2, Luav/sdk/keyvalue/value/common/SDKInitializeInfo;->toBytes()[B
+move-result-object v2
+invoke-static v1, v2, v3, Luav/jni/JNISdk;->native_initialize(Luav/jni/value/InitializeInfo; [B Luav/jni/callback/JNIProductConnectionCallback;)Z
+move-result v1
+monitor-exit v0
+return v1
+move-exception v1
+monitor-exit v0
+throw v1
+
+METHOD native_changeDatalinkUpgradeToV1(I Luav/jni/callback/JNIChangeDatalinkCallback;)V
+
+METHOD native_changeDatalinkV1ToUpgrade(I Luav/jni/callback/JNIChangeDatalinkCallback;)V
+
+METHOD native_clearSurface(I I)Z
+
+METHOD native_getAppLocation()Ljava/lang/String;
+
+METHOD native_getAppPackManagerPointer()J
+
+METHOD native_getCSDKVersion()Ljava/lang/String;
+
+METHOD native_initialize(Luav/jni/value/InitializeInfo; [B Luav/jni/callback/JNIProductConnectionCallback;)Z
+
+METHOD native_setAppLocation([B)V
+
+METHOD native_setComponentConnectionListener(I Luav/jni/callback/JNIComponentConnectionCallback;)V
+
+METHOD native_setMockSurface(I I I Landroid/view/Surface;)Z
+
+METHOD native_setNetworkHandler(Luav/sdk/handler/Network/INetworkHandler;)V
+
+METHOD native_setNetworkStatus(Z)V
+
+METHOD native_setSurface(I I I Landroid/view/Surface;)Z
+
+METHOD native_setTimeSyncRequestCallback(Luav/sdk/handler/TimeSync/jni/JNITimeSyncRequestCallback;)V
+
+METHOD native_startAudioDataListener(I Luav/jni/callback/data/JNIAudioDataCallback;)V
+
+METHOD native_startVideoDataListener(I I Luav/jni/callback/data/JNIVideoDataCallback;)V
+
+METHOD native_stopAudioDataListener(I)V
+
+METHOD native_stopVideoDataListener(I I)V
+
+METHOD native_uninitialize()V
+
+METHOD native_updateUserLoginInfo(Luav/sdk/systeminfo/UserAccountLoginInfo; Luav/jni/callback/JNIBoolCallback;)V
+
+METHOD removeAudioObserver(I)V
+invoke-static v0, Luav/jni/JNISdk;->native_stopAudioDataListener(I)V
+return-void 
+
+METHOD removeSurface(I I)V
+invoke-static v0, v1, Luav/jni/JNISdk;->native_clearSurface(I I)Z
+return-void 
+
+METHOD removeVideoObserver(I I)V
+invoke-static v0, v1, Luav/jni/JNISdk;->native_stopVideoDataListener(I I)V
+return-void 
+
+METHOD setAppLocation(Luav/sdk/keyvalue/value/common/LocationCoordinate2D;)V
+invoke-virtual v0, Luav/sdk/keyvalue/value/common/LocationCoordinate2D;->toBytes()[B
+move-result-object v0
+invoke-static v0, Luav/jni/JNISdk;->native_setAppLocation([B)V
+return-void 
+
+METHOD setAudioObserver(I Luav/sdk/common/CallBack2;)V
+new-instance v0, Luav/jni/JNISdk$2;
+invoke-direct v0, v2, Luav/jni/JNISdk$2;-><init>(Luav/sdk/common/CallBack2;)V
+invoke-static v1, v0, Luav/jni/JNISdk;->native_startAudioDataListener(I Luav/jni/callback/data/JNIAudioDataCallback;)V
+return-void 
+
+METHOD setComponentConnectionListener(I Luav/jni/callback/JNIComponentConnectionCallback;)V
+const-class v0, Luav/jni/JNISdk;
+monitor-enter v0
+invoke-static v1, v2, Luav/jni/JNISdk;->native_setComponentConnectionListener(I Luav/jni/callback/JNIComponentConnectionCallback;)V
+monitor-exit v0
+return-void 
+move-exception v1
+monitor-exit v0
+throw v1
+
+METHOD setNetworkHandler(Luav/sdk/handler/Network/INetworkHandler;)V
+invoke-static v0, Luav/jni/JNISdk;->native_setNetworkHandler(Luav/sdk/handler/Network/INetworkHandler;)V
+return-void 
+
+METHOD setNetworkStatus(Z)V
+invoke-static v0, Luav/jni/JNISdk;->native_setNetworkStatus(Z)V
+return-void 
+
+METHOD setSurface(I I Landroid/view/Surface;)V
+const/16 v0, 55
+invoke-static v1, v0, v2, v3, Luav/jni/JNISdk;->native_setSurface(I I I Landroid/view/Surface;)Z
+return-void 
+
+METHOD setTimeSyncRequestCallback(Luav/sdk/handler/TimeSync/jni/JNITimeSyncRequestCallback;)V
+invoke-static v0, Luav/jni/JNISdk;->native_setTimeSyncRequestCallback(Luav/sdk/handler/TimeSync/jni/JNITimeSyncRequestCallback;)V
+return-void 
+
+METHOD setVideoObserver(I I Luav/sdk/common/CallBack2;)V
+new-instance v0, Luav/jni/JNISdk$1;
+invoke-direct v0, v3, Luav/jni/JNISdk$1;-><init>(Luav/sdk/common/CallBack2;)V
+invoke-static v1, v2, v0, Luav/jni/JNISdk;->native_startVideoDataListener(I I Luav/jni/callback/data/JNIVideoDataCallback;)V
+return-void 
+
+METHOD uninitialize()V
+const-class v0, Luav/jni/JNISdk;
+monitor-enter v0
+invoke-static Luav/jni/JNISdk;->native_uninitialize()V
+monitor-exit v0
+return-void 
+move-exception v1
+monitor-exit v0
+throw v1
+
+METHOD updateUserLoginInfo(Luav/sdk/systeminfo/UserAccountLoginInfo; Luav/jni/callback/JNIBoolCallback;)V
+invoke-static v0, v1, Luav/jni/JNISdk;->native_updateUserLoginInfo(Luav/sdk/systeminfo/UserAccountLoginInfo; Luav/jni/callback/JNIBoolCallback;)V
+return-void 
+
+CLASS Luav/jni/value/InitializeInfo;
+FIELD commonStorageDirPath Ljava/lang/String;
+FIELD ldmConfig Luav/sdk/keyvalue/value/common/LDMConfig;
+FIELD mAppServiceId Ljava/lang/String;
+FIELD mAppVersion Ljava/lang/String;
+FIELD mAreaCodeDatabaseFilePath Ljava/lang/String;
+FIELD mAreaCodeNeedPhoneGPS Z
+FIELD mAreaCodeStoragePath Ljava/lang/String;
+FIELD mBridgeServerEnable Z
+FIELD mDeviceSystemProduct Ljava/lang/String;
+FIELD mFlightRecordPath Ljava/lang/String;
+FIELD mFlyLimitDatabasePath Ljava/lang/String;
+FIELD mGNSSLogPath Ljava/lang/String;
+FIELD mHMacSH256Key Ljava/lang/String;
+FIELD mLogPath Ljava/lang/String;
+FIELD mOfflineMapPath Ljava/lang/String;
+FIELD mPhoneType Ljava/lang/String;
+FIELD mSDRLogPath Ljava/lang/String;
+FIELD mUseDeafultNetwork Z
+FIELD mainThreadMsgQueueSize I
+FIELD systemPublicDirPath Ljava/lang/String;
+
+METHOD <init>()V
+invoke-direct v3, Ljava/lang/Object;-><init>()V
+const-string v0, ""
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mFlyLimitDatabasePath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mAreaCodeStoragePath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mAreaCodeDatabaseFilePath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mAppVersion Ljava/lang/String;
+const/4 v1, 0
+iput-boolean v1, v3, Luav/jni/value/InitializeInfo;->mBridgeServerEnable Z
+const/4 v1, 1
+iput-boolean v1, v3, Luav/jni/value/InitializeInfo;->mAreaCodeNeedPhoneGPS Z
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mFlightRecordPath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mLogPath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mSDRLogPath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mGNSSLogPath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mOfflineMapPath Ljava/lang/String;
+const-string v2, "test-app"
+iput-object v2, v3, Luav/jni/value/InitializeInfo;->mAppServiceId Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mPhoneType Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mDeviceSystemProduct Ljava/lang/String;
+const-string v2, "test"
+iput-object v2, v3, Luav/jni/value/InitializeInfo;->mHMacSH256Key Ljava/lang/String;
+iput-boolean v1, v3, Luav/jni/value/InitializeInfo;->mUseDeafultNetwork Z
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->systemPublicDirPath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->commonStorageDirPath Ljava/lang/String;
+const/16 v0, 4000
+iput v0, v3, Luav/jni/value/InitializeInfo;->mainThreadMsgQueueSize I
+return-void 
+
+METHOD <init>(Ljava/lang/String; Ljava/lang/String; Ljava/lang/String;)V
+invoke-direct v3, Ljava/lang/Object;-><init>()V
+const-string v0, ""
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mAreaCodeStoragePath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mAreaCodeDatabaseFilePath Ljava/lang/String;
+const/4 v1, 0
+iput-boolean v1, v3, Luav/jni/value/InitializeInfo;->mBridgeServerEnable Z
+const/4 v1, 1
+iput-boolean v1, v3, Luav/jni/value/InitializeInfo;->mAreaCodeNeedPhoneGPS Z
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mLogPath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mSDRLogPath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mGNSSLogPath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mOfflineMapPath Ljava/lang/String;
+const-string v2, "test-app"
+iput-object v2, v3, Luav/jni/value/InitializeInfo;->mAppServiceId Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mPhoneType Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->mDeviceSystemProduct Ljava/lang/String;
+const-string v2, "test"
+iput-object v2, v3, Luav/jni/value/InitializeInfo;->mHMacSH256Key Ljava/lang/String;
+iput-boolean v1, v3, Luav/jni/value/InitializeInfo;->mUseDeafultNetwork Z
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->systemPublicDirPath Ljava/lang/String;
+iput-object v0, v3, Luav/jni/value/InitializeInfo;->commonStorageDirPath Ljava/lang/String;
+const/16 v0, 4000
+iput v0, v3, Luav/jni/value/InitializeInfo;->mainThreadMsgQueueSize I
+iput-object v5, v3, Luav/jni/value/InitializeInfo;->mFlyLimitDatabasePath Ljava/lang/String;
+iput-object v4, v3, Luav/jni/value/InitializeInfo;->mAppVersion Ljava/lang/String;
+iput-object v6, v3, Luav/jni/value/InitializeInfo;->mFlightRecordPath Ljava/lang/String;
+return-void 
+
+METHOD getAreaCodeDatabaseFilePath()Ljava/lang/String;
+iget-object v0, v1, Luav/jni/value/InitializeInfo;->mAreaCodeDatabaseFilePath Ljava/lang/String;
+return-object v0
+
+METHOD getAreaCodeStoragePath()Ljava/lang/String;
+iget-object v0, v1, Luav/jni/value/InitializeInfo;->mAreaCodeStoragePath Ljava/lang/String;
+return-object v0
+
+METHOD getCommonStorageDirPath()Ljava/lang/String;
+iget-object v0, v1, Luav/jni/value/InitializeInfo;->commonStorageDirPath Ljava/lang/String;
+return-object v0
+
+METHOD getLdmConfig()Luav/sdk/keyvalue/value/common/LDMConfig;
+iget-object v0, v1, Luav/jni/value/InitializeInfo;->ldmConfig Luav/sdk/keyvalue/value/common/LDMConfig;
+return-object v0
+
+METHOD getMainThreadMsgQueueSize()I
+iget v0, v1, Luav/jni/value/InitializeInfo;->mainThreadMsgQueueSize I
+return v0
+
+METHOD getSystemPublicDir()Ljava/lang/String;
+iget-object v0, v1, Luav/jni/value/InitializeInfo;->systemPublicDirPath Ljava/lang/String;
+return-object v0
+
+METHOD getmAppVersion()Ljava/lang/String;
+iget-object v0, v1, Luav/jni/value/InitializeInfo;->mAppVersion Ljava/lang/String;
+return-object v0
+
+METHOD getmFlightRecordPath()Ljava/lang/String;
+iget-object v0, v1, Luav/jni/value/InitializeInfo;->mFlightRecordPath Ljava/lang/String;
+return-object v0
+
+METHOD getmFlyLimitDatabasePath()Ljava/lang/String;
+iget-object v0, v1, Luav/jni/value/InitializeInfo;->mFlyLimitDatabasePath Ljava/lang/String;
+return-object v0
+
+METHOD isAreaCodeNeedPhoneGPS()Z
+iget-boolean v0, v1, Luav/jni/value/InitializeInfo;->mAreaCodeNeedPhoneGPS Z
+return v0
+
+METHOD isBridgeServerEnable()Z
+iget-boolean v0, v1, Luav/jni/value/InitializeInfo;->mBridgeServerEnable Z
+return v0
+
+METHOD isUsedDefaultNetwork()Z
+iget-boolean v0, v1, Luav/jni/value/InitializeInfo;->mUseDeafultNetwork Z
+return v0
+
+METHOD setAppServiceId(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mAppServiceId Ljava/lang/String;
+return-void 
+
+METHOD setAreaCodeDatabaseFilePath(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mAreaCodeDatabaseFilePath Ljava/lang/String;
+return-void 
+
+METHOD setAreaCodeNeedPhoneGPS(Z)V
+iput-boolean v1, v0, Luav/jni/value/InitializeInfo;->mAreaCodeNeedPhoneGPS Z
+return-void 
+
+METHOD setAreaCodeStoragePath(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mAreaCodeStoragePath Ljava/lang/String;
+return-void 
+
+METHOD setBridgeServerEnable(Z)V
+iput-boolean v1, v0, Luav/jni/value/InitializeInfo;->mBridgeServerEnable Z
+return-void 
+
+METHOD setCommonStorageDirPath(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->commonStorageDirPath Ljava/lang/String;
+return-void 
+
+METHOD setGNSSLogPath(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mGNSSLogPath Ljava/lang/String;
+return-void 
+
+METHOD setHMacSH256Key(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mHMacSH256Key Ljava/lang/String;
+return-void 
+
+METHOD setLdmConfig(Luav/sdk/keyvalue/value/common/LDMConfig;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->ldmConfig Luav/sdk/keyvalue/value/common/LDMConfig;
+return-void 
+
+METHOD setLogPath(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mLogPath Ljava/lang/String;
+return-void 
+
+METHOD setMDeviceSystemProduct(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mDeviceSystemProduct Ljava/lang/String;
+return-void 
+
+METHOD setMainThreadMsgQueueSize(I)V
+iput v1, v0, Luav/jni/value/InitializeInfo;->mainThreadMsgQueueSize I
+return-void 
+
+METHOD setOfflineMapPath(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mOfflineMapPath Ljava/lang/String;
+return-void 
+
+METHOD setPhoneType(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mPhoneType Ljava/lang/String;
+return-void 
+
+METHOD setSDRLogPath(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mSDRLogPath Ljava/lang/String;
+return-void 
+
+METHOD setSystemPublicDir(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->systemPublicDirPath Ljava/lang/String;
+return-void 
+
+METHOD setUseDefaultNetwork(Z)V
+iput-boolean v1, v0, Luav/jni/value/InitializeInfo;->mUseDeafultNetwork Z
+return-void 
+
+METHOD setmAppVersion(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mAppVersion Ljava/lang/String;
+return-void 
+
+METHOD setmFlightRecordPath(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mFlightRecordPath Ljava/lang/String;
+return-void 
+
+METHOD setmFlyLimitDatabasePath(Ljava/lang/String;)V
+iput-object v1, v0, Luav/jni/value/InitializeInfo;->mFlyLimitDatabasePath Ljava/lang/String;
+return-void 
